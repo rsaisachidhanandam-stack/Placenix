@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Placenix — AI-Powered Employability & Campus Recruitment Operating System for universities and colleges. Streamline placements with intelligent analytics, resume scoring, and recruitment automation.">
+  <meta property="og:title" content="Placenix | AI Placement OS">
+  <meta property="og:description" content="The future operating system for university placements and employability intelligence.">
+  <title>Placenix | AI-Powered Campus Recruitment OS</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="style/tokens.css">
+  <link rel="stylesheet" href="style/reset.css">
+  <link rel="stylesheet" href="style/animations.css">
+  <link rel="stylesheet" href="style/layout.css">
+  <link rel="stylesheet" href="style/components.css">
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ── Landing-specific override to prevent shift ── */
+    body { overflow-x: hidden; }
+    #app {
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ── Mobile topbar menu show ── */
+    @media (max-width: 1024px) {
+      #mobile-menu-btn { display: flex !important; }
+    }
+
+    /* Mobile sidebar overlay */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: calc(var(--z-sidebar) - 1);
+    }
+    .sidebar-overlay.visible { display: block; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- App entry -->
+  <script type="module" src="main.js"></script>
+</body>
+</html>

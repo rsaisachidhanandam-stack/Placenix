@@ -1,0 +1,180 @@
+/* ============================================================
+   PLACENIX — DESIGN TOKENS
+   AI-Powered Employability & Campus Recruitment OS
+   ============================================================ */
+
+:root {
+  /* ── Brand Core ─────────────────────────────────────────── */
+  --brand-deep-blue:        #0A0F2E;
+  --brand-navy:             #0D1B4B;
+  --brand-electric-violet:  #7C3AED;
+  --brand-violet-mid:       #8B5CF6;
+  --brand-violet-light:     #A78BFA;
+  --brand-cyan:             #22D3EE;
+  --brand-cyan-soft:        #67E8F9;
+  --brand-cyan-muted:       #0EA5E9;
+
+  /* ── Backgrounds ─────────────────────────────────────────── */
+  --bg-primary:             #05071A;
+  --bg-secondary:           #090D25;
+  --bg-tertiary:            #0D1330;
+  --bg-sidebar:             #070B20;
+  --bg-card:                rgba(255, 255, 255, 0.03);
+  --bg-card-hover:          rgba(255, 255, 255, 0.06);
+  --bg-glass:               rgba(13, 19, 48, 0.7);
+  --bg-glass-light:         rgba(255, 255, 255, 0.05);
+  --bg-input:               rgba(255, 255, 255, 0.05);
+  --bg-input-focus:         rgba(124, 58, 237, 0.1);
+  --bg-overlay:             rgba(5, 7, 26, 0.85);
+
+  /* ── Borders ─────────────────────────────────────────────── */
+  --border-subtle:          rgba(255, 255, 255, 0.06);
+  --border-medium:          rgba(255, 255, 255, 0.1);
+  --border-glow:            rgba(124, 58, 237, 0.4);
+  --border-cyan:            rgba(34, 211, 238, 0.3);
+  --border-input:           rgba(255, 255, 255, 0.08);
+  --border-input-focus:     rgba(124, 58, 237, 0.6);
+
+  /* ── Text ────────────────────────────────────────────────── */
+  --text-primary:           #F0F4FF;
+  --text-secondary:         #94A3B8;
+  --text-muted:             #475569;
+  --text-placeholder:       #334155;
+  --text-link:              #A78BFA;
+  --text-link-hover:        #C4B5FD;
+  --text-on-brand:          #FFFFFF;
+
+  /* ── Status / Semantic ───────────────────────────────────── */
+  --success:                #10B981;
+  --success-bg:             rgba(16, 185, 129, 0.12);
+  --success-border:         rgba(16, 185, 129, 0.3);
+  --warning:                #F59E0B;
+  --warning-bg:             rgba(245, 158, 11, 0.12);
+  --warning-border:         rgba(245, 158, 11, 0.3);
+  --danger:                 #EF4444;
+  --danger-bg:              rgba(239, 68, 68, 0.12);
+  --danger-border:          rgba(239, 68, 68, 0.3);
+  --info:                   #3B82F6;
+  --info-bg:                rgba(59, 130, 246, 0.12);
+  --info-border:            rgba(59, 130, 246, 0.3);
+
+  /* ── Gradients ───────────────────────────────────────────── */
+  --gradient-brand:         linear-gradient(135deg, #7C3AED 0%, #22D3EE 100%);
+  --gradient-brand-soft:    linear-gradient(135deg, rgba(124,58,237,0.8) 0%, rgba(34,211,238,0.8) 100%);
+  --gradient-hero:          radial-gradient(ellipse 80% 60% at 60% 30%, rgba(124,58,237,0.25) 0%, transparent 70%);
+  --gradient-hero-2:        radial-gradient(ellipse 50% 40% at 20% 80%, rgba(34,211,238,0.15) 0%, transparent 70%);
+  --gradient-card:          linear-gradient(135deg, rgba(124,58,237,0.08) 0%, rgba(34,211,238,0.04) 100%);
+  --gradient-sidebar:       linear-gradient(180deg, #070B20 0%, #05071A 100%);
+  --gradient-text:          linear-gradient(135deg, #A78BFA 0%, #67E8F9 100%);
+  --gradient-glow:          radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%);
+
+  /* ── Shadows ─────────────────────────────────────────────── */
+  --shadow-sm:              0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md:              0 4px 16px rgba(0,0,0,0.4);
+  --shadow-lg:              0 8px 32px rgba(0,0,0,0.5);
+  --shadow-xl:              0 20px 60px rgba(0,0,0,0.6);
+  --shadow-glow-violet:     0 0 30px rgba(124,58,237,0.25), 0 0 60px rgba(124,58,237,0.1);
+  --shadow-glow-cyan:       0 0 30px rgba(34,211,238,0.2), 0 0 60px rgba(34,211,238,0.08);
+  --shadow-card:            0 4px 24px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.2);
+  --shadow-card-hover:      0 8px 40px rgba(0,0,0,0.4), 0 0 20px rgba(124,58,237,0.15);
+
+  /* ── Spacing ─────────────────────────────────────────────── */
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   20px;
+  --space-6:   24px;
+  --space-8:   32px;
+  --space-10:  40px;
+  --space-12:  48px;
+  --space-16:  64px;
+  --space-20:  80px;
+  --space-24:  96px;
+
+  /* ── Border Radius ───────────────────────────────────────── */
+  --radius-sm:    6px;
+  --radius-md:    10px;
+  --radius-lg:    16px;
+  --radius-xl:    24px;
+  --radius-2xl:   32px;
+  --radius-full:  9999px;
+
+  /* ── Typography ──────────────────────────────────────────── */
+  --font-sans:    'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Space Grotesk', 'SF Pro Display', sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+
+  --text-xs:    0.75rem;
+  --text-sm:    0.875rem;
+  --text-base:  1rem;
+  --text-lg:    1.125rem;
+  --text-xl:    1.25rem;
+  --text-2xl:   1.5rem;
+  --text-3xl:   1.875rem;
+  --text-4xl:   2.25rem;
+  --text-5xl:   3rem;
+  --text-6xl:   3.75rem;
+  --text-7xl:   4.5rem;
+
+  --weight-normal:   400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+  --weight-extrabold:800;
+
+  --leading-tight:  1.2;
+  --leading-snug:   1.35;
+  --leading-normal: 1.6;
+  --leading-relaxed:1.75;
+
+  /* ── Transitions ─────────────────────────────────────────── */
+  --transition-fast:    0.15s ease;
+  --transition-base:    0.25s ease;
+  --transition-slow:    0.4s ease;
+  --transition-spring:  0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Layout ──────────────────────────────────────────────── */
+  --sidebar-width:        260px;
+  --sidebar-collapsed:    72px;
+  --topbar-height:        64px;
+  --content-max-width:    1440px;
+
+  /* ── Z-Index ─────────────────────────────────────────────── */
+  --z-base:     1;
+  --z-dropdown: 100;
+  --z-sidebar:  200;
+  --z-topbar:   300;
+  --z-modal:    400;
+  --z-toast:    500;
+}
+
+/* ── Light Mode Overrides ────────────────────────────────────── */
+[data-theme="light"] {
+  --bg-primary:             #F8FAFF;
+  --bg-secondary:           #EEF2FF;
+  --bg-tertiary:            #E8EEFF;
+  --bg-sidebar:             #FFFFFF;
+  --bg-card:                rgba(255, 255, 255, 0.9);
+  --bg-card-hover:          rgba(255, 255, 255, 1);
+  --bg-glass:               rgba(255, 255, 255, 0.85);
+  --bg-glass-light:         rgba(255, 255, 255, 0.7);
+  --bg-input:               rgba(0, 0, 0, 0.04);
+  --bg-input-focus:         rgba(124, 58, 237, 0.05);
+  --bg-overlay:             rgba(248, 250, 255, 0.9);
+
+  --border-subtle:          rgba(0, 0, 0, 0.06);
+  --border-medium:          rgba(0, 0, 0, 0.1);
+  --border-input:           rgba(0, 0, 0, 0.1);
+
+  --text-primary:           #0F172A;
+  --text-secondary:         #475569;
+  --text-muted:             #94A3B8;
+  --text-placeholder:       #CBD5E1;
+
+  --shadow-card:            0 2px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05);
+  --shadow-card-hover:      0 8px 30px rgba(0,0,0,0.12), 0 0 20px rgba(124,58,237,0.1);
+
+  --gradient-hero:          radial-gradient(ellipse 80% 60% at 60% 30%, rgba(124,58,237,0.12) 0%, transparent 70%);
+  --gradient-hero-2:        radial-gradient(ellipse 50% 40% at 20% 80%, rgba(34,211,238,0.08) 0%, transparent 70%);
+}

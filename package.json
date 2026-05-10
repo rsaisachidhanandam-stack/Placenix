@@ -1,0 +1,14 @@
+{
+  "name": "placenix",
+  "version": "1.0.0",
+  "description": "AI-Powered Employability & Campus Recruitment Operating System",
+  "private": true,
+  "scripts": {
+    "start": "npx serve . -p 3000",
+    "dev": "npx serve . -p 3000",
+    "serve": "npx serve . -p 3000"
+  },
+  "keywords": ["placement", "ai", "saas", "university", "recruitment"],
+  "author": "Placenix Technologies",
+  "license": "MIT"
+}
