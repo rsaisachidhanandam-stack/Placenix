@@ -1,223 +1,169 @@
-export async function loadStudentDash(root, Store) {
-  const p = Store.studentProfile;
-  const user = Store.session.user;
+// ============================================================
+// PLACENIX — BALANCED INTELLIGENCE OPERATING SYSTEM (v2.4)
+// ============================================================
+
+export async function loadStudentDash(root, Store, supabase) {
+  const user = Store.session?.user;
+  if (!user) {
+    root.innerHTML = `<div style="padding:100px; text-align:center; color:var(--text-description);">Institutional session expired. Please re-authenticate.</div>`;
+    return;
+  }
+
   root.innerHTML = `
-<style>
-.dash-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:24px;}
-.dash-mid{display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:24px;}
-.dash-bottom{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}
-.emp-meter-wrap{position:relative;width:140px;height:140px;margin:0 auto;}
-.emp-meter-wrap svg{transform:rotate(-90deg);}
-.emp-meter-label{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
-.emp-meter-val{font-family:var(--font-display);font-size:1.75rem;font-weight:800;color:var(--text-primary);}
-.emp-meter-sub{font-size:.7rem;color:var(--text-muted);}
-.skill-bar{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;}
-.skill-bar-row{display:flex;align-items:center;gap:10px;}
-.skill-bar-label{font-size:.78rem;color:var(--text-secondary);width:130px;flex-shrink:0;}
-.skill-bar-track{flex:1;height:6px;background:rgba(255,255,255,.06);border-radius:99px;overflow:hidden;}
-.skill-bar-fill{height:100%;border-radius:99px;background:var(--gradient-brand);transition:width 1.2s ease;}
-.skill-bar-pct{font-size:.75rem;color:var(--text-muted);width:32px;text-align:right;flex-shrink:0;}
-.app-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border-subtle);gap:12px;}
-.app-row:last-child{border-bottom:none;}
-.app-company{font-size:.875rem;font-weight:600;color:var(--text-primary);}
-.app-role{font-size:.75rem;color:var(--text-muted);}
-.app-date{font-size:.75rem;color:var(--text-muted);}
-.prob-ring-wrap{position:relative;width:120px;height:120px;margin:16px auto 8px;}
-.prob-ring-wrap svg{transform:rotate(-135deg);}
-.prob-ring-label{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
-.welcome-banner{background:linear-gradient(135deg,rgba(124,58,237,.15) 0%,rgba(34,211,238,.08) 100%);border:1px solid rgba(124,58,237,.25);border-radius:16px;padding:24px 28px;display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;}
-.welcome-text h2{font-family:var(--font-display);font-size:1.4rem;font-weight:800;margin-bottom:6px;}
-.welcome-text p{color:var(--text-secondary);font-size:.875rem;}
-.welcome-actions{display:flex;gap:10px;flex-shrink:0;}
-@media(max-width:1100px){.dash-grid{grid-template-columns:repeat(2,1fr);}.dash-mid,.dash-bottom{grid-template-columns:1fr;}}
-@media(max-width:600px){.dash-grid{grid-template-columns:1fr;}}
-</style>
-<div class="page-header">
-  <h1 class="page-title">Good morning, ${(user.full_name || 'Student').split(' ')[0]} 👋</h1>
-  <p class="page-subtitle">${user.department || 'Not Set'} · ${user.year || 'No Year'} · CGPA: ${user.cgpa || 'N/A'}</p>
-</div>
-
-<!-- Welcome banner -->
-<div class="welcome-banner animate-fade-in-up">
-  <div class="welcome-text">
-    <h2>Your placement journey is <span style="background:var(--gradient-brand);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">72% ready</span></h2>
-    <p>Complete your profile & update your resume to boost your employability score by +12 points</p>
-  </div>
-  <div class="welcome-actions">
-    <a href="#resume" onclick="window.location.hash='resume'" class="btn btn-primary" style="text-decoration:none;">Update Resume →</a>
-    <a href="#drives" onclick="window.location.hash='drives'" class="btn btn-secondary" style="text-decoration:none;">View Drives</a>
-  </div>
-</div>
-
-<!-- Stats row -->
-<div class="dash-grid">
-  <div class="stat-card animate-fade-in-up">
-    <div class="stat-card-icon" style="background:rgba(124,58,237,.15);">🎯</div>
-    <div class="stat-card-value" id="sc-emp">78</div>
-    <div class="stat-card-label">Employability Score</div>
-    <div class="stat-card-change up">↑ +6 this month</div>
-  </div>
-  <div class="stat-card animate-fade-in-up delay-100">
-    <div class="stat-card-icon" style="background:rgba(34,211,238,.12);">📄</div>
-    <div class="stat-card-value" id="sc-ats">82</div>
-    <div class="stat-card-label">ATS Resume Score</div>
-    <div class="stat-card-change up">↑ +8 after last update</div>
-  </div>
-  <div class="stat-card animate-fade-in-up delay-200">
-    <div class="stat-card-icon" style="background:rgba(16,185,129,.12);">📝</div>
-    <div class="stat-card-value">3</div>
-    <div class="stat-card-label">Active Applications</div>
-    <div class="stat-card-change" style="color:var(--warning);">1 shortlisted</div>
-  </div>
-  <div class="stat-card animate-fade-in-up delay-300">
-    <div class="stat-card-icon" style="background:rgba(245,158,11,.12);">📅</div>
-    <div class="stat-card-value">4</div>
-    <div class="stat-card-label">Drives Open</div>
-    <div class="stat-card-change" style="color:var(--info);">Deadline in 5 days</div>
-  </div>
-</div>
-
-<!-- Middle row -->
-<div class="dash-mid">
-  <!-- Left: Skill breakdown + chart -->
-  <div class="card animate-fade-in-up">
-    <div class="card-header">
-      <div>
-        <div class="card-title">Employability Breakdown</div>
-        <div class="card-subtitle">AI-analyzed skill profile</div>
+    <div style="padding: 40px; max-width: 1560px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px;">
+      
+      <!-- Operational Header -->
+      <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+        <div>
+          <div class="label-ent" style="margin-bottom: 8px; color:var(--brand-primary);">Institutional Workspace</div>
+          <h1 class="h1-ent">Operational Intelligence</h1>
+        </div>
+        <div style="display:flex; gap:16px;">
+          <div style="background:var(--bg-card); border:1px solid var(--border-main); padding:8px 16px; border-radius:10px; display:flex; align-items:center; gap:12px; font-size:12px; font-weight:700;">
+            <div style="width:8px; height:8px; background:var(--brand-secondary); border-radius:50%; box-shadow:0 0 8px var(--brand-secondary);"></div>
+            System Operational
+          </div>
+        </div>
       </div>
-      <a href="#employability" onclick="window.location.hash='employability'" class="btn btn-sm btn-ghost" style="text-decoration:none;">Full Report →</a>
+
+      <!-- Metric Infrastructure -->
+      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 24px;">
+        <div class="card-ent" style="background: linear-gradient(145deg, var(--bg-card), rgba(139,92,246,0.05));">
+          <div class="label-ent" style="margin-bottom: 16px;">Employability Node</div>
+          <div class="metric-ent">84.2</div>
+          <div style="height:4px; background:rgba(255,255,255,0.03); border-radius:10px; overflow:hidden; margin-top:16px;">
+            <div style="width:84.2%; height:100%; background:var(--brand-primary); box-shadow:0 0 12px var(--brand-primary);"></div>
+          </div>
+        </div>
+
+        <div class="card-ent">
+          <div class="label-ent" style="margin-bottom: 16px;">Active Engagements</div>
+          <div class="metric-ent">12</div>
+          <p style="font-size:12px; color:var(--text-description); margin-top:8px;">4 Pending institutional reviews</p>
+        </div>
+
+        <div class="card-ent">
+          <div class="label-ent" style="margin-bottom: 16px;">Market Readiness</div>
+          <div class="metric-ent">Tier 1</div>
+          <p style="font-size:12px; color:var(--text-description); margin-top:8px;">Top 5% of Department Node</p>
+        </div>
+
+        <div class="card-ent">
+          <div class="label-ent" style="margin-bottom: 16px;">Pipeline Velocity</div>
+          <div class="metric-ent">08</div>
+          <p style="font-size:12px; color:var(--text-description); margin-top:8px;">Current conversion: <span style="color:var(--brand-secondary);">37.5%</span></p>
+        </div>
+      </div>
+
+      <!-- Primary Content Area -->
+      <div style="display:grid; grid-template-columns: 2fr 1fr; gap: 40px;">
+        
+        <div style="display:flex; flex-direction:column; gap:40px;">
+          <!-- Trajectory Panel -->
+          <div class="card-ent" style="padding:48px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:48px;">
+              <div>
+                <h2 class="h2-ent">Employability Neural Trend</h2>
+                <p style="color:var(--text-description); font-size:14px; margin-top:4px;">Diagnostic trajectory for comprehensive career readiness.</p>
+              </div>
+              <div style="background:var(--bg-surface); border:1px solid var(--border-main); padding:8px 16px; border-radius:8px; font-size:11px; font-weight:800; color:var(--text-muted);">LIVE TELEMETRY</div>
+            </div>
+            
+            <div style="height:320px; width:100%; position:relative;">
+              <svg width="100%" height="100%" viewBox="0 0 800 320" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--brand-primary)" stop-opacity="0.15"/>
+                    <stop offset="100%" stop-color="var(--brand-primary)" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <path d="M0,280 Q150,260 300,180 T600,120 T800,40 L800,320 L0,320 Z" fill="url(#chartGrad)"/>
+                <path d="M0,280 Q150,260 300,180 T600,120 T800,40" fill="none" stroke="var(--brand-primary)" stroke-width="3" stroke-linecap="round"/>
+                <circle cx="300" cy="180" r="5" fill="#fff" stroke="var(--brand-primary)" stroke-width="3"/>
+                <circle cx="800" cy="40" r="5" fill="#fff" stroke="var(--brand-primary)" stroke-width="3"/>
+              </svg>
+              <div style="position:absolute; bottom:40px; right:40px; background:rgba(0,0,0,0.4); backdrop-filter:blur(10px); border:1px solid var(--brand-primary); padding:16px 24px; border-radius:12px;">
+                <div class="label-ent" style="color:var(--brand-primary); font-size:9px; margin-bottom:4px;">Current Prediction</div>
+                <div style="font-weight:800; color:#fff; font-size:14px;">Tier 1 High Probability</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Node -->
+          <div class="card-ent" style="padding:40px;">
+            <h2 class="h2-ent" style="margin-bottom:32px;">Institutional Action Center</h2>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:32px;">
+              <div style="background:var(--bg-surface); border:1px solid var(--border-main); border-radius:16px; padding:32px; display:flex; flex-direction:column; justify-content:space-between; height:180px;">
+                <div>
+                  <div style="font-weight:700; font-size:15px; color:#fff; margin-bottom:8px;">Google Institutional Node</div>
+                  <div class="label-ent" style="font-size:9px;">SDE-1 • Closes in 14h</div>
+                </div>
+                <button class="btn-premium" onclick="window.location.hash='new-applications'">Commence Application</button>
+              </div>
+              <div style="background:var(--bg-surface); border:1px solid var(--border-main); border-radius:16px; padding:32px; display:flex; flex-direction:column; justify-content:space-between; height:180px;">
+                <div>
+                  <div style="font-weight:700; font-size:15px; color:#fff; margin-bottom:8px;">Meta University Network</div>
+                  <div class="label-ent" style="font-size:9px;">Screening in Progress</div>
+                </div>
+                <button class="btn-premium-ghost">Track Progression</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:40px;">
+          <!-- Intelligence Feed -->
+          <div class="card-ent" style="padding:40px;">
+            <div class="label-ent" style="color:var(--brand-primary); margin-bottom:32px;">Operational Intelligence</div>
+            <div style="display:flex; flex-direction:column; gap:32px;">
+              <div style="position:relative; padding-left:24px; border-left:1px solid var(--border-subtle);">
+                <div style="position:absolute; left:-4.5px; top:0; width:8px; height:8px; background:var(--brand-primary); border-radius:50%; box-shadow:0 0 10px var(--brand-primary);"></div>
+                <div style="font-weight:700; color:#fff; font-size:13px; margin-bottom:4px;">Node Sync Complete</div>
+                <p style="font-size:12px; color:var(--text-description); line-height:1.6;">Resume parsed for FinTech infrastructure alignment. Match: 88%.</p>
+                <div class="label-ent" style="font-size:9px; margin-top:8px;">2h 14m ago</div>
+              </div>
+              <div style="position:relative; padding-left:24px; border-left:1px solid var(--border-subtle);">
+                <div style="position:absolute; left:-4.5px; top:0; width:8px; height:8px; background:var(--text-muted); border-radius:50%;"></div>
+                <div style="font-weight:700; color:#fff; font-size:13px; margin-bottom:4px;">Skill Radar Update</div>
+                <p style="font-size:12px; color:var(--text-description); line-height:1.6;">Cloud Architecture certification verified by Dept. Node.</p>
+                <div class="label-ent" style="font-size:9px; margin-top:8px;">Yesterday</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Governance -->
+          <div class="card-ent" style="padding:40px;">
+            <div class="label-ent" style="margin-bottom:24px;">Governance Links</div>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <a href="#queries" class="gov-link">Institutional Query</a>
+              <a href="#resume-analysis" class="gov-link">Execute Neural Scan</a>
+              <a href="#skill-analysis" class="gov-link">Infrastructure Audit</a>
+            </div>
+          </div>
+        </div>
+
+      </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 160px;gap:24px;align-items:center;">
-      <div id="skill-bars"></div>
-      <div style="text-align:center;">
-        <canvas id="radar-chart" width="150" height="150"></canvas>
-      </div>
-    </div>
-  </div>
-  <!-- Right: Placement probability -->
-  <div class="card animate-fade-in-up delay-200">
-    <div class="card-header">
-      <div class="card-title">Placement Probability</div>
-      <span class="badge badge-success badge-dot">High</span>
-    </div>
-    <div class="prob-ring-wrap">
-      <svg width="120" height="120" viewBox="0 0 120 120">
-        <circle cx="60" cy="60" r="45" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="10" stroke-dasharray="212" stroke-linecap="round"/>
-        <circle cx="60" cy="60" r="45" fill="none" stroke="url(#probGrad)" stroke-width="10" stroke-dasharray="212" stroke-dashoffset="59" stroke-linecap="round" id="prob-arc"/>
-        <defs><linearGradient id="probGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#7C3AED"/><stop offset="100%" stop-color="#22D3EE"/></linearGradient></defs>
-      </svg>
-      <div class="prob-ring-label">
-        <span style="font-family:var(--font-display);font-size:1.6rem;font-weight:800;color:var(--text-primary);">72%</span>
-        <span style="font-size:.65rem;color:var(--text-muted);">probability</span>
-      </div>
-    </div>
-    <p style="text-align:center;font-size:.8rem;color:var(--text-secondary);margin-top:8px;">Based on CGPA, skills, ATS score and market demand</p>
-    <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px;">
-      <div class="progress-bar-wrapper">
-        <div class="progress-bar-label"><span>Profile Completion</span><span>74%</span></div>
-        <div class="progress-bar-track"><div class="progress-bar-fill" style="width:74%"></div></div>
-      </div>
-      <div class="progress-bar-wrapper">
-        <div class="progress-bar-label"><span>Skills Match</span><span>68%</span></div>
-        <div class="progress-bar-track"><div class="progress-bar-fill" style="width:68%"></div></div>
-      </div>
-    </div>
-  </div>
-</div>
 
-<!-- Bottom row -->
-<div class="dash-bottom">
-  <!-- Applications -->
-  <div class="card animate-fade-in-up">
-    <div class="card-header">
-      <div class="card-title">My Applications</div>
-      <a href="#drives" onclick="window.location.hash='drives'" class="btn btn-sm btn-ghost" style="text-decoration:none;">All →</a>
-    </div>
-    <div id="app-list"></div>
-  </div>
-  <!-- AI Recommendations -->
-  <div class="ai-widget animate-fade-in-up delay-100">
-    <div class="ai-widget-header">
-      <span class="ai-badge">🤖 AI</span>
-      <span class="ai-widget-title">Smart Recommendations</span>
-    </div>
-    <div id="ai-recs" style="display:flex;flex-direction:column;gap:10px;"></div>
-  </div>
-  <!-- Upcoming Drives Timeline -->
-  <div class="card animate-fade-in-up delay-200">
-    <div class="card-header"><div class="card-title">Upcoming Deadlines</div></div>
-    <div class="timeline" id="drive-timeline"></div>
-  </div>
-</div>`;
-
-  // Skill bars
-  const skills = p.skills;
-  document.getElementById('skill-bars').innerHTML = Object.entries(skills).map(([k, v]) => `
-    <div class="skill-bar">
-      <div class="skill-bar-row">
-        <span class="skill-bar-label">${k.replace(/([A-Z])/g,' $1').trim()}</span>
-        <div class="skill-bar-track"><div class="skill-bar-fill" style="width:${v}%"></div></div>
-        <span class="skill-bar-pct">${v}%</span>
-      </div>
-    </div>`).join('');
-
-  // Applications
-  document.getElementById('app-list').innerHTML = Store.studentProfile.applications.map(a => `
-    <div class="app-row">
-      <div><div class="app-company">${a.drive}</div><div class="app-role">${a.role}</div></div>
-      <div style="text-align:right;"><span class="badge ${a.status==='Shortlisted'?'badge-success':a.status==='Technical Round'?'badge-warning':'badge-neutral'}">${a.status}</span><div class="app-date">${a.date}</div></div>
-    </div>`).join('');
-
-  // AI recs
-  document.getElementById('ai-recs').innerHTML = Store.studentProfile.aiRecommendations.slice(0,3).map(r => `
-    <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:12px;display:flex;gap:10px;align-items:flex-start;">
-      <span style="font-size:1.1rem;flex-shrink:0;">${r.icon}</span>
-      <div style="flex:1;">
-        <div style="font-size:.8rem;font-weight:600;color:var(--text-primary);margin-bottom:2px;">${r.title}</div>
-        <div style="font-size:.75rem;color:var(--text-secondary);">${r.desc}</div>
-      </div>
-    </div>`).join('');
-
-  // Drive timeline
-  const openDrives = Store.drives.filter(d => d.status === 'Open').slice(0, 4);
-  document.getElementById('drive-timeline').innerHTML = openDrives.map(d => `
-    <div class="timeline-item">
-      <div class="timeline-left"><div class="timeline-dot"></div><div class="timeline-line"></div></div>
-      <div class="timeline-content">
-        <div class="timeline-title">${d.company} — ${d.role}</div>
-        <div class="timeline-time">Deadline: ${d.deadline} · ${d.package}</div>
-      </div>
-    </div>`).join('');
-
-  // Radar chart
-  setTimeout(() => {
-    const ctx = document.getElementById('radar-chart');
-    if (!ctx || typeof Chart === 'undefined') return;
-    new Chart(ctx, {
-      type: 'radar',
-      data: {
-        labels: ['Technical','Comm.','Problem\nSolving','Domain','Collab.'],
-        datasets: [{
-          data: Object.values(skills),
-          backgroundColor: 'rgba(124,58,237,0.2)',
-          borderColor: '#7C3AED',
-          pointBackgroundColor: '#22D3EE',
-          borderWidth: 2,
-        }]
-      },
-      options: {
-        responsive: false,
-        scales: {
-          r: {
-            min: 0, max: 100,
-            ticks: { display: false },
-            grid: { color: 'rgba(255,255,255,0.06)' },
-            pointLabels: { color: '#64748B', font: { size: 9 } }
-          }
-        },
-        plugins: { legend: { display: false } }
+    <style>
+      .btn-premium {
+        background: var(--brand-primary); color: #fff; border: none; padding: 12px 20px; 
+        border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; transition: var(--t-fast);
+        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
       }
-    });
-  }, 100);
+      .btn-premium:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+      .btn-premium-ghost {
+        background: rgba(255,255,255,0.02); color: var(--text-description); border: 1px solid var(--border-main); 
+        padding: 12px 20px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; transition: var(--t-fast);
+      }
+      .btn-premium-ghost:hover { background: var(--bg-hover); color: #fff; }
+
+      .gov-link {
+        display: block; padding: 16px; background: var(--bg-surface); border: 1px solid var(--border-main);
+        border-radius: 12px; color: var(--text-description); font-size: 13px; font-weight: 600; text-decoration: none; transition: var(--t-fast);
+      }
+      .gov-link:hover { color: #fff; border-color: var(--brand-primary); transform: translateX(4px); background: var(--bg-hover); }
+    </style>
+  `;
 }

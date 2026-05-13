@@ -1,159 +1,143 @@
 // ============================================================
-// PLACENIX — HASH-BASED SPA ROUTER
+// PLACENIX — CENTRALIZED SPA ROUTER (FULLY HARMONIZED)
 // ============================================================
 
-import { renderSidebar, renderTopbar } from './components/sidebar.js';
 import { loadLandingPage }   from './pages/landing.js';
 import { loadAuthPage }      from './pages/auth.js';
+import { loadOnboardingPage } from './pages/onboarding.js';
 import { loadStudentDash }   from './pages/dashboard-student.js';
 import { loadTPODash, loadAdminDash } from './pages/dashboard-tpo.js';
-import { loadResumePage }    from './pages/resume-intelligence.js';
-import { loadEmpPage }       from './pages/employability.js';
-import { loadDrivesPage }    from './pages/drives.js';
-import { loadKanbanPage }    from './pages/kanban.js';
-import { loadAnalyticsPage } from './pages/analytics.js';
-import { loadAlumniPage }    from './pages/alumni.js';
-import { loadInterviewPage } from './pages/interview-repo.js';
-import { loadCommPage }      from './pages/communication.js';
-import { loadAIPage }        from './pages/ai-modules.js';
-import { loadVirtualInterviewPage } from './pages/virtual-interview.js';
-import { loadSaaSPage }      from './pages/saas-admin.js';
-import { loadOnboardingPage }from './pages/onboarding.js';
 import { loadProfilePage }   from './pages/profile.js';
+import { loadDrivesPage }    from './pages/drives.js';
+import { loadAlumniPage }    from './pages/alumni.js';
+import { loadAnalyticsPage } from './pages/analytics.js';
+import { loadAIPage }        from './pages/ai-modules.js';
+import { loadRepoPage }      from './pages/interview-repo.js';
+import { loadCommPage }      from './pages/communication.js';
+import { loadVirtualInterviewPage } from './pages/virtual-interview.js';
+import { loadResumePage }    from './pages/resume-intelligence.js';
+import { loadEmployabilityPage } from './pages/employability.js';
+import { 
+  loadDeptDash, loadDeptStudents, loadDeptResume, 
+  loadDeptSkills, loadDeptNewJobs, loadDeptPrevJobs, 
+  loadDeptAnnouncements, loadDeptQueries 
+} from './pages/dashboard-dept.js';
+
+import { renderSidebar, renderTopbar } from './components/sidebar.js';
+import { supabase   } from './supabase.js';
 import Store          from './store.js';
-import { supabase }   from './supabase.js';
 
 const DASHBOARD_PAGES = [
-  'student-dashboard','tpo-dashboard','admin-dashboard',
-  'profile','resume','employability','drives','kanban',
-  'analytics','alumni','interview-repo','communication','ai-modules','saas-admin',
-  'virtual-interview'
+  'student-dashboard', 'tpo-dashboard', 'admin-dashboard',
+  'student-details', 'profile', 'employability', 'skill-analysis', 
+  'drives', 'new-applications', 'my-applications', 'completed-batches',
+  'alumni', 'alumni-connect', 'analytics', 'ai-modules', 'ai-predictor',
+  'interview-repo', 'communication', 'queries', 'virtual-interview', 
+  'faculty-advisor', 'admin-dept', 'resume', 'resume-analysis', 'kanban', 'saas-admin',
+  'dept-students', 'dept-resume', 'dept-skills', 'dept-new-jobs', 'dept-prev-jobs', 'dept-announcements', 'dept-queries'
 ];
 
 const routes = {
-  '':                  (r,s) => loadLandingPage(r,s),
-  'landing':           (r,s) => loadLandingPage(r,s),
-  'login':             (r,s) => loadAuthPage(r,s,'login'),
-  'signup':            (r,s) => loadAuthPage(r,s,'signup'),
-  'otp':               (r,s) => loadAuthPage(r,s,'otp'),
+  '':                  loadLandingPage,
+  'login':             (r,s,sb) => loadAuthPage(r,s,'login',sb),
+  'signup':            (r,s,sb) => loadAuthPage(r,s,'signup',sb),
+  'onboarding':        loadOnboardingPage,
   'student-dashboard': loadStudentDash,
   'tpo-dashboard':     loadTPODash,
-  'admin-dashboard':   loadAdminDash,
-  'resume':            loadResumePage,
-  'employability':     loadEmpPage,
-  'drives':            loadDrivesPage,
-  'kanban':            loadKanbanPage,
-  'analytics':         loadAnalyticsPage,
-  'alumni':            loadAlumniPage,
-  'interview-repo':    loadInterviewPage,
-  'communication':     loadCommPage,
-  'ai-modules':        loadAIPage,
-  'virtual-interview': loadVirtualInterviewPage,
-  'saas-admin':        loadSaaSPage,
-  'onboarding':        (r,s) => loadOnboardingPage(r,s),
+  'admin-dashboard':   loadDeptDash,
+  'student-details':   loadProfilePage,
   'profile':           loadProfilePage,
+  'employability':     loadEmployabilityPage,
+  'skill-analysis':    loadEmployabilityPage,
+  'drives':            loadDrivesPage,
+  'new-applications':  loadDrivesPage,
+  'my-applications':   loadDrivesPage,
+  'completed-batches': loadDrivesPage,
+  'alumni':            loadAlumniPage,
+  'alumni-connect':    loadAlumniPage,
+  'analytics':         loadAnalyticsPage,
+  'ai-modules':        loadAIPage,
+  'ai-predictor':      loadAIPage,
+  'interview-repo':    loadRepoPage,
+  'communication':     loadCommPage,
+  'queries':           loadCommPage,
+  'virtual-interview': loadVirtualInterviewPage,
+  'resume':            loadResumePage,
+  'resume-analysis':   loadResumePage,
+  'kanban':            loadDrivesPage,
+  'saas-admin':        loadLandingPage,
+  'dept-students':      loadDeptStudents,
+  'dept-resume':        loadDeptResume,
+  'dept-skills':        loadDeptSkills,
+  'dept-new-jobs':      loadDeptNewJobs,
+  'dept-prev-jobs':      loadDeptPrevJobs,
+  'dept-announcements': loadDeptAnnouncements,
+  'dept-queries':       loadDeptQueries
 };
 
 function getRoute() {
-  // Normalize route: remove hash, remove query params, and convert underscores to hyphens
-  let raw = window.location.hash.replace('#','').split('?')[0] || '';
-  return raw.replace(/_/g, '-'); 
+  const hash = window.location.hash || '#';
+  let raw = hash.replace('#', '') || '';
+  if (raw.startsWith('/')) raw = raw.substring(1);
+  return raw.replace(/_/g, '-').toLowerCase(); 
 }
 
 async function handleRoute() {
   const route = getRoute();
-  console.log('🛣️ Routing to:', route);
-
+  console.log('🧭 Router: Transitioning to node ->', route);
+  console.table(Object.keys(routes));
   const app   = document.getElementById('app');
-  const isDash = DASHBOARD_PAGES.includes(route);
-  
-  // 1. Auth Guard
-  if (isDash && !Store.session.user) {
-    console.warn('🔒 Unauthorized access. Redirecting to login...');
-    window.location.hash = 'login';
-    return;
-  }
-
-  // 2. Onboarding Guard
-  if (isDash && Store.session.user && !Store.session.user.onboarding_complete) {
-    console.warn('🚧 Onboarding incomplete. Redirecting...');
-    window.location.hash = 'onboarding';
-    return;
-  }
-  
-  if (route === 'onboarding' && !Store.session.user) {
-    window.location.hash = 'login';
-    return;
-  }
-
-  const loader = routes[route] || routes[''];
-
-  app.style.opacity = '0';
-  app.style.transform = 'translateY(8px)';
-  
-  await sleep(100);
+  if (!app) return;
 
   try {
+    const isDash = DASHBOARD_PAGES.includes(route);
+    const user   = Store.session?.user;
+    const role   = Store.session?.role || 'guest';
+
     if (isDash) {
       app.innerHTML = `
         <div class="app-shell">
-          <nav class="sidebar" id="sidebar">
-            ${renderSidebar(Store.session.role, route, Store.session.user)}
-          </nav>
-          <div class="main-content" id="main-content">
-            ${renderTopbar(Store.session.user, route)}
-            <div class="page-content">
-              <div id="page-root"></div>
+          <nav class="sidebar" id="sidebar">${renderSidebar(role, route, user)}</nav>
+          <main class="main-content" id="main-content">
+            ${renderTopbar(user, route)}
+            <div class="page-content" id="page-root">
+              <div style="padding:100px; text-align:center; color:var(--text-muted);">
+                <div class="animate-spin" style="width:32px; height:32px; border:3px solid var(--border-subtle); border-top-color:var(--brand-primary); border-radius:50%; margin:0 auto 20px;"></div>
+                Calibrating Interface Nodes...
+              </div>
             </div>
-          </div>
+          </main>
         </div>`;
-      const pageRoot = document.getElementById('page-root');
-      await loader(pageRoot, Store);
-      initSidebar();
     } else {
       app.innerHTML = `<div id="page-root"></div>`;
-      await loader(document.getElementById('page-root'), Store);
     }
+
+    const pageRoot = document.getElementById('page-root');
+    const loader   = routes[route] || routes[''];
+    
+    console.log(`🚀 Router: Executing loader for [${route}] ->`, loader.name || 'Anonymous');
+    await loader(pageRoot, Store, supabase);
+    if (isDash) initSidebar();
+
   } catch (err) {
     console.error('❌ Router Error:', err);
-    app.innerHTML = `<div style="padding:40px;text-align:center;"><h2>Page Load Error</h2><p>${err.message}</p><a href="#landing">Back to Home</a></div>`;
+    app.innerHTML = `
+      <div style="padding:40px; text-align:center; background:#09090b; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff;">
+        <div style="font-size:48px; margin-bottom:24px;">⚠️</div>
+        <h2 style="font-weight:800; font-size:24px;">Neural Link Failure</h2>
+        <p style="color:#a1a1aa; margin-top:12px; max-width:400px; line-height:1.6;">The application encountered a terminal error while mounting the <strong>${route || 'root'}</strong> node.</p>
+        <code style="display:block; margin-top:24px; padding:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:#ef4444; font-size:12px;">${err.message}</code>
+        <button style="margin-top:32px; padding:12px 24px; background:#7c3aed; color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer;" onclick="location.reload();">Retry Lifecycle</button>
+      </div>`;
   }
-
-  requestAnimationFrame(() => {
-    app.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-    app.style.opacity = '1';
-    app.style.transform = 'translateY(0)';
-  });
-
-  window.scrollTo({ top: 0 });
 }
 
 function initSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const main    = document.getElementById('main-content');
-
-  document.getElementById('sidebar-collapse-btn')?.addEventListener('click', () => {
-    sidebar.classList.toggle('collapsed');
-    main.classList.toggle('sidebar-collapsed');
-  });
-
-  document.getElementById('mobile-menu-btn')?.addEventListener('click', () => {
-    sidebar.classList.toggle('mobile-open');
-  });
-
   document.getElementById('logout-btn')?.addEventListener('click', async () => {
-    await supabase.auth.signOut();
-  });
-
-  document.querySelectorAll('[data-route]').forEach(el => {
-    el.addEventListener('click', e => {
-      e.preventDefault();
-      window.location.hash = el.getAttribute('data-route').replace(/_/g, '-');
-    });
+    if (supabase) await supabase.auth.signOut();
+    location.reload();
   });
 }
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 export function initRouter() {
   window.addEventListener('hashchange', handleRoute);

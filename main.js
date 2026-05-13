@@ -1,5 +1,5 @@
 // ============================================================
-// PLACENIX — APP ENTRY POINT
+// PLACENIX — APP ENTRY POINT (RESILIENT BOOT)
 // ============================================================
 
 import { initRouter } from './router.js';
@@ -8,55 +8,45 @@ import { initToast  } from './components/toast.js';
 import { supabase   } from './supabase.js';
 import Store          from './store.js';
 
-async function initApp() {
-  console.log('🚀 Placenix Initializing...');
+async function bootApp() {
+  console.log('🚀 Placenix: Resuming Standard Boot Sequence...');
   
-  // 1. Initialize Global UI
-  initTheme();
-  initToast();
+  try {
+    // 1. Initialize UI Environment
+    initTheme();
+    initToast();
 
-  // 2. Handle Supabase Session
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session) {
-    // Fetch extended profile data
-    const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-    
-    Store.session.user = {
-      id: session.user.id,
-      email: session.user.email,
-      ...session.user.user_metadata,
-      ...(profile || {}) // Merge DB profile
-    };
-    Store.session.role = Store.session.user.role || 'student';
-    console.log('👤 Active Session:', Store.session.user.full_name);
-  }
+    // 2. Start Router immediately
+    initRouter();
 
-  // 3. Listen for Auth Changes
-  supabase.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN' && session) {
-      const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-      Store.session.user = { 
-        id: session.user.id, 
-        email: session.user.email, 
-        ...session.user.user_metadata,
-        ...(profile || {})
-      };
-      Store.session.role = Store.session.user.role || 'student';
+    // 3. Handle Authentication if client is active
+    if (supabase) {
+      const { data: { session } } = await supabase.auth.getSession();
       
-      // If onboarding isn't done, force routing check
-      if (!Store.session.user.onboarding_complete && Store.session.role === 'student') {
-        window.location.hash = 'onboarding';
+      if (session) {
+        Store.session.user = { id: session.user.id, email: session.user.email, ...session.user.user_metadata };
+        Store.session.role = Store.session.user.role || 'student';
+        
+        // Refresh UI with user data
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
       }
-    } else if (event === 'SIGNED_OUT') {
-      Store.session.user = null;
-      Store.session.role = 'guest';
-      window.location.hash = 'login';
-    }
-  });
 
-  // 4. Initialize Router
-  initRouter();
+      supabase.auth.onAuthStateChange((event, session) => {
+        if (session) {
+          Store.session.user = { id: session.user.id, email: session.user.email, ...session.user.user_metadata };
+          Store.session.role = Store.session.user.role || 'student';
+        } else {
+          Store.session.user = null;
+          Store.session.role = 'guest';
+          window.location.hash = 'login';
+        }
+      });
+    }
+
+  } catch (err) {
+    console.error('🔥 Fatal Boot Error:', err);
+    // index.html diagnostic layer will handle visibility
+  }
 }
 
-// Start the app
-document.addEventListener('DOMContentLoaded', initApp);
+document.addEventListener('DOMContentLoaded', bootApp);

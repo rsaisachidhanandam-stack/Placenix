@@ -1,102 +1,110 @@
-export async function loadInterviewPage(root, Store) {
+export async function loadRepoPage(root, Store, supabase) {
   root.innerHTML = `
-<style>
-.intv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px;}
-.intv-card{background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:16px;padding:22px;transition:all .3s;}
-.intv-card:hover{border-color:var(--border-glow);transform:translateY(-2px);box-shadow:var(--shadow-card-hover);}
-.intv-company{font-size:1rem;font-weight:800;color:var(--text-primary);margin-bottom:2px;}
-.intv-role{font-size:.8rem;color:var(--text-secondary);}
-.intv-rounds{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0;}
-.intv-round{padding:3px 10px;background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.2);border-radius:99px;font-size:.72rem;font-weight:600;color:var(--brand-violet-light);}
-.intv-meta-row{display:flex;gap:12px;flex-wrap:wrap;font-size:.78rem;color:var(--text-muted);margin-bottom:12px;}
-.diff-easy{color:var(--success);}
-.diff-medium{color:var(--warning);}
-.diff-hard{color:var(--danger);}
-</style>
-<div class="page-header" style="display:flex;justify-content:space-between;align-items:center;">
-  <div>
-    <h1 class="page-title">Interview Experience Repository</h1>
-    <p class="page-subtitle">AI-curated real interview experiences from placed students</p>
-  </div>
-  <button class="btn btn-primary" onclick="showSubmitModal()">+ Share Experience</button>
-</div>
-
-<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
-  ${['All','Easy','Medium','Hard'].map((d,i)=>`<button class="chip ${i===0?'selected':''}">${d}</button>`).join('')}
-  ${['Google','Amazon','TCS','Infosys','Microsoft'].map(c=>`<button class="chip">${c}</button>`).join('')}
-</div>
-
-<div style="display:grid;grid-template-columns:3fr 1fr;gap:20px;">
-  <div class="intv-grid" id="intv-grid"></div>
-  <div>
-    <div class="card" style="margin-bottom:16px;">
-      <div class="card-header"><div class="card-title">Top Asked Topics</div></div>
-      ${[['Arrays & Strings',92],['Dynamic Programming',78],['System Design',74],['Trees & Graphs',68],['Leadership Principles',61],['OS/DBMS Concepts',54]].map(([t,v])=>`
-        <div style="margin-bottom:10px;">
-          <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:3px;"><span style="color:var(--text-secondary);">${t}</span><span style="font-weight:700;color:var(--text-primary);">${v}%</span></div>
-          <div style="height:5px;background:rgba(255,255,255,.05);border-radius:99px;overflow:hidden;"><div style="width:${v}%;height:100%;background:var(--gradient-brand);border-radius:99px;"></div></div>
-        </div>`).join('')}
-    </div>
-    <div class="ai-widget">
-      <div class="ai-widget-header"><span class="ai-badge">🤖 AI</span><span class="ai-widget-title">Pattern Insights</span></div>
-      <div class="ai-widget-body">
-        <p style="margin-bottom:10px;">AI has analyzed 240+ interview experiences. Key findings:</p>
-        <ul style="display:flex;flex-direction:column;gap:8px;padding-left:0;list-style:none;">
-          <li style="font-size:.8rem;">📌 <strong>Google</strong> focuses 70% on DSA + 30% on System Design</li>
-          <li style="font-size:.8rem;">📌 <strong>Amazon</strong> asks LP questions in every round</li>
-          <li style="font-size:.8rem;">📌 <strong>TCS Digital</strong> always includes SQL & Java OOP</li>
-        </ul>
+  <div class="page-header">
+    <div class="flex justify-between items-center">
+      <div>
+        <h1 class="page-title">Completed Batches Repository</h1>
+        <p class="page-description">Institutional interview intelligence and historical recruitment telemetry.</p>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-secondary">Filter Repositories</button>
+        <button class="btn btn-primary" onclick="showSubmitModal()">Commit Experience</button>
       </div>
     </div>
   </div>
-</div>
 
-<div id="submit-modal" style="display:none;" class="modal-overlay" onclick="if(event.target===this)this.style.display='none'">
-  <div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-header">
-      <h2 class="modal-title">Share Interview Experience</h2>
-      <button onclick="document.getElementById('submit-modal').style.display='none'" class="btn-icon">✕</button>
+  <div class="grid grid-cols-3" style="grid-template-columns: 2fr 1fr;">
+    <div style="display:flex; flex-direction:column; gap:24px;">
+      <div class="grid grid-cols-2" id="intv-grid-container"></div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:12px;">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div class="input-group"><label class="input-label">Company</label><input class="input" placeholder="e.g. Google"></div>
-        <div class="input-group"><label class="input-label">Role</label><input class="input" placeholder="SDE I"></div>
+
+    <div style="display:flex; flex-direction:column; gap:24px;">
+      <div class="card">
+        <div class="card-header"><h3 class="card-title">Institutional Topic Prevalence</h3></div>
+        <div style="display:flex; flex-direction:column; gap:16px; margin-top:12px;">
+          ${[['System Design Architecture', 92], ['Advanced Algorithms', 78], ['Behavioral Assessment', 74], ['Database Engineering', 68]].map(([t, v]) => `
+            <div>
+              <div class="flex justify-between items-center" style="margin-bottom:6px;">
+                <span style="font-size:12px; font-weight:600; color:var(--text-description);">${t}</span>
+                <span style="font-size:12px; font-weight:700; color:var(--text-main);">${v}%</span>
+              </div>
+              <div style="height:4px; background:rgba(255,255,255,0.05); border-radius:2px; overflow:hidden;">
+                <div style="height:100%; width:${v}%; background:var(--brand-primary); border-radius:2px;"></div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
       </div>
-      <div class="input-group"><label class="input-label">Rounds (comma separated)</label><input class="input" placeholder="Online Assessment, Technical 1, HR"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div class="input-group"><label class="input-label">Difficulty</label><select class="input"><option>Easy</option><option>Medium</option><option>Hard</option></select></div>
-        <div class="input-group"><label class="input-label">Result</label><select class="input"><option>Selected</option><option>Rejected</option><option>In Progress</option></select></div>
+
+      <div class="card" style="background:linear-gradient(135deg, rgba(124,58,237,0.05) 0%, rgba(34,211,238,0.03) 100%); border-color:rgba(124,58,237,0.1);">
+        <div class="card-header">
+          <h3 class="card-title">AI Pattern Intelligence</h3>
+          <span class="status-pill status-success" style="font-size:9px;">Active</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:12px;">
+          <div style="font-size:12px; color:var(--text-description); line-height:1.6;">AI has audited 240+ institutional experiences:</div>
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <div style="width:24px; height:24px; background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:10px;">📌</div>
+            <div style="font-size:11px; color:var(--text-muted); line-height:1.4;"><strong style="color:var(--text-main);">Google:</strong> Focuses 70% on DSA and architectural scalability.</div>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <div style="width:24px; height:24px; background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:10px;">📌</div>
+            <div style="font-size:11px; color:var(--text-muted); line-height:1.4;"><strong style="color:var(--text-main);">Amazon:</strong> Leadership principles audited in 100% of cases.</div>
+          </div>
+        </div>
       </div>
-      <div class="input-group"><label class="input-label">Experience Details</label><textarea class="input" rows="4" placeholder="Describe each round, questions asked, topics covered…" style="resize:vertical;"></textarea></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="document.getElementById('submit-modal').style.display='none'">Cancel</button>
-      <button class="btn btn-primary" onclick="document.getElementById('submit-modal').style.display='none';alert('Experience shared! AI will analyze and publish it shortly.')">Submit Experience →</button>
     </div>
   </div>
-</div>`;
 
-  document.getElementById('intv-grid').innerHTML = Store.interviews.map(iv => {
-    const diffClass = iv.difficulty === 'Easy' ? 'diff-easy' : iv.difficulty === 'Hard' ? 'diff-hard' : 'diff-medium';
+  <!-- Modal -->
+  <div id="submit-modal" class="modal-overlay" style="display:none;">
+    <div class="modal" style="max-width:640px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Experience Commitment</h3>
+        <button class="btn-ghost" onclick="document.getElementById('submit-modal').style.display='none'">✕</button>
+      </div>
+      <div class="grid grid-cols-2">
+        <div class="input-group"><label class="label">Organization</label><input class="input" placeholder="e.g. Microsoft"></div>
+        <div class="input-group"><label class="label">Designated Role</label><input class="input" placeholder="Software Engineer"></div>
+      </div>
+      <div class="input-group"><label class="label">Interview Assessment Rounds</label><input class="input" placeholder="e.g. Technical I, Architectural Review, HR"></div>
+      <div class="grid grid-cols-2">
+        <div class="input-group"><label class="label">Difficulty Index</label><select class="input"><option>Low</option><option>Medium</option><option>High</option></select></div>
+        <div class="input-group"><label class="label">Outcome Status</label><select class="input"><option>Selected</option><option>Rejected</option></select></div>
+      </div>
+      <div class="input-group"><label class="label">Full Assessment Narrative</label><textarea class="input" style="height:120px; padding:12px;"></textarea></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('submit-modal').style.display='none'">Discard</button>
+        <button class="btn btn-primary" onclick="document.getElementById('submit-modal').style.display='none'; alert('Experience successfully committed to the institutional intelligence base.')">Commit Experience →</button>
+      </div>
+    </div>
+  </div>
+  `;
+
+  const container = document.getElementById('intv-grid-container');
+  container.innerHTML = Store.interviews.map(iv => {
+    const diffStatus = iv.difficulty === 'Easy' ? 'status-success' : iv.difficulty === 'Hard' ? 'status-danger' : 'status-warning';
     return `
-    <div class="intv-card">
-      <div class="intv-company">${iv.company}</div>
-      <div class="intv-role">${iv.role} · ${iv.year}</div>
-      <div class="intv-meta-row">
-        <span class="${diffClass}">● ${iv.difficulty}</span>
-        <span class="${iv.result==='Selected'?'badge-success':''}" style="color:${iv.result==='Selected'?'var(--success)':'var(--text-muted)'};">✓ ${iv.result}</span>
-        <span>by ${iv.author}</span>
+    <div class="card" style="display:flex; flex-direction:column; justify-content:space-between;">
+      <div>
+        <div class="flex justify-between items-start" style="margin-bottom:16px;">
+          <h4 style="font-size:16px; font-weight:800; color:var(--text-main);">${iv.company}</h4>
+          <span class="status-pill ${diffStatus}" style="font-size:9px;">${iv.difficulty} Complexity</span>
+        </div>
+        <div style="font-size:12px; font-weight:600; color:var(--brand-primary);">${iv.role} · ${iv.year}</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Committed by ${iv.author}</div>
+        
+        <div class="flex gap-2" style="flex-wrap:wrap; margin:16px 0;">
+          ${iv.rounds.map(r => `<span style="font-size:10px; padding:2px 8px; background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); border-radius:4px; color:var(--text-description);">${r}</span>`).join('')}
+        </div>
       </div>
-      <div class="intv-rounds">${iv.rounds.map(r=>`<span class="intv-round">${r}</span>`).join('')}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;">${iv.tags.map(t=>`<span class="chip">${t}</span>`).join('')}</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:.78rem;color:var(--text-muted);">👍 ${iv.helpful} found this helpful</span>
-        <button class="btn btn-sm btn-secondary">Read Full →</button>
+      
+      <div class="flex justify-between items-center" style="padding-top:16px; border-top:1px solid var(--border-subtle);">
+        <div style="font-size:11px; color:var(--text-muted);">${iv.helpful} helpful audits</div>
+        <button class="btn btn-ghost" style="font-size:11px; padding:4px 8px;">View Full Case Study →</button>
       </div>
     </div>`;
   }).join('');
 
-  window.showSubmitModal = () => {
-    document.getElementById('submit-modal').style.display = 'flex';
-  };
+  window.showSubmitModal = () => document.getElementById('submit-modal').style.display = 'flex';
 }

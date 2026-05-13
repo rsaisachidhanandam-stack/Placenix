@@ -1,276 +1,125 @@
-import { supabase } from '../supabase.js';
-
-export async function loadOnboardingPage(root, Store) {
+export async function loadOnboardingPage(root, Store, supabase) {
   root.innerHTML = getOnboardingHTML();
-  initOnboarding(Store);
+  initOnboarding(Store, supabase);
 }
 
 function getOnboardingHTML() {
   return `
-<style>
-.onboard-shell {
-  min-height: 100vh;
-  background: var(--bg-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-}
-.onboard-bg {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 50% 0%, rgba(124,58,237,0.15) 0%, transparent 60%);
-}
-.onboard-container {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  max-width: 600px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 24px;
-  padding: 40px;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-  backdrop-filter: blur(20px);
-}
-.onboard-header {
-  text-align: center;
-  margin-bottom: 32px;
-}
-.onboard-title {
-  font-family: var(--font-display);
-  font-size: 2rem;
-  font-weight: 800;
-  margin-bottom: 8px;
-}
-.onboard-subtitle {
-  color: var(--text-secondary);
-  font-size: 0.95rem;
-}
-.stepper {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 40px;
-  justify-content: center;
-}
-.step-dot {
-  width: 40px;
-  height: 6px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 99px;
-  transition: all 0.3s;
-}
-.step-dot.active {
-  background: var(--gradient-brand);
-}
-.step-dot.completed {
-  background: var(--brand-electric-violet);
-  opacity: 0.6;
-}
-.step-panel {
-  display: none;
-  animation: fadeIn 0.4s ease;
-}
-.step-panel.active {
-  display: block;
-}
-.onboard-nav {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 40px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border-subtle);
-}
-.skill-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 8px 16px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-input);
-  border-radius: 99px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  user-select: none;
-}
-.skill-chip.selected {
-  background: rgba(124,58,237,0.15);
-  border-color: var(--brand-electric-violet);
-  color: var(--brand-violet-light);
-}
-.skill-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-</style>
-
-<div class="onboard-shell">
-  <div class="onboard-bg"></div>
-  <div class="onboard-container">
+  <div style="min-height:100vh; background:var(--bg-primary); display:flex; align-items:center; justify-content:center; padding:24px; position:relative; overflow:hidden;">
+    <div style="position:absolute; inset:0; background:radial-gradient(circle at top right, rgba(124,58,237,0.1) 0%, transparent 50%), radial-gradient(circle at bottom left, rgba(34,211,238,0.05) 0%, transparent 50%);"></div>
     
-    <div class="stepper" id="onboard-stepper">
-      <div class="step-dot active"></div>
-      <div class="step-dot"></div>
-      <div class="step-dot"></div>
-      <div class="step-dot"></div>
-    </div>
-
-    <!-- Step 1: Academic -->
-    <div class="step-panel active" id="step-1">
-      <div class="onboard-header">
-        <h2 class="onboard-title">Academic Details 🎓</h2>
-        <p class="onboard-subtitle">Let's set up your university profile.</p>
+    <div class="card" style="width:100%; max-width:680px; position:relative; z-index:10; padding:64px; box-shadow:0 32px 64px rgba(0,0,0,0.4);">
+      <div style="text-align:center; margin-bottom:48px;">
+        <div style="font-size:32px; margin-bottom:24px;">🎓</div>
+        <h1 style="font-size:28px; font-weight:800; color:var(--text-main);">Institutional Onboarding</h1>
+        <p style="font-size:14px; color:var(--text-description); margin-top:8px;">Initialize your professional identity within the Placenix ecosystem.</p>
       </div>
-      <div style="display:grid;gap:16px;">
+
+      <div style="display:flex; gap:12px; justify-content:center; margin-bottom:56px;">
+        ${[1,2,3,4].map(i => `<div class="step-indicator" id="dot-${i}" style="width:48px; height:4px; background:rgba(255,255,255,0.05); border-radius:2px; transition:all 0.3s;"></div>`).join('')}
+      </div>
+
+      <div id="step-1" class="onboard-step">
+        <h3 style="font-size:18px; font-weight:700; color:var(--text-main); margin-bottom:24px;">Academic Registry</h3>
         <div class="input-group">
-          <label class="input-label">Department</label>
+          <label class="label">Major / Department</label>
           <select class="input" id="ob-dept">
-            <option value="Computer Science">Computer Science</option>
+            <option value="Computer Science">Computer Science & Engineering</option>
             <option value="Information Technology">Information Technology</option>
-            <option value="Electronics">Electronics</option>
-            <option value="Mechanical">Mechanical</option>
+            <option value="Electronics">Electronics & Communication</option>
+            <option value="Mechanical">Mechanical Engineering</option>
           </select>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div class="input-group">
-            <label class="input-label">Batch Year (Graduation)</label>
-            <input type="text" class="input" id="ob-batch" placeholder="2025" value="2025">
-          </div>
-          <div class="input-group">
-            <label class="input-label">Section</label>
-            <input type="text" class="input" id="ob-section" placeholder="A" value="A">
-          </div>
+        <div class="grid grid-cols-2" style="margin-top:16px;">
+          <div class="input-group"><label class="label">Graduation Batch</label><input type="text" id="ob-batch" class="input" value="2026"></div>
+          <div class="input-group"><label class="label">Assigned Section</label><input type="text" id="ob-section" class="input" placeholder="e.g. B"></div>
         </div>
       </div>
-    </div>
 
-    <!-- Step 2: Identity & Grades -->
-    <div class="step-panel" id="step-2">
-      <div class="onboard-header">
-        <h2 class="onboard-title">Current Standing 📊</h2>
-        <p class="onboard-subtitle">This helps match you with eligible placement drives.</p>
-      </div>
-      <div style="display:grid;gap:16px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div class="input-group">
-            <label class="input-label">Roll Number</label>
-            <input type="text" class="input" id="ob-roll" placeholder="e.g. 21CS001">
-          </div>
-          <div class="input-group">
-            <label class="input-label">Student ID</label>
-            <input type="text" class="input" id="ob-sid" placeholder="e.g. S123456">
-          </div>
+      <div id="step-2" class="onboard-step" style="display:none;">
+        <h3 style="font-size:18px; font-weight:700; color:var(--text-main); margin-bottom:24px;">Institutional Standing</h3>
+        <div class="grid grid-cols-2">
+          <div class="input-group"><label class="label">Institutional Roll No.</label><input type="text" id="ob-roll" class="input" placeholder="e.g. 22CS104"></div>
+          <div class="input-group"><label class="label">Verification ID</label><input type="text" id="ob-sid" class="input" placeholder="e.g. SID-9920"></div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div class="input-group">
-            <label class="input-label">Current CGPA</label>
-            <input type="number" step="0.01" class="input" id="ob-cgpa" placeholder="8.5">
-          </div>
-          <div class="input-group">
-            <label class="input-label">Active Arrears</label>
-            <input type="number" class="input" id="ob-arrears" placeholder="0" value="0">
-          </div>
+        <div class="grid grid-cols-2" style="margin-top:16px;">
+          <div class="input-group"><label class="label">Current CGPA</label><input type="number" step="0.01" id="ob-cgpa" class="input" placeholder="0.00"></div>
+          <div class="input-group"><label class="label">Active Arrears</label><input type="number" id="ob-arrears" class="input" value="0"></div>
         </div>
       </div>
-    </div>
 
-    <!-- Step 3: Skills -->
-    <div class="step-panel" id="step-3">
-      <div class="onboard-header">
-        <h2 class="onboard-title">Top Skills ⚡</h2>
-        <p class="onboard-subtitle">Select the skills you are most confident in.</p>
+      <div id="step-3" class="onboard-step" style="display:none;">
+        <h3 style="font-size:18px; font-weight:700; color:var(--text-main); margin-bottom:24px;">Core Competencies</h3>
+        <div class="flex gap-2" style="flex-wrap:wrap;">
+          ${['React', 'Node.js', 'Python', 'AWS', 'Java', 'Algorithms', 'System Design', 'SQL', 'Machine Learning'].map(s => 
+            `<div class="skill-node" data-skill="${s}" style="padding:8px 16px; background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); border-radius:8px; font-size:12px; font-weight:600; color:var(--text-description); cursor:pointer; transition:all 0.2s;">${s}</div>`
+          ).join('')}
+        </div>
       </div>
-      <div class="skill-grid" id="ob-skills">
-        ${['JavaScript', 'Python', 'Java', 'C++', 'React', 'Node.js', 'SQL', 'MongoDB', 'AWS', 'Machine Learning', 'Data Structures', 'System Design'].map(s => 
-          `<div class="skill-chip" data-skill="${s}">${s}</div>`
-        ).join('')}
-      </div>
-    </div>
 
-    <!-- Step 4: Goals -->
-    <div class="step-panel" id="step-4">
-      <div class="onboard-header">
-        <h2 class="onboard-title">Placement Goal 🎯</h2>
-        <p class="onboard-subtitle">What kind of role are you aiming for?</p>
+      <div id="step-4" class="onboard-step" style="display:none;">
+        <h3 style="font-size:18px; font-weight:700; color:var(--text-main); margin-bottom:24px;">Professional Objectives</h3>
+        <div class="input-group">
+          <label class="label">Primary Career Interest</label>
+          <select class="input" id="ob-interest">
+            <option value="Software Engineer">Software Engineering</option>
+            <option value="Data Scientist">Data Intelligence</option>
+            <option value="Product Manager">Product Strategy</option>
+          </select>
+        </div>
+        <div class="input-group" style="margin-top:16px;">
+          <label class="label">Compensation Goal (LPA)</label>
+          <select class="input" id="ob-goal">
+            <option value="10-15">10 - 15 LPA</option>
+            <option value="15-25">15 - 25 LPA</option>
+            <option value="25+">25+ LPA (Elite)</option>
+          </select>
+        </div>
       </div>
-      <div class="input-group">
-        <label class="input-label">Primary Career Interest</label>
-        <select class="input" id="ob-interest">
-          <option value="Software Engineer">Software Engineer</option>
-          <option value="Data Scientist">Data Scientist</option>
-          <option value="Product Manager">Product Manager</option>
-          <option value="Core Engineering">Core Engineering</option>
-        </select>
-      </div>
-      <div class="input-group" style="margin-top:16px;">
-        <label class="input-label">Target Package (LPA)</label>
-        <select class="input" id="ob-goal">
-          <option value="3-5">3 - 5 LPA</option>
-          <option value="6-9">6 - 9 LPA</option>
-          <option value="10-15">10 - 15 LPA</option>
-          <option value="15+">15+ LPA</option>
-        </select>
+
+      <div class="flex justify-between items-center" style="margin-top:48px; padding-top:32px; border-top:1px solid var(--border-subtle);">
+        <button id="ob-prev" class="btn btn-secondary" style="visibility:hidden;">Previous Node</button>
+        <button id="ob-next" class="btn btn-primary" style="height:48px; padding:0 32px;">Proceed to Next Node →</button>
       </div>
     </div>
-
-    <!-- Navigation -->
-    <div class="onboard-nav">
-      <button class="btn btn-secondary" id="ob-prev" style="visibility:hidden;">← Back</button>
-      <button class="btn btn-primary" id="ob-next">Next Step →</button>
-    </div>
-
   </div>
-</div>`;
+
+  <style>
+    .skill-node.selected { background: var(--brand-primary) !important; color: white !important; border-color: var(--brand-primary) !important; box-shadow: 0 4px 12px rgba(124,58,237,0.3); }
+    .step-indicator.active { background: var(--brand-primary) !important; width: 80px !important; }
+    .step-indicator.completed { background: var(--success) !important; opacity: 0.5; }
+  </style>
+  `;
 }
 
 function initOnboarding(Store) {
-  let currentStep = 1;
-  const totalSteps = 4;
-  
+  let step = 1;
   const nextBtn = document.getElementById('ob-next');
   const prevBtn = document.getElementById('ob-prev');
-  const panels = document.querySelectorAll('.step-panel');
-  const dots = document.querySelectorAll('.step-dot');
-  
-  // Skill chip toggling
-  document.querySelectorAll('.skill-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      chip.classList.toggle('selected');
-    });
+
+  document.querySelectorAll('.skill-node').forEach(node => {
+    node.onclick = () => node.classList.toggle('selected');
   });
 
-  function updateUI() {
-    panels.forEach((p, i) => {
-      p.classList.toggle('active', i + 1 === currentStep);
+  function update() {
+    document.querySelectorAll('.onboard-step').forEach((s, i) => s.style.display = (i+1 === step) ? 'block' : 'none');
+    document.querySelectorAll('.step-indicator').forEach((d, i) => {
+      d.className = 'step-indicator';
+      if (i+1 === step) d.classList.add('active');
+      else if (i+1 < step) d.classList.add('completed');
     });
-    dots.forEach((d, i) => {
-      d.classList.toggle('active', i + 1 === currentStep);
-      d.classList.toggle('completed', i + 1 < currentStep);
-    });
-    
-    prevBtn.style.visibility = currentStep === 1 ? 'hidden' : 'visible';
-    
-    if (currentStep === totalSteps) {
-      nextBtn.textContent = 'Complete Profile 🚀';
-    } else {
-      nextBtn.textContent = 'Next Step →';
-    }
+    prevBtn.style.visibility = (step === 1) ? 'hidden' : 'visible';
+    nextBtn.textContent = (step === 4) ? 'Finalize Identity 🚀' : 'Proceed to Next Node →';
   }
 
-  nextBtn.addEventListener('click', async () => {
-    if (currentStep < totalSteps) {
-      currentStep++;
-      updateUI();
+  nextBtn.onclick = async () => {
+    if (step < 4) {
+      step++;
+      update();
     } else {
-      // Finish Onboarding - Save to Supabase
-      nextBtn.textContent = 'Saving...';
       nextBtn.disabled = true;
-
-      // Gather Data
-      const selectedSkills = Array.from(document.querySelectorAll('.skill-chip.selected')).map(c => c.getAttribute('data-skill'));
-      
+      nextBtn.textContent = 'Committing Registry...';
+      const skills = Array.from(document.querySelectorAll('.skill-node.selected')).map(n => n.getAttribute('data-skill'));
       const payload = {
         department: document.getElementById('ob-dept').value,
         batch_year: document.getElementById('ob-batch').value,
@@ -279,38 +128,29 @@ function initOnboarding(Store) {
         student_id: document.getElementById('ob-sid').value,
         cgpa: parseFloat(document.getElementById('ob-cgpa').value) || null,
         arrears: parseInt(document.getElementById('ob-arrears').value) || 0,
-        skills: selectedSkills,
+        skills,
         career_interests: [document.getElementById('ob-interest').value],
         placement_goal: document.getElementById('ob-goal').value,
         onboarding_complete: true
       };
-
       try {
-        const { error } = await supabase
-          .from('profiles')
-          .update(payload)
-          .eq('id', Store.session.user.id);
-
-        if (error) throw error;
-        
-        // Update local store
+        await supabase.from('profiles').update(payload).eq('id', Store.session.user.id);
         Store.session.user = { ...Store.session.user, ...payload };
-        
-        // Redirect to dashboard
         window.location.hash = 'student-dashboard';
-        
-      } catch (err) {
-        alert('Error saving profile: ' + err.message);
-        nextBtn.textContent = 'Complete Profile 🚀';
+      } catch (e) { 
+        alert("Registry Error: " + e.message);
         nextBtn.disabled = false;
+        nextBtn.textContent = 'Finalize Identity 🚀';
       }
     }
-  });
+  };
 
-  prevBtn.addEventListener('click', () => {
-    if (currentStep > 1) {
-      currentStep--;
-      updateUI();
+  prevBtn.onclick = () => {
+    if (step > 1) {
+      step--;
+      update();
     }
-  });
+  };
+
+  update();
 }

@@ -1,4 +1,4 @@
-export async function loadAnalyticsPage(root, Store) {
+export async function loadAnalyticsPage(root, Store, supabase) {
   const a = Store.analytics;
   root.innerHTML = `
 <style>

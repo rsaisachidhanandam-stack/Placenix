@@ -177,10 +177,10 @@ const Store = {
 
   // ── Student Profile (current) ──────────────────────────────
   studentProfile: {
-    completion: 74,
-    empScore: 78,
-    atsScore: 82,
-    placementProbability: 72,
+    completion: 0,
+    empScore: null,
+    atsScore: null,
+    placementProbability: 0,
     skills: {
       technical:     84,
       communication: 72,

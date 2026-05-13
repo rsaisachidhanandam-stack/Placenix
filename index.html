@@ -20,35 +20,64 @@
   <link rel="stylesheet" href="style/layout.css">
   <link rel="stylesheet" href="style/components.css">
 
-  <!-- Chart.js -->
+  <!-- Core Libraries (UMD Fallbacks) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
   <style>
-    /* ── Landing-specific override to prevent shift ── */
-    body { overflow-x: hidden; }
+    /* ── Diagnostic Console ── */
+    #placenix-error-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #09090b;
+      z-index: 99999;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 40px;
+      overflow-y: auto;
+    }
     #app {
       transition: opacity 0.3s ease, transform 0.3s ease;
       opacity: 1;
       transform: translateY(0);
     }
-
-    /* ── Mobile topbar menu show ── */
     @media (max-width: 1024px) {
       #mobile-menu-btn { display: flex !important; }
     }
-
-    /* Mobile sidebar overlay */
-    .sidebar-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.5);
-      z-index: calc(var(--z-sidebar) - 1);
-    }
-    .sidebar-overlay.visible { display: block; }
   </style>
+
+  <script>
+    // ── Universal Exception Catcher ──
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+      const overlay = document.getElementById('placenix-error-overlay');
+      if (overlay) {
+        overlay.style.display = 'block';
+        overlay.innerHTML = `
+          <div style="max-width:800px; margin:0 auto;">
+            <div style="font-size:40px; margin-bottom:20px;">🚨</div>
+            <h2 style="color:#ef4444; font-size:20px; margin-bottom:12px;">Global Exception Trapped</h2>
+            <p style="color:#a1a1aa; font-size:14px; margin-bottom:24px;">The application environment has encountered a fatal script error during the boot sequence.</p>
+            <div style="padding:20px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); border-radius:8px; color:#ef4444; font-size:13px; line-height:1.6; white-space:pre-wrap;">
+              Error: ${msg}
+              Source: ${url}
+              Position: L${lineNo}:C${columnNo}
+              Stack: ${error ? error.stack : 'N/A'}
+            </div>
+            <button onclick="location.reload()" style="margin-top:32px; padding:12px 24px; background:#7c3aed; color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Retry Boot Sequence</button>
+          </div>
+        `;
+      }
+      return false;
+    };
+    window.onunhandledrejection = function(event) {
+      console.error('Unhandled rejection:', event.reason);
+      // Optional: trigger overlay for async errors too
+    };
+  </script>
 </head>
 <body>
+  <div id="placenix-error-overlay"></div>
   <div id="app"></div>
 
   <!-- Toast container -->
