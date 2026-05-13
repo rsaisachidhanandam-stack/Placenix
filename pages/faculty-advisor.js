@@ -5,6 +5,7 @@ export async function loadFacultyAdvisorPage(root, Store) {
     activeTab: 'dashboard',
     searchQuery: '',
     filterDept: 'All',
+    transfers: [],
     students: [
       { id: 1, name: 'Aditya Kumar', regNo: '2021CSE001', dept: 'CSE', cgpa: 9.2, resumeScore: 88, empScore: 85, prob: 'High', status: 'Approved', readiness: 90 },
       { id: 2, name: 'Sanjana Rao', regNo: '2021ECE042', dept: 'ECE', cgpa: 8.5, resumeScore: 72, empScore: 65, prob: 'Medium', status: 'Pending', readiness: 60 },
@@ -12,6 +13,74 @@ export async function loadFacultyAdvisorPage(root, Store) {
       { id: 4, name: 'Priya Dharshini', regNo: '2021IT015', dept: 'IT', cgpa: 8.9, resumeScore: 95, empScore: 92, prob: 'High', status: 'Approved', readiness: 95 },
       { id: 5, name: 'Vikram Singh', regNo: '2021MECH010', dept: 'MECH', cgpa: 7.8, resumeScore: 60, empScore: 55, prob: 'Medium', status: 'Under Review', readiness: 50 },
     ]
+  };
+
+  // 🟢 Synchronize Proposal Registry
+  async function syncTransfers() {
+    try {
+      const { data, error } = await supabase
+        .from('section_requests')
+        .select('*, profiles!student_id(full_name, roll_number)')
+        .eq('status', 'Pending')
+        .order('created_at', { ascending: false });
+      
+      if (!error && data) {
+        state.transfers = data;
+      }
+    } catch (err) {
+      console.error('Proposal Registry Offline:', err);
+    }
+  }
+
+  // 🔥 Execute First Synchronization
+  await syncTransfers();
+
+  // 🟢 Global Control Handlers for Sections
+  window.handleAcceptTransfer = async (id, studentId, targetDept, targetSection) => {
+    if (!confirm('🛡️ SYSTEM ACCESS REQUIRED:\n\nAre you sure you want to ACCEPT and EXECUTE this section transfer?')) return;
+    
+    try {
+      // 1. Reassign actual profile nodes
+      const { error: profErr } = await supabase
+        .from('profiles')
+        .update({
+          department: targetDept,
+          section_name: targetSection
+        })
+        .eq('id', studentId);
+      if (profErr) throw profErr;
+
+      // 2. Finalize request registry
+      const { error: reqErr } = await supabase
+        .from('section_requests')
+        .update({ status: 'Approved' })
+        .eq('id', id);
+      if (reqErr) throw reqErr;
+
+      alert('Success: Academic migration confirmed. Student profile updated.');
+      await syncTransfers();
+      render();
+    } catch (e) {
+      alert('Execution Blocked: ' + e.message);
+    }
+  };
+
+  window.handleRejectTransfer = async (id) => {
+    if (!confirm('⚠️ Confirm Rejection:\n\nReject this proposed section transfer request?')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('section_requests')
+        .update({ status: 'Rejected' })
+        .eq('id', id);
+      if (error) throw error;
+
+      alert('Proposal archived and rejected.');
+      await syncTransfers();
+      render();
+    } catch (e) {
+      alert('Rejection Failure: ' + e.message);
+    }
   };
 
   const render = () => {
@@ -94,6 +163,10 @@ export async function loadFacultyAdvisorPage(root, Store) {
         <div class="fa-tab ${state.activeTab === 'students' ? 'active' : ''}" data-tab="students">Student Roster</div>
         <div class="fa-tab ${state.activeTab === 'validation' ? 'active' : ''}" data-tab="validation">Profile Validation</div>
         <div class="fa-tab ${state.activeTab === 'mentoring' ? 'active' : ''}" data-tab="mentoring">AI Mentoring</div>
+        <div class="fa-tab ${state.activeTab === 'transfers' ? 'active' : ''}" data-tab="transfers" style="position:relative;">
+          Section Requests
+          ${state.transfers.length > 0 ? `<span style="position:absolute; top:-5px; right:-5px; background:#f59e0b; color:#fff; font-size:9px; padding:2px 6px; border-radius:10px; font-weight:900; border:2px solid var(--bg-surface);">${state.transfers.length}</span>` : ''}
+        </div>
       </div>
 
       <div id="fa-content">
@@ -116,6 +189,7 @@ export async function loadFacultyAdvisorPage(root, Store) {
       case 'students': return renderStudents();
       case 'validation': return renderValidation();
       case 'mentoring': return renderMentoring();
+      case 'transfers': return renderTransfers();
       default: return renderDashboard();
     }
   }
@@ -354,6 +428,83 @@ export async function loadFacultyAdvisorPage(root, Store) {
         </div>
       </div>
     </div>
+    `;
+  }
+
+  function renderTransfers() {
+    if (!state.transfers || state.transfers.length === 0) {
+      return `
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:64px; background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:24px; text-align:center; color:var(--text-muted); animation: fadeIn 0.4s ease;">
+          <div style="font-size:40px; margin-bottom:16px; filter: grayscale(0.5);">📋</div>
+          <div style="font-weight:800; color:#fff; margin-bottom:4px; font-size:16px;">Clear Workspace</div>
+          <div style="font-size:13px; color:var(--text-description);">No pending section transfer proposals in your queue.</div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="fa-section-card" style="animation: fadeIn 0.4s ease;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:28px;">
+          <div>
+            <h3 style="font-size:1.25rem; font-weight:900; color:#fff;">Section Transfer Requests</h3>
+            <p style="font-size:12px; color:var(--text-description); margin-top:2px;">Review and approve student proposals requesting section reassignments.</p>
+          </div>
+          <span style="background:rgba(245,158,11,0.1); border:1px solid #f59e0b; color:#f59e0b; font-size:11px; font-weight:800; padding:8px 16px; border-radius:8px;">
+            ${state.transfers.length} PENDING
+          </span>
+        </div>
+
+        <table class="fa-table">
+          <thead>
+            <tr>
+              <th>STUDENT PROFILE</th>
+              <th>ORIGINAL NODE</th>
+              <th>PROPOSED TARGET</th>
+              <th style="width:30%">JUSTIFICATION</th>
+              <th style="text-align:right;">ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.transfers.map(req => {
+              const student = req.profiles || { full_name: 'Unregistered Student', roll_number: 'N/A' };
+              return `
+                <tr>
+                  <td>
+                    <div style="font-weight:800; color:#fff; font-size:14px;">${student.full_name}</div>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Roll ID: ${student.roll_number}</div>
+                  </td>
+                  <td>
+                    <span style="font-size:12px; font-weight:600; color:var(--text-description);">${req.current_dept || 'General'}</span><br/>
+                    <span style="font-size:11px; color:var(--text-muted);">Section ${req.current_section || 'None'}</span>
+                  </td>
+                  <td>
+                    <div style="background:rgba(124,58,237,0.1); border:1px solid rgba(124,58,237,0.2); padding:6px 10px; border-radius:8px; display:inline-block;">
+                      <strong style="font-size:12px; color:#fff;">Section ${req.target_section}</strong>
+                    </div>
+                  </td>
+                  <td>
+                    <div style="font-size:12px; color:var(--text-description); line-height:1.5; padding:8px; background:rgba(0,0,0,0.1); border-radius:8px; border:1px solid var(--border-subtle); font-style:italic;">
+                      "${req.reason || 'No statement provided.'}"
+                    </div>
+                  </td>
+                  <td style="text-align:right;">
+                    <div style="display:flex; gap:8px; justify-content:flex-end;">
+                      <button class="btn btn-sm btn-primary" style="font-size:10px; padding:8px 16px; border-radius:8px;" 
+                        onclick="window.handleAcceptTransfer(${req.id}, '${req.student_id}', '${req.target_dept}', '${req.target_section}')">
+                        ✅ Approve
+                      </button>
+                      <button class="btn btn-sm" style="font-size:10px; padding:8px 16px; border-radius:8px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); color:#ef4444;" 
+                        onclick="window.handleRejectTransfer(${req.id})">
+                        ❌ Reject
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
     `;
   }
 

@@ -174,8 +174,8 @@ function renderLogin() {
 
     <form id="login-form">
       <div class="input-wrapper">
-        <label class="input-label">University Email Address</label>
-        <input type="email" id="login-email" class="auth-input" placeholder="name@university.edu" required>
+        <label class="input-label">Email Address</label>
+        <input type="email" id="login-email" class="auth-input" placeholder="name@email.com" required>
       </div>
       <div class="input-wrapper">
         <div class="flex justify-between items-center" style="margin-bottom:8px;">
@@ -214,8 +214,8 @@ function renderSignup() {
         </div>
       </div>
       <div class="input-wrapper">
-        <label class="input-label">Institution email</label>
-        <input type="email" id="signup-email" class="auth-input" placeholder="john.doe@university.edu" required>
+        <label class="input-label">Email address</label>
+        <input type="email" id="signup-email" class="auth-input" placeholder="name@email.com" required>
       </div>
       <div class="input-wrapper">
         <label class="input-label">Workspace Role</label>
@@ -269,9 +269,39 @@ function initAuth(mode, Store, supabase) {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         
+        const userRole = data.user.user_metadata?.role || selectedRole;
+
+        // Institutional Staff Authorization Firewall
+        if (['faculty', 'coordinator', 'tpo', 'admin'].includes(userRole)) {
+          console.log('🛡️ Firewall Authentication Query initiated for:', email);
+          const { data: profile, error: profileErr } = await supabase
+            .from('staff_profiles')
+            .select('status, role')
+            .eq('email', email)
+            .single();
+
+          console.log('🛡️ Firewall Diagnostics:', { profile, profileErr });
+
+          if (profileErr || !profile || profile.status !== 'Approved') {
+            await supabase.auth.signOut();
+            
+            // Construct highly descriptive diagnostics to pin-point server logic failures
+            let reason = 'Profile missing from registry.';
+            if (profileErr) reason = `Database Connection Failed: ${profileErr.message}`;
+            else if (profile) reason = `Account status is currently '${profile.status}'. Needs 'Approved'.`;
+
+            throw new Error(`Access Restricted: ${reason}`);
+          }
+          
+          // Inherit the absolute role granted by the admin panel
+          if (data.user.user_metadata) {
+            data.user.user_metadata.role = profile.role;
+          }
+        }
+        
         // Sync Store
-        Store.session.user = { id: data.user.id, email: data.user.email, ...data.user.user_metadata };
-        Store.session.role = Store.session.user.role || selectedRole;
+        Store.session.user = { id: data.user.id, email: data.user.email, ...(data.user.user_metadata || {}) };
+        Store.session.role = Store.session.user.role || userRole;
         
         // Redirect to Workspace
         window.location.hash = Store.session.role + '-dashboard';
@@ -284,7 +314,7 @@ function initAuth(mode, Store, supabase) {
           options: { data: { first_name: fname, last_name: lname, full_name: `${fname} ${lname}`, role } }
         });
         if (error) throw error;
-        alert('Verification protocol initiated. Please check your institutional email.');
+        alert('Registration successful! Please check your email inbox.');
         window.location.hash = 'login';
       }
     } catch (err) {

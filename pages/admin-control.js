@@ -2,30 +2,106 @@
 // PLACENIX — INSTITUTIONAL ADMIN CONTROL
 // ============================================================
 
-export async function loadAdminControl(root, Store) {
+export async function loadAdminControl(root, Store, supabase) {
   const hash = window.location.hash.replace('#', '');
   
-  const state = {
-    departments: [
-      { id: 'CSE', name: 'Computer Science & Engineering', sections: ['A', 'B', 'C'] },
-      { id: 'ECE', name: 'Electronics & Communication', sections: ['A', 'B'] },
-      { id: 'MECH', name: 'Mechanical Engineering', sections: ['A'] }
-    ],
-    staff: [
-      { id: 1, name: 'Dr. Ramesh Kumar', email: 'ramesh.k@univ.edu', status: 'Pending', role: 'None', mapping: 'None' },
-      { id: 2, name: 'Prof. Anita Desai', email: 'anita.d@univ.edu', status: 'Approved', role: 'faculty', mapping: 'CSE - Section A' },
-      { id: 3, name: 'Srinivas Rao', email: 'srinivas.r@univ.edu', status: 'Pending', role: 'None', mapping: 'None' },
-      { id: 4, name: 'Dr. John Doe', email: 'johndoe@univ.edu', status: 'Approved', role: 'coordinator', mapping: 'MECH' },
-      { id: 5, name: 'TPO Office', email: 'tpo@univ.edu', status: 'Approved', role: 'tpo', mapping: 'Global' }
-    ]
-  };
+  // Show a beautiful loader while syncing neural grid
+  root.innerHTML = `
+    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; color:var(--text-muted);">
+      <div class="animate-spin" style="width:40px; height:40px; border:4px solid var(--border-subtle); border-top-color:var(--brand-primary); border-radius:50%; margin-bottom:20px;"></div>
+      Synchronizing Operational Registry with Supabase Core...
+    </div>
+  `;
+
+  // 1. Pull live Departments and bound Section nodes from Supabase
+  try {
+    const { data: dbDepts, error: deptErr } = await supabase
+      .from('departments')
+      .select(`
+        id,
+        name,
+        sections (
+          section_name
+        )
+      `);
+
+    if (deptErr) throw deptErr;
+
+    if (dbDepts) {
+      Store.departments = dbDepts.map(d => ({
+        id: d.id,
+        name: d.name,
+        sections: d.sections ? d.sections.map(s => s.section_name) : []
+      }));
+    }
+  } catch (err) {
+    console.error('⚠️ Sync failure on Departments namespace:', err);
+    // Fallback if table not migrated yet
+    if (!Store.departments) {
+      Store.departments = [
+        { id: 'CSE', name: 'Computer Science & Engineering', sections: ['A', 'B', 'C'] },
+        { id: 'ECE', name: 'Electronics & Communication', sections: ['A', 'B'] },
+        { id: 'MECH', name: 'Mechanical Engineering', sections: ['A'] }
+      ];
+    }
+  }
+
+  // 2. Pull live Staff Profiles and mappings from Supabase
+  try {
+    const { data: dbStaff, error: staffErr } = await supabase
+      .from('staff_profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (staffErr) throw staffErr;
+
+    if (dbStaff) {
+      Store.staff = dbStaff;
+    }
+  } catch (err) {
+    console.error('⚠️ Sync failure on Staff namespace:', err);
+    // Fallback if table not migrated yet
+    if (!Store.staff) {
+      Store.staff = [
+        { id: 1, name: 'Dr. Ramesh Kumar', email: 'ramesh.k@univ.edu', status: 'Pending', role: 'None', mapping: 'None' },
+        { id: 2, name: 'Prof. Anita Desai', email: 'anita.d@univ.edu', status: 'Approved', role: 'faculty', mapping: 'CSE - Section A' },
+        { id: 3, name: 'Srinivas Rao', email: 'srinivas.r@univ.edu', status: 'Pending', role: 'None', mapping: 'None' },
+        { id: 4, name: 'Dr. John Doe', email: 'johndoe@univ.edu', status: 'Approved', role: 'coordinator', mapping: 'MECH' },
+        { id: 5, name: 'TPO Office', email: 'tpo@univ.edu', status: 'Approved', role: 'tpo', mapping: 'Global' }
+      ];
+    }
+  }
+
+  // 3. Pull live Degree Programs and Academic Batches from Supabase
+  try {
+    const { data: dbDegrees } = await supabase.from('degrees').select('*').order('degree_name');
+    const { data: dbBatches } = await supabase.from('academic_batches').select('*').order('batch_name');
+    
+    Store.degrees = dbDegrees || [];
+    Store.batches = dbBatches || [];
+  } catch (err) {
+    console.error('⚠️ Sync failure on Degrees/Batches namespace:', err);
+    if (!Store.degrees) {
+      Store.degrees = [
+        { degree_name: 'B.Tech' },
+        { degree_name: 'M.Tech' },
+        { degree_name: 'MBA' }
+      ];
+    }
+    if (!Store.batches) {
+      Store.batches = [
+        { batch_name: '2021 - 2025' },
+        { batch_name: '2022 - 2026' }
+      ];
+    }
+  }
 
   const render = () => {
     let content = '';
-    if (hash === 'admin-setup') content = renderSetup(state);
-    else if (hash === 'admin-staff' || hash === 'admin-roles') content = renderStaff(state);
-    else if (hash === 'admin-mapping') content = renderMapping(state);
-    else content = renderSetup(state);
+    if (hash === 'admin-setup') content = renderSetup(Store);
+    else if (hash === 'admin-staff' || hash === 'admin-roles') content = renderStaff(Store);
+    else if (hash === 'admin-mapping') content = renderMapping(Store);
+    else content = renderSetup(Store);
 
     root.innerHTML = `
       <div style="padding: 40px; max-width: 1560px; margin: 0 auto; animation: fadeIn 0.4s ease-out;">
@@ -46,9 +122,265 @@ export async function loadAdminControl(root, Store) {
         .admin-table tr:hover td { background: rgba(255,255,255,0.02); }
         .admin-input { width: 100%; height: 44px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-main); color: #fff; padding: 0 16px; border-radius: 12px; font-size: 14px; }
         .admin-input:focus { border-color: var(--brand-primary); outline: none; }
-        .admin-select { width: 100%; height: 44px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-main); color: #fff; padding: 0 16px; border-radius: 12px; font-size: 14px; appearance: none; }
+        .admin-select { width: 100%; height: 44px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-main); color: #fff; padding: 0 16px; border-radius: 12px; font-size: 14px; }
+        .admin-select option { background: #18181b; color: #fff; }
       </style>
     `;
+  };
+
+  window.handleCreateDept = async () => {
+    const nameInput = document.getElementById('dept-name-input');
+    const codeInput = document.getElementById('dept-code-input');
+    const name = nameInput?.value.trim();
+    const code = codeInput?.value.trim().toUpperCase();
+
+    if (!name || !code) {
+      alert('Error: Both Department Name and Department Code must be provided.');
+      return;
+    }
+    if (Store.departments.some(d => d.id === code)) {
+      alert(`Error: A department with the identifier "${code}" already exists.`);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('departments')
+        .insert([{ id: code, name: name }]);
+      if (error) throw error;
+      
+      Store.departments.push({ id: code, name: name, sections: [] });
+      render();
+    } catch (err) {
+      alert('Database Insert Refused: ' + err.message);
+    }
+  };
+
+  window.handleCreateSection = async () => {
+    const deptSelect = document.getElementById('section-dept-select');
+    const nameInput = document.getElementById('section-name-input');
+    const deptId = deptSelect?.value;
+    const sectionName = nameInput?.value.trim();
+
+    if (!deptId || deptId === 'Select Department...') {
+      alert('Error: Please specify the Target Department.');
+      return;
+    }
+    if (!sectionName) {
+      alert('Error: Section / Batch Identifier cannot be empty.');
+      return;
+    }
+
+    const dept = Store.departments.find(d => d.id === deptId);
+    if (dept) {
+      if (dept.sections.includes(sectionName)) {
+        alert(`Error: Section "${sectionName}" already exists under ${deptId}.`);
+        return;
+      }
+
+      try {
+        const { error } = await supabase
+          .from('sections')
+          .insert([{ department_id: deptId, section_name: sectionName }]);
+        if (error) throw error;
+
+        dept.sections.push(sectionName);
+        render();
+      } catch (err) {
+        alert('Database Section Node Refused: ' + err.message);
+      }
+    }
+  };
+
+  window.promptAddSection = async (deptId) => {
+    const sectionName = prompt(`Configure new Section node for ${deptId}:`);
+    if (sectionName && sectionName.trim()) {
+      const dept = Store.departments.find(d => d.id === deptId);
+      const target = sectionName.trim();
+      if (dept && !dept.sections.includes(target)) {
+        try {
+          const { error } = await supabase
+            .from('sections')
+            .insert([{ department_id: deptId, section_name: target }]);
+          if (error) throw error;
+
+          dept.sections.push(target);
+          render();
+        } catch (err) {
+          alert('Database Section Node Refused: ' + err.message);
+        }
+      } else if (dept) {
+        alert('Error: Section already exists.');
+      }
+    }
+  };
+
+  window.handleCreateDegree = async () => {
+    const input = document.getElementById('degree-name-input');
+    const name = input?.value.trim();
+    if (!name) return alert('Error: Degree Program Name cannot be empty.');
+    
+    try {
+      const { error } = await supabase
+        .from('degrees')
+        .insert([{ degree_name: name }]);
+      if (error) throw error;
+      
+      Store.degrees.push({ degree_name: name });
+      render();
+      alert(`Success: "${name}" degree program initialized.`);
+    } catch (err) { 
+      alert('Database Insert Refused: ' + err.message); 
+    }
+  };
+
+  window.handleCreateBatch = async () => {
+    const input = document.getElementById('batch-name-input');
+    const name = input?.value.trim();
+    if (!name) return alert('Error: Academic Batch designator cannot be empty.');
+    
+    try {
+      const { error } = await supabase
+        .from('academic_batches')
+        .insert([{ batch_name: name }]);
+      if (error) throw error;
+      
+      Store.batches.push({ batch_name: name });
+      render();
+      alert(`Success: Academic batch "${name}" initialized.`);
+    } catch (err) { 
+      alert('Database Insert Refused: ' + err.message); 
+    }
+  };
+
+  window.handleApproveStaff = async (id) => {
+    const selector = document.getElementById(`role-select-${id}`);
+    const role = selector?.value;
+    
+    if (!role || role === 'none') {
+      alert('Error: Please assign an institutional role before authenticating.');
+      return;
+    }
+    
+    const targetMapping = role === 'tpo' ? 'Global' : 'None';
+
+    try {
+      const { error } = await supabase
+        .from('staff_profiles')
+        .update({ 
+          status: 'Approved', 
+          role: role,
+          mapping: targetMapping 
+        })
+        .eq('id', id);
+        
+      if (error) throw error;
+
+      const person = Store.staff.find(s => s.id === id);
+      if (person) {
+        person.status = 'Approved';
+        person.role = role;
+        person.mapping = targetMapping;
+        render();
+      }
+    } catch (err) {
+      alert('Supabase Operation Refused: ' + err.message);
+    }
+  };
+
+  window.handleRejectStaff = async (id) => {
+    if (confirm('Are you sure you want to reject this authorization request?')) {
+      try {
+        const { error } = await supabase
+          .from('staff_profiles')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw error;
+        
+        Store.staff = Store.staff.filter(s => s.id !== id);
+        render();
+      } catch (err) {
+        alert('Supabase Operation Refused: ' + err.message);
+      }
+    }
+  };
+
+  window.handleRevokeStaff = async (id) => {
+    if (confirm('Are you sure you want to revoke active credentials for this staff node?')) {
+      try {
+        const { error } = await supabase
+          .from('staff_profiles')
+          .update({ status: 'Pending', role: 'None', mapping: 'None' })
+          .eq('id', id);
+
+        if (error) throw error;
+
+        const person = Store.staff.find(s => s.id === id);
+        if (person) {
+          person.status = 'Pending';
+          person.role = 'None';
+          person.mapping = 'None';
+          render();
+        }
+      } catch (err) {
+        alert('Supabase Operation Refused: ' + err.message);
+      }
+    }
+  };
+
+  window.handleRoleUpdate = async (id, newRole) => {
+    const targetMapping = newRole === 'tpo' ? 'Global' : 'None';
+    try {
+      const { error } = await supabase
+        .from('staff_profiles')
+        .update({ role: newRole, mapping: targetMapping })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      const person = Store.staff.find(s => s.id === id);
+      if (person) {
+        person.role = newRole;
+        person.mapping = targetMapping;
+        render();
+        alert(`System role for ${person.name} updated to ${newRole.toUpperCase()}.`);
+      }
+    } catch (err) {
+      alert('Supabase Role Update Failed: ' + err.message);
+    }
+  };
+
+  window.handleUpdateMapping = async (id) => {
+    const deptSelect = document.getElementById(`map-dept-select-${id}`);
+    const sectionSelect = document.getElementById(`map-section-select-${id}`);
+    const dept = deptSelect?.value;
+    const sec = sectionSelect?.value;
+    
+    let mappingText = 'None';
+    if (dept === 'global') {
+      mappingText = 'Global';
+    } else if (dept && dept !== 'Select Dept...') {
+      mappingText = sec === 'all' ? dept : `${dept} - Section ${sec}`;
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('staff_profiles')
+        .update({ mapping: mappingText })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      const person = Store.staff.find(s => s.id === id);
+      if (person) {
+        person.mapping = mappingText;
+        render();
+        alert(`Neural Mapping configuration updated for ${person.name}.`);
+      }
+    } catch (err) {
+      alert('Supabase Mapping Update Refused: ' + err.message);
+    }
   };
 
   render();
@@ -62,13 +394,13 @@ function renderSetup(state) {
         <div style="display:flex; flex-direction:column; gap:16px;">
           <div>
             <label class="label-ent" style="font-size:10px; margin-bottom:8px; display:block;">DEPARTMENT NAME</label>
-            <input type="text" class="admin-input" placeholder="e.g. Civil Engineering">
+            <input type="text" id="dept-name-input" class="admin-input" placeholder="e.g. Civil Engineering">
           </div>
           <div>
             <label class="label-ent" style="font-size:10px; margin-bottom:8px; display:block;">DEPARTMENT CODE</label>
-            <input type="text" class="admin-input" placeholder="e.g. CIVIL">
+            <input type="text" id="dept-code-input" class="admin-input" placeholder="e.g. CIVIL">
           </div>
-          <button class="btn-premium" style="height:48px; font-size:14px; margin-top:8px;">Initialize Department</button>
+          <button class="btn-premium" onclick="handleCreateDept()" style="height:48px; font-size:14px; margin-top:8px;">Initialize Department</button>
         </div>
       </div>
 
@@ -77,16 +409,38 @@ function renderSetup(state) {
         <div style="display:flex; flex-direction:column; gap:16px;">
           <div>
             <label class="label-ent" style="font-size:10px; margin-bottom:8px; display:block;">TARGET DEPARTMENT</label>
-            <select class="admin-select">
+            <select id="section-dept-select" class="admin-select">
               <option disabled selected>Select Department...</option>
               ${state.departments.map(d => `<option value="${d.id}">${d.name} (${d.id})</option>`).join('')}
             </select>
           </div>
           <div>
             <label class="label-ent" style="font-size:10px; margin-bottom:8px; display:block;">SECTION / BATCH IDENTIFIER</label>
-            <input type="text" class="admin-input" placeholder="e.g. Section A">
+            <input type="text" id="section-name-input" class="admin-input" placeholder="e.g. Section A">
           </div>
-          <button class="btn-premium-ghost" style="height:48px; font-size:14px; margin-top:8px; width:100%;">Create Section Node</button>
+          <button class="btn-premium-ghost" onclick="handleCreateSection()" style="height:48px; font-size:14px; margin-top:8px; width:100%;">Create Section Node</button>
+        </div>
+      </div>
+
+      <div class="admin-card">
+        <h2 style="font-size:20px; font-weight:800; margin-bottom:24px;">Create Degree Program</h2>
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <div>
+            <label class="label-ent" style="font-size:10px; margin-bottom:8px; display:block;">DEGREE NAME</label>
+            <input type="text" id="degree-name-input" class="admin-input" placeholder="e.g. B.Tech or MBA">
+          </div>
+          <button class="btn-premium" onclick="handleCreateDegree()" style="height:48px; font-size:14px; margin-top:8px;">Initialize Degree</button>
+        </div>
+      </div>
+
+      <div class="admin-card">
+        <h2 style="font-size:20px; font-weight:800; margin-bottom:24px;">Manage Academic Batches</h2>
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <div>
+            <label class="label-ent" style="font-size:10px; margin-bottom:8px; display:block;">BATCH DESIGNATOR</label>
+            <input type="text" id="batch-name-input" class="admin-input" placeholder="e.g. 2021 - 2025">
+          </div>
+          <button class="btn-premium-ghost" onclick="handleCreateBatch()" style="height:48px; font-size:14px; margin-top:8px; width:100%;">Initialize Batch</button>
         </div>
       </div>
 
@@ -99,10 +453,25 @@ function renderSetup(state) {
               <div style="font-size:12px; color:var(--text-muted); margin-bottom:16px; font-weight:700;">Code: ${d.id}</div>
               <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 ${d.sections.map(s => `<span style="background:var(--brand-violet-soft); color:var(--brand-primary); font-size:11px; font-weight:800; padding:4px 10px; border-radius:6px;">Section ${s}</span>`).join('')}
-                <span style="background:rgba(255,255,255,0.05); color:var(--text-muted); font-size:11px; font-weight:800; padding:4px 10px; border-radius:6px; cursor:pointer;">+ Add Node</span>
+                <span onclick="promptAddSection('${d.id}')" style="background:rgba(255,255,255,0.05); color:var(--text-muted); font-size:11px; font-weight:800; padding:4px 10px; border-radius:6px; cursor:pointer;">+ Add Node</span>
               </div>
             </div>
           `).join('')}
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:32px; border-top:1px solid rgba(255,255,255,0.05); padding-top:32px; margin-top:32px;">
+          <div>
+            <h3 style="font-size:14px; font-weight:800; color:#fff; margin-bottom:16px; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted);">Allocated Degree Nodes</h3>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              ${(state.degrees || []).map(d => `<span style="background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); font-size:11px; font-weight:800; color:#fff; padding:6px 12px; border-radius:8px;">${d.degree_name}</span>`).join('')}
+            </div>
+          </div>
+          <div>
+            <h3 style="font-size:14px; font-weight:800; color:#fff; margin-bottom:16px; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted);">Allocated Academic Batches</h3>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              ${(state.batches || []).map(b => `<span style="background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); font-size:11px; font-weight:800; color:#fff; padding:6px 12px; border-radius:8px;">${b.batch_name}</span>`).join('')}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -110,8 +479,8 @@ function renderSetup(state) {
 }
 
 function renderStaff(state) {
-  const pending = state.staff.filter(s => s.status === 'Pending');
-  const approved = state.staff.filter(s => s.status === 'Approved');
+  const pending = state.staff.filter(s => s.status === 'Pending' && s.role !== 'admin');
+  const approved = state.staff.filter(s => s.status === 'Approved' && s.role !== 'admin');
 
   return `
     <div style="display:flex; flex-direction:column; gap:40px;">
@@ -139,7 +508,7 @@ function renderStaff(state) {
                 </td>
                 <td style="color:var(--text-description); font-size:13px;">${s.email}</td>
                 <td>
-                  <select class="admin-select" style="height:32px; font-size:12px; width:180px;">
+                  <select id="role-select-${s.id}" class="admin-select" style="height:32px; font-size:12px; width:180px;">
                     <option value="none" selected>Select Role...</option>
                     <option value="faculty">Faculty Advisor</option>
                     <option value="coordinator">Dept. Coordinator</option>
@@ -147,8 +516,8 @@ function renderStaff(state) {
                   </select>
                 </td>
                 <td style="text-align:right;">
-                  <button class="btn-premium" style="padding:6px 12px; font-size:11px; border-radius:8px; margin-right:8px;">Authenticate</button>
-                  <button class="btn-premium-ghost" style="padding:6px 12px; font-size:11px; border-radius:8px; border-color:#ef4444; color:#ef4444;">Reject</button>
+                  <button onclick="handleApproveStaff(${s.id})" class="btn-premium" style="padding:6px 12px; font-size:11px; border-radius:8px; margin-right:8px; cursor:pointer;">Authenticate</button>
+                  <button onclick="handleRejectStaff(${s.id})" class="btn-premium-ghost" style="padding:6px 12px; font-size:11px; border-radius:8px; border-color:#ef4444; color:#ef4444; cursor:pointer;">Reject</button>
                 </td>
               </tr>
             `).join('')}
@@ -176,7 +545,7 @@ function renderStaff(state) {
                   <div style="font-size:11px; color:var(--text-muted);">${s.email}</div>
                 </td>
                 <td>
-                  <select class="admin-select" style="height:32px; font-size:12px; width:180px;">
+                  <select onchange="handleRoleUpdate(${s.id}, this.value)" class="admin-select" style="height:32px; font-size:12px; width:180px;">
                     <option value="faculty" ${s.role === 'faculty' ? 'selected' : ''}>Faculty Advisor</option>
                     <option value="coordinator" ${s.role === 'coordinator' ? 'selected' : ''}>Dept. Coordinator</option>
                     <option value="tpo" ${s.role === 'tpo' ? 'selected' : ''}>TPO Login</option>
@@ -186,10 +555,11 @@ function renderStaff(state) {
                   <span style="font-size:12px; font-weight:600; color:var(--text-description);">${s.mapping}</span>
                 </td>
                 <td style="text-align:right;">
-                  <span class="status-pill status-success" style="font-size:10px; cursor:pointer;">Revoke Access</span>
+                  <span onclick="handleRevokeStaff(${s.id})" class="status-pill status-success" style="font-size:10px; cursor:pointer; border: 1px solid #ef4444; color: #ef4444; background: rgba(239, 68, 68, 0.1);">Revoke Access</span>
                 </td>
               </tr>
             `).join('')}
+            ${approved.length === 0 ? `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:32px;">No active staff enrolled.</td></tr>` : ''}
           </tbody>
         </table>
       </div>
@@ -199,7 +569,7 @@ function renderStaff(state) {
 }
 
 function renderMapping(state) {
-  const approved = state.staff.filter(s => s.status === 'Approved');
+  const approved = state.staff.filter(s => s.status === 'Approved' && s.role !== 'admin');
 
   return `
     <div class="admin-card">
@@ -228,7 +598,7 @@ function renderMapping(state) {
             <!-- Target Department -->
             <div>
               <label class="label-ent" style="font-size:9px; margin-bottom:6px; display:block;">MAP DEPARTMENT</label>
-              <select class="admin-select" style="height:36px; font-size:12px;">
+              <select id="map-dept-select-${s.id}" class="admin-select" style="height:36px; font-size:12px;">
                 <option disabled ${s.mapping === 'None' ? 'selected' : ''}>Select Dept...</option>
                 <option value="global" ${s.mapping === 'Global' ? 'selected' : ''}>Global (All)</option>
                 ${state.departments.map(d => `<option value="${d.id}" ${s.mapping.includes(d.id) ? 'selected' : ''}>${d.name}</option>`).join('')}
@@ -238,7 +608,7 @@ function renderMapping(state) {
             <!-- Target Section -->
             <div>
               <label class="label-ent" style="font-size:9px; margin-bottom:6px; display:block;">MAP SECTION / BATCH</label>
-              <select class="admin-select" style="height:36px; font-size:12px;">
+              <select id="map-section-select-${s.id}" class="admin-select" style="height:36px; font-size:12px;">
                 <option value="all" ${!s.mapping.includes('Section') ? 'selected' : ''}>All Sections</option>
                 <option value="A" ${s.mapping.includes('Section A') ? 'selected' : ''}>Section A</option>
                 <option value="B" ${s.mapping.includes('Section B') ? 'selected' : ''}>Section B</option>
@@ -248,11 +618,12 @@ function renderMapping(state) {
 
             <!-- Action -->
             <div>
-              <button class="btn-premium" style="height:36px; padding:0 20px; font-size:11px; margin-top:14px;">Update Map</button>
+              <button onclick="handleUpdateMapping(${s.id})" class="btn-premium" style="height:36px; padding:0 20px; font-size:11px; margin-top:14px; cursor:pointer;">Update Map</button>
             </div>
 
           </div>
         `).join('')}
+        ${approved.length === 0 ? `<div style="text-align:center; color:var(--text-muted); padding:24px;">No active staff available to map.</div>` : ''}
       </div>
     </div>
   `;
