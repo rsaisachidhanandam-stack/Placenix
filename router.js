@@ -22,19 +22,23 @@ import {
   loadDeptSkills, loadDeptNewJobs, loadDeptPrevJobs, 
   loadDeptAnnouncements, loadDeptQueries 
 } from './pages/dashboard-dept.js';
+import { loadFacultyAdvisorPage } from './pages/faculty-advisor.js';
+import { loadAdminControl }       from './pages/admin-control.js';
 
 import { renderSidebar, renderTopbar } from './components/sidebar.js';
 import { supabase   } from './supabase.js';
 import Store          from './store.js';
 
 const DASHBOARD_PAGES = [
-  'student-dashboard', 'tpo-dashboard', 'admin-dashboard',
+  'student-dashboard', 'tpo-dashboard', 'coordinator-dashboard', 'department-dashboard', 'admin-dashboard',
   'student-details', 'profile', 'employability', 'skill-analysis', 
   'drives', 'new-applications', 'my-applications', 'completed-batches',
   'alumni', 'alumni-connect', 'analytics', 'ai-modules', 'ai-predictor',
   'interview-repo', 'communication', 'queries', 'virtual-interview', 
-  'faculty-advisor', 'admin-dept', 'resume', 'resume-analysis', 'kanban', 'saas-admin',
-  'dept-students', 'dept-resume', 'dept-skills', 'dept-new-jobs', 'dept-prev-jobs', 'dept-announcements', 'dept-queries'
+  'faculty-advisor', 'faculty-dashboard', 'fa-students', 'fa-resume', 'fa-skills', 'fa-new-jobs', 'fa-prev-jobs',
+  'admin-dept', 'resume', 'resume-analysis', 'kanban', 'saas-admin',
+  'dept-students', 'dept-resume', 'dept-skills', 'dept-new-jobs', 'dept-prev-jobs', 'dept-announcements', 'dept-queries',
+  'admin-setup', 'admin-staff', 'admin-roles', 'admin-mapping'
 ];
 
 const routes = {
@@ -44,7 +48,13 @@ const routes = {
   'onboarding':        loadOnboardingPage,
   'student-dashboard': loadStudentDash,
   'tpo-dashboard':     loadTPODash,
-  'admin-dashboard':   loadDeptDash,
+  'coordinator-dashboard': loadDeptDash,
+  'department-dashboard':  loadDeptDash,
+  'admin-dashboard':   loadAdminControl,
+  'admin-setup':       loadAdminControl,
+  'admin-staff':       loadAdminControl,
+  'admin-roles':       loadAdminControl,
+  'admin-mapping':     loadAdminControl,
   'student-details':   loadProfilePage,
   'profile':           loadProfilePage,
   'employability':     loadEmployabilityPage,
@@ -72,7 +82,13 @@ const routes = {
   'dept-new-jobs':      loadDeptNewJobs,
   'dept-prev-jobs':      loadDeptPrevJobs,
   'dept-announcements': loadDeptAnnouncements,
-  'dept-queries':       loadDeptQueries
+  'dept-queries':       loadDeptQueries,
+  'faculty-dashboard':  loadFacultyAdvisorPage,
+  'fa-students':        loadDeptStudents,
+  'fa-resume':          loadDeptResume,
+  'fa-skills':          loadDeptSkills,
+  'fa-new-jobs':        loadDeptNewJobs,
+  'fa-prev-jobs':       loadDeptPrevJobs
 };
 
 function getRoute() {

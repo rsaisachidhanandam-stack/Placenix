@@ -141,8 +141,9 @@ function renderLogin() {
     { id: 'student', name: 'Student', icon: '👤', desc: 'Personal intelligence node & career path' },
     { id: 'faculty', name: 'Faculty Advisor', icon: '👨‍🏫', desc: 'Student mentorship & academic oversight' },
     { id: 'coordinator', name: 'Dept. Coordinator', icon: '📊', desc: 'Placement ops & department telemetry' },
-    { id: 'admin', name: 'Department Login', icon: '🛡️', desc: 'Institutional control & user management' },
-    { id: 'tpo', name: 'TPO Workspace', icon: '🏢', desc: 'Corporate relations & campus drive ops' }
+    { id: 'department', name: 'Department Login', icon: '🏛️', desc: 'Departmental oversight & intelligence' },
+    { id: 'tpo', name: 'TPO Workspace', icon: '🏢', desc: 'Corporate relations & campus drive ops' },
+    { id: 'admin', name: 'Institutional Admin', icon: '🛡️', desc: 'Global control & user authorization' }
   ];
 
   return `
@@ -221,6 +222,8 @@ function renderSignup() {
         <select id="signup-role" class="auth-input" style="appearance:none; background-image: url('data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3E%3Cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3E%3C/svg%3E'); background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em;">
           <option value="student">Student</option>
           <option value="faculty">Faculty Advisor</option>
+          <option value="coordinator">Dept. Coordinator</option>
+          <option value="department">Department Login</option>
           <option value="tpo">Training & Placement Officer</option>
           <option value="admin">Institutional Admin</option>
         </select>

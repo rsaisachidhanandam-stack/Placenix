@@ -32,9 +32,9 @@ const SECTIONS = {
       { label: 'Query Center', icon: 'support', route: 'queries' },
     ]}
   ],
-  admin: [
+  coordinator: [
     { label: 'OPERATIONAL', items: [
-      { label: 'Dept. Dashboard', icon: 'dashboard', route: 'admin-dashboard' },
+      { label: 'Dept. Dashboard', icon: 'dashboard', route: 'coordinator-dashboard' },
     ]},
     { label: 'STUDENTS', items: [
       { label: 'Students Overview', icon: 'user', route: 'dept-students' },
@@ -51,11 +51,39 @@ const SECTIONS = {
       { label: 'Announcements', icon: 'support', route: 'dept-announcements' },
       { label: 'Queries', icon: 'support', route: 'dept-queries' },
     ]}
+  ],
+  admin: [
+    { label: 'INSTITUTIONAL SETUP', items: [
+      { label: 'Departments & Sections', icon: 'network', route: 'admin-setup' },
+    ]},
+    { label: 'ACCESS CONTROL', items: [
+      { label: 'Staff Authorization', icon: 'support', route: 'admin-staff' },
+      { label: 'Role Assignment', icon: 'user', route: 'admin-roles' },
+    ]},
+    { label: 'OPERATIONAL LOGISTICS', items: [
+      { label: 'Work Mapping', icon: 'dashboard', route: 'admin-mapping' },
+    ]}
+  ],
+  faculty: [
+    { label: 'OPERATIONAL', items: [
+      { label: 'Mentoring Dashboard', icon: 'dashboard', route: 'faculty-dashboard' },
+    ]},
+    { label: 'STUDENTS', items: [
+      { label: 'Students Overview', icon: 'user', route: 'fa-students' },
+    ]},
+    { label: 'AI INTELLIGENCE', items: [
+      { label: 'Resume Analysis', icon: 'intelligence', route: 'fa-resume' },
+      { label: 'Skill Analysis', icon: 'intelligence', route: 'fa-skills' },
+    ]},
+    { label: 'RECRUITMENT', items: [
+      { label: 'New Job Application', icon: 'recruitment', route: 'fa-new-jobs' },
+      { label: 'Previous Job Application', icon: 'recruitment', route: 'fa-prev-jobs' },
+    ]}
   ]
 };
 
 export function renderSidebar(role, activeRoute, user) {
-  const sections = SECTIONS[role] || SECTIONS.student;
+  const sections = role === 'department' ? SECTIONS.coordinator : (SECTIONS[role] || SECTIONS.student);
   const initials = (user?.full_name || 'U').split(' ').map(n=>n[0]).join('').toUpperCase();
 
   const navHTML = sections.map(section => `
