@@ -221,6 +221,7 @@ function renderSignup() {
         <select id="signup-role" class="auth-input" style="appearance:none; background-image: url('data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3E%3Cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22/%3E%3C/svg%3E'); background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em;">
           <option value="student">Student</option>
           <option value="faculty">Faculty Advisor</option>
+          <option value="coordinator">Department Coordinator</option>
           <option value="tpo">Training & Placement Officer</option>
           <option value="admin">Institutional Admin</option>
         </select>

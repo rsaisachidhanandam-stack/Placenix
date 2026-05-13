@@ -51,6 +51,29 @@ const SECTIONS = {
       { label: 'Announcements', icon: 'support', route: 'dept-announcements' },
       { label: 'Queries', icon: 'support', route: 'dept-queries' },
     ]}
+  ],
+  coordinator: [
+    { label: 'COORDINATOR WORKSPACE', items: [
+      { label: 'Students Overview', icon: 'user', route: 'dept-students' },
+      { label: 'Student Resume Analysis', icon: 'intelligence', route: 'dept-resume' },
+      { label: 'Student Skill Analysis', icon: 'intelligence', route: 'dept-skills' },
+      { label: 'New Job Applications', icon: 'recruitment', route: 'dept-new-jobs' },
+      { label: 'Previous Job Applications', icon: 'recruitment', route: 'dept-prev-jobs' },
+      { label: 'Announcements', icon: 'support', route: 'dept-announcements' },
+      { label: 'Queries', icon: 'support', route: 'dept-queries' },
+    ]}
+  ],
+  faculty: [
+    { label: 'OPERATIONAL', items: [
+      { label: 'Mentoring Dashboard', icon: 'dashboard', route: 'faculty-dashboard' },
+    ]}
+  ],
+  tpo: [
+    { label: 'TPO WORKSPACE', items: [
+      { label: 'Dept. Placement Report', icon: 'dashboard', route: 'tpo-dashboard' },
+      { label: 'Create Job Application', icon: 'recruitment', route: 'drives' },
+      { label: 'Previous Job Application', icon: 'recruitment', route: 'kanban' },
+    ]}
   ]
 };
 

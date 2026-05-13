@@ -22,13 +22,15 @@ import {
   loadDeptSkills, loadDeptNewJobs, loadDeptPrevJobs, 
   loadDeptAnnouncements, loadDeptQueries 
 } from './pages/dashboard-dept.js';
+import { loadFacultyAdvisorPage } from './pages/faculty-advisor.js';
+import { loadKanbanPage } from './pages/kanban.js';
 
 import { renderSidebar, renderTopbar } from './components/sidebar.js';
 import { supabase   } from './supabase.js';
 import Store          from './store.js';
 
 const DASHBOARD_PAGES = [
-  'student-dashboard', 'tpo-dashboard', 'admin-dashboard',
+  'student-dashboard', 'tpo-dashboard', 'admin-dashboard', 'coordinator-dashboard', 'faculty-dashboard',
   'student-details', 'profile', 'employability', 'skill-analysis', 
   'drives', 'new-applications', 'my-applications', 'completed-batches',
   'alumni', 'alumni-connect', 'analytics', 'ai-modules', 'ai-predictor',
@@ -45,6 +47,8 @@ const routes = {
   'student-dashboard': loadStudentDash,
   'tpo-dashboard':     loadTPODash,
   'admin-dashboard':   loadDeptDash,
+  'coordinator-dashboard': (r,s,sb) => { window.location.hash = 'dept-students'; },
+  'faculty-dashboard': loadFacultyAdvisorPage,
   'student-details':   loadProfilePage,
   'profile':           loadProfilePage,
   'employability':     loadEmployabilityPage,
@@ -64,7 +68,7 @@ const routes = {
   'virtual-interview': loadVirtualInterviewPage,
   'resume':            loadResumePage,
   'resume-analysis':   loadResumePage,
-  'kanban':            loadDrivesPage,
+  'kanban':            loadKanbanPage,
   'saas-admin':        loadLandingPage,
   'dept-students':      loadDeptStudents,
   'dept-resume':        loadDeptResume,
