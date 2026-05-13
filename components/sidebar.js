@@ -79,6 +79,13 @@ const SECTIONS = {
       { label: 'New Job Application', icon: 'recruitment', route: 'fa-new-jobs' },
       { label: 'Previous Job Application', icon: 'recruitment', route: 'fa-prev-jobs' },
     ]}
+  ],
+  tpo: [
+    { label: 'TPO WORKSPACE', items: [
+      { label: 'Dept. Placement Report', icon: 'dashboard', route: 'tpo-dashboard' },
+      { label: 'Create Job Application', icon: 'recruitment', route: 'drives' },
+      { label: 'Previous Job Application', icon: 'recruitment', route: 'kanban' },
+    ]}
   ]
 };
 

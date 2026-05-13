@@ -79,7 +79,7 @@ export async function loadTPODash(root, Store) {
     <div class="card animate-fade-in-up delay-200">
       <div class="card-title" style="margin-bottom:12px;">Quick Actions</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
-        ${[['🎯','Create New Drive','drives'],['🔀','View Pipeline','kanban'],['📊','Full Analytics','analytics'],['💬','Send Announcement','communication']].map(([ic,lbl,rt])=>`
+        ${[['🎯','Create New Drive','drives'],['🔀','View Pipeline','kanban']].map(([ic,lbl,rt])=>`
           <a href="#${rt}" onclick="window.location.hash='${rt}'" class="btn btn-secondary" style="justify-content:flex-start;text-decoration:none;">${ic} ${lbl}</a>`).join('')}
       </div>
     </div>

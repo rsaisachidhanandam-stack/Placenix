@@ -38,7 +38,6 @@ export async function loadKanbanPage(root, Store) {
       <option>Infosys — Systems Engineer</option>
       <option>Zoho — MTS</option>
     </select>
-    <button class="btn btn-secondary btn-sm">📊 Analytics</button>
   </div>
 </div>
 
