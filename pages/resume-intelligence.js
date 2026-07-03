@@ -9,7 +9,21 @@ export async function loadResumePage(root, Store, supabase) {
     return;
   }
 
+  // Preemptively load pdf.js script in the background
+  loadPdfJs().catch(err => console.warn("Failed to pre-load pdf.js:", err));
+
   const renderUI = (analysis = null, isUploading = false) => {
+    const formatLabel = (str) => {
+      let formatted = str.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      // Professional acronym formatting
+      formatted = formatted.replace(/Saas\b/gi, 'SaaS');
+      formatted = formatted.replace(/Fintech\b/gi, 'FinTech');
+      formatted = formatted.replace(/Healthtech\b/gi, 'HealthTech');
+      formatted = formatted.replace(/Ats\b/gi, 'ATS');
+      formatted = formatted.replace(/Swe\b/gi, 'SWE');
+      return formatted;
+    };
+
     let score = analysis?.ats_score || 0;
     let scoreLabel = 'High Compatibility';
     let scoreClass = 'status-success';
@@ -18,8 +32,61 @@ export async function loadResumePage(root, Store, supabase) {
 
     const foundKws = analysis?.found_keywords || [];
     const missingKws = analysis?.missing_keywords || [];
-    const industries = Object.entries(analysis?.industry_match || {}).slice(0, 3);
-    const suggestions = analysis?.suggestions || [];
+    
+    // Clean and validate industry alignment data to prevent long text from breaking layout
+    const rawIndustryMatch = analysis?.industry_match || {};
+    const cleanIndustryMatch = {};
+    let industryAnalysisText = '';
+
+    Object.entries(rawIndustryMatch).forEach(([key, val]) => {
+      const numVal = parseInt(val);
+      if (key.toLowerCase() === 'analysis' || key.toLowerCase() === 'summary' || isNaN(numVal)) {
+        if (typeof val === 'string' && val.length > 15) {
+          industryAnalysisText = val;
+        }
+      } else {
+        cleanIndustryMatch[key] = Math.min(100, Math.max(0, numVal));
+      }
+    });
+
+    // Provide default fallbacks if no numeric match percentages were parsed
+    if (Object.keys(cleanIndustryMatch).length === 0) {
+      const scoreBase = analysis?.ats_score || 70;
+      cleanIndustryMatch['Enterprise SaaS'] = scoreBase;
+      cleanIndustryMatch['FinTech'] = Math.max(10, scoreBase - 15);
+      cleanIndustryMatch['E-commerce'] = Math.max(10, scoreBase - 25);
+    }
+    const industries = Object.entries(cleanIndustryMatch).slice(0, 3);
+
+    // Clean and validate suggestions icons (mapping text icon names to emojis)
+    const suggestions = (analysis?.suggestions || []).map(s => {
+      let icon = s.icon || '✨';
+      const iconMap = {
+        'alert-circle': '⚠️',
+        'alert-triangle': '⚠️',
+        'code': '💻',
+        'terminal': '⌨️',
+        'trending-up': '📈',
+        'trending-down': '📉',
+        'bar-chart': '📊',
+        'bar-chart-2': '📊',
+        'file-text': '📄',
+        'file': '📄',
+        'settings': '⚙️',
+        'tool': '🛠️',
+        'briefcase': '💼',
+        'cpu': '🧠',
+        'activity': '⚡',
+        'check-circle': '✅'
+      };
+      const cleanIcon = String(icon).toLowerCase().trim();
+      if (iconMap[cleanIcon]) {
+        icon = iconMap[cleanIcon];
+      } else if (cleanIcon.length > 2) {
+        icon = '✨';
+      }
+      return { ...s, icon };
+    });
 
     root.innerHTML = `
     <div style="padding: 24px 40px; max-width: 1560px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
@@ -37,8 +104,8 @@ export async function loadResumePage(root, Store, supabase) {
         <div style="font-size:13px; color:var(--text-description); max-width:400px; text-align:right;">AI-powered optimization & role-match insights.</div>
       </div>
 
-      <!-- Main Workspace Grid (Optimized for Single View) -->
-      <div style="display:grid; grid-template-columns: 340px 1fr; gap: 32px; align-items: start;">
+      <!-- Main Workspace Grid (Optimized for Responsive Views) -->
+      <div class="resume-workspace-grid">
         
         <!-- LEFT COLUMN: Input & Score -->
         <div style="display:flex; flex-direction:column; gap:24px;">
@@ -110,7 +177,7 @@ export async function loadResumePage(root, Store, supabase) {
               <div style="background:var(--brand-primary-light); color:var(--brand-primary); padding:3px 10px; border-radius:100px; font-size:9px; font-weight:800;">AI MATCHED</div>
             </div>
             
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:32px;">
+            <div class="keywords-subgrid">
               <div>
                 <div class="label-ent" style="color:var(--brand-secondary); margin-bottom:12px; font-size:10px;">✓ Detected (${foundKws.length})</div>
                 <div style="display:flex; flex-wrap:wrap; gap:6px;">
@@ -126,21 +193,28 @@ export async function loadResumePage(root, Store, supabase) {
             </div>
           </div>
 
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;">
+          <div class="analytics-subgrid">
             <!-- Industry Match -->
-            <div class="card-ent" style="padding:24px;">
-              <h3 class="h2-ent" style="font-size:15px; margin-bottom:20px;">Industry Alignment</h3>
-              <div style="display:flex; flex-direction:column; gap:16px;">
-                ${industries.length ? industries.map(([n, v]) => `
-                  <div style="display:grid; grid-template-columns: 100px 1fr 40px; align-items:center; gap:16px;">
-                    <span style="font-size:12px; font-weight:600; color:var(--text-description);">${n}</span>
-                    <div style="height:4px; background:rgba(255,255,255,0.02); border-radius:10px; overflow:hidden;">
-                      <div style="height:100%; width:${v}%; background:var(--brand-primary); border-radius:10px;"></div>
+            <div class="card-ent" style="padding:24px; display:flex; flex-direction:column; justify-content:space-between; min-height:220px;">
+              <div>
+                <h3 class="h2-ent" style="font-size:15px; margin-bottom:20px;">Industry Alignment</h3>
+                <div style="display:flex; flex-direction:column; gap:16px;">
+                  ${industries.length ? industries.map(([n, v]) => `
+                    <div style="display:grid; grid-template-columns: 140px 1fr 40px; align-items:center; gap:16px;">
+                      <span style="font-size:12px; font-weight:600; color:var(--text-description); text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${formatLabel(n)}">${formatLabel(n)}</span>
+                      <div style="height:4px; background:rgba(255,255,255,0.02); border-radius:10px; overflow:hidden;">
+                        <div style="height:100%; width:${v}%; background:var(--brand-primary); border-radius:10px;"></div>
+                      </div>
+                      <span style="font-size:12px; font-weight:800; color:#fff; text-align:right;">${v}%</span>
                     </div>
-                    <span style="font-size:12px; font-weight:800; color:#fff; text-align:right;">${v}%</span>
-                  </div>
-                `).join('') : '<div style="color:var(--text-muted); font-size:11px;">Awaiting alignment...</div>'}
+                  `).join('') : '<div style="color:var(--text-muted); font-size:11px;">Awaiting alignment...</div>'}
+                </div>
               </div>
+              ${industryAnalysisText ? `
+                <div style="margin-top:20px; padding:12px 16px; background:rgba(255,255,255,0.015); border:1px solid var(--border-subtle); border-radius:10px; font-size:11.5px; line-height:1.5; color:var(--text-description); word-break:break-word; text-align:left;">
+                  <strong style="color:#fff;">AI Analysis:</strong> ${industryAnalysisText}
+                </div>
+              ` : ''}
             </div>
 
             <!-- AI Suggestions -->
@@ -148,9 +222,12 @@ export async function loadResumePage(root, Store, supabase) {
               <h3 class="h2-ent" style="font-size:15px; margin-bottom:20px;">Optimization Pulse</h3>
               <div style="display:flex; flex-direction:column; gap:12px;">
                 ${suggestions.length ? suggestions.map(s => `
-                  <div style="display:flex; gap:12px; align-items:center; padding:10px; background:rgba(255,255,255,0.01); border:1px solid var(--border-main); border-radius:12px;">
-                    <div style="font-size:16px;">${s.icon || '✨'}</div>
-                    <div style="font-weight:700; color:#fff; font-size:13px;">${s.title}</div>
+                  <div style="display:flex; gap:16px; align-items:flex-start; padding:16px; background:rgba(255,255,255,0.01); border:1px solid var(--border-subtle); border-radius:12px; transition: all var(--t-fast);">
+                    <div style="font-size:20px; line-height:1.2; padding-top:2px; flex-shrink:0;">${s.icon || '✨'}</div>
+                    <div style="display:flex; flex-direction:column; gap:6px; text-align:left;">
+                      <div style="font-weight:700; color:#fff; font-size:13.5px; line-height:1.4;">${s.title}</div>
+                      ${s.description ? `<div style="font-size:11.5px; color:var(--text-description); line-height:1.5;">${s.description}</div>` : ''}
+                    </div>
                   </div>
                 `).join('') : '<div style="color:var(--text-muted); font-size:11px;">Ingest for insights.</div>'}
               </div>
@@ -172,6 +249,43 @@ export async function loadResumePage(root, Store, supabase) {
       }
       @keyframes spin { to { transform: rotate(360deg); } }
       #dropzone:hover { border-color: var(--brand-primary); background: rgba(255,255,255,0.03); }
+
+      /* Responsive Layout Classes */
+      .resume-workspace-grid {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        gap: 32px;
+        align-items: start;
+      }
+      .keywords-subgrid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 32px;
+      }
+      .analytics-subgrid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+
+      @media (max-width: 1024px) {
+        .resume-workspace-grid {
+          grid-template-columns: 1fr;
+          gap: 24px;
+        }
+      }
+      @media (max-width: 768px) {
+        .analytics-subgrid {
+          grid-template-columns: 1fr;
+          gap: 16px;
+        }
+      }
+      @media (max-width: 640px) {
+        .keywords-subgrid {
+          grid-template-columns: 1fr;
+          gap: 20px;
+        }
+      }
     </style>
     `;
 
@@ -179,87 +293,118 @@ export async function loadResumePage(root, Store, supabase) {
     if (fileInput) fileInput.addEventListener('change', handleFileUpload);
   };
 
-  // --- PDF & AI Logic (Same as v2.4 with Mock Fallback) ---
-  const loadPdfJs = async () => {
-    if (window.pdfjsLib) return;
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js';
-      script.onload = () => {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-        resolve();
-      };
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-  };
-
-  const extractTextFromPDF = async (file) => {
-    await loadPdfJs();
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await window.pdfjsLib.getDocument(arrayBuffer).promise;
-    let fullText = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      fullText += textContent.items.map(s => s.str).join(' ') + '\n';
-    }
-    return fullText;
-  };
-
-  const analyzeWithGemini = async (text, targetRole) => {
-    const apiKey = window.GEMINI_API_KEY || Store.config?.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.warn("AI Intelligence: GEMINI_API_KEY missing. Activating Professional Mock.");
-      await new Promise(r => setTimeout(r, 2000));
-      return {
-        ats_score: 84,
-        found_keywords: ["React.js", "Node.js", "TypeScript", "System Architecture", "Cloud Infrastructure", "REST APIs", "web development", "problem-solving", "analytical skills"],
-        missing_keywords: ["GraphQL", "Docker Orchestration", "CI/CD Pipeline", "Algorithms", "Unit Testing"],
-        industry_match: { "Enterprise SaaS": 85, "FinTech": 60, "E-commerce": 50 },
-        suggestions: [
-          { title: "Quantifiable Impact", description: "Increase 'System Efficiency' metrics by adding numerical node data.", icon: "📊" },
-          { title: "Architecture Depth", description: "Expand on 'Microservices' infrastructure to align with Tier 1 nodes.", icon: "🏗️" }
-        ]
-      };
-    }
-    try {
-      const prompt = `Analyze this resume for a ${targetRole} role. Be strict and critical for ATS. Return raw JSON with keys: "ats_score" (0-100), "found_keywords" (array), "missing_keywords" (array), "industry_match" (object), "suggestions" (array of {title, description, icon}).`;
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt + "\n\nResume Text:\n" + text.substring(0, 10000) }] }],
-          generationConfig: { response_mime_type: "application/json" }
-        })
-      });
-      const data = await response.json();
-      return JSON.parse(data.candidates[0].content.parts[0].text);
-    } catch (e) { throw new Error("AI parsing failure. Using fallback."); }
-  };
-
+  // --- Dynamic Scan Handler (Isolates scans to sandbox key) ---
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || file.type !== 'application/pdf') return;
     const targetRole = document.getElementById('target-role').value;
-    renderUI(user.resume_analysis, true);
+    const currentSandbox = user.resume_analysis?.sandbox || user.resume_analysis;
+    renderUI(currentSandbox, true);
 
     try {
       const fileName = `${user.id}/resume_${Date.now()}.pdf`;
-      await supabase.storage.from('resumes').upload(fileName, file);
-      const { data: { publicUrl } } = supabase.storage.from('resumes').getPublicUrl(fileName);
+      const uploadPromise = supabase.storage.from('resumes').upload(fileName, file);
+      
       const text = await extractTextFromPDF(file);
-      const analysis = await analyzeWithGemini(text, targetRole);
-      await supabase.from('profiles').update({ resume_url: publicUrl, resume_analysis: analysis }).eq('id', user.id);
-      user.resume_url = publicUrl;
-      user.resume_analysis = analysis;
+      const analysis = await analyzeWithGemini(text, targetRole, Store);
+      
+      const uploadRes = await uploadPromise;
+      if (uploadRes.error) throw new Error("Supabase Storage Upload Failure: " + uploadRes.error.message);
+      
+      const { data: { publicUrl } } = supabase.storage.from('resumes').getPublicUrl(fileName);
+      
+      const updatedAnalysis = {
+        ...(user.resume_analysis || {}),
+        sandbox: analysis,
+        sandbox_url: publicUrl
+      };
+      await supabase.from('profiles').update({ resume_analysis: updatedAnalysis }).eq('id', user.id);
+      user.resume_analysis = updatedAnalysis;
+      
       renderUI(analysis, false);
     } catch (error) {
       console.error("Intelligence failure:", error);
       alert("Intelligence Engine Error: " + error.message);
-      renderUI(user.resume_analysis, false);
+      renderUI(user.resume_analysis?.sandbox || user.resume_analysis, false);
     }
   };
 
-  renderUI(user.resume_analysis, false);
+  const sandboxAnalysis = user.resume_analysis?.sandbox || user.resume_analysis;
+  renderUI(sandboxAnalysis, false);
 }
+
+// ── Module-Level Exportable AI Helpers ───────────────────────────
+
+export async function loadPdfJs() {
+  if (window.pdfjsLib) return;
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js';
+    script.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+      resolve();
+    };
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+export const extractTextFromPDF = async (file) => {
+  await loadPdfJs();
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument(arrayBuffer).promise;
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    fullText += textContent.items.map(s => s.str).join(' ') + '\n';
+  }
+  return fullText;
+};
+
+export const analyzeWithGemini = async (text, targetRole, Store) => {
+  const apiKey = window.GEMINI_API_KEY || Store?.config?.GEMINI_API_KEY;
+  const isDummy = !apiKey || apiKey.startsWith('AQ.');
+
+  if (isDummy) {
+    console.warn("AI Intelligence: GEMINI_API_KEY missing or placeholder. Activating Professional Mock.");
+    await new Promise(r => setTimeout(r, 300));
+    return {
+      ats_score: 84,
+      found_keywords: ["React.js", "Node.js", "TypeScript", "System Architecture", "Cloud Infrastructure", "REST APIs", "web development", "problem-solving", "analytical skills"],
+      missing_keywords: ["GraphQL", "Docker Orchestration", "CI/CD Pipeline", "Algorithms", "Unit Testing"],
+      industry_match: { "Enterprise SaaS": 85, "FinTech": 60, "E-commerce": 50 },
+      suggestions: [
+        { title: "Quantifiable Impact", description: "Increase 'System Efficiency' metrics by adding numerical data points.", icon: "📊" },
+        { title: "Architecture Depth", description: "Expand on 'Microservices' infrastructure to align with Tier 1 nodes.", icon: "🏗️" }
+      ]
+    };
+  }
+  try {
+    const prompt = `Analyze this resume for a ${targetRole} role. Be strict and critical for ATS. Return raw JSON with keys: "ats_score" (0-100), "found_keywords" (array of strings), "missing_keywords" (array of strings), "industry_match" (key-value object mapping exactly 3 industry names like "Enterprise SaaS", "FinTech", "HealthTech", etc. to their match percentage numbers 0-100), "suggestions" (array of objects with keys "title", "description", and "icon" where "icon" is a single representative emoji character like 📊, ⚠️, 💻, 📈, etc.).`;
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt + "\n\nResume Text:\n" + text.substring(0, 10000) }] }],
+        generationConfig: { responseMimeType: "application/json" }
+      })
+    });
+    clearTimeout(timeoutId);
+    const data = await response.json();
+    if (!data.candidates || !data.candidates[0]) throw new Error("AI did not return any candidates.");
+    let txt = data.candidates[0].content.parts[0].text.trim();
+    if (txt.startsWith('```')) {
+      txt = txt.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+    }
+    return JSON.parse(txt);
+  } catch (e) { 
+    console.error("Gemini AI parsing failure detail:", e);
+    throw new Error("AI parsing failure. Using fallback."); 
+  }
+};

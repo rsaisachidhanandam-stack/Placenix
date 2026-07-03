@@ -1,4 +1,68 @@
 export async function loadAlumniPage(root, Store) {
+  const role = Store.session?.role || 'student';
+
+  const renderCard = (a) => {
+    return `
+      <div class="card-ent alumni-card" style="padding:24px; display:flex; flex-direction:column; gap:20px; transition:all 0.3s ease;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <div style="width:48px; height:48px; background:var(--brand-primary); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; color:white; box-shadow: 0 4px 12px rgba(139,92,246,0.2);">${a.avatar}</div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+            ${a.mentoring ? 
+              `<span style="background:rgba(16,185,129,0.1); color:var(--brand-secondary); padding:3px 10px; border-radius:100px; font-size:9px; font-weight:800;">ACTIVE MENTOR</span>` : 
+              `<span style="background:rgba(255,255,255,0.05); color:var(--text-muted); padding:3px 10px; border-radius:100px; font-size:9px; font-weight:800;">OFFLINE</span>`
+            }
+            ${a.pushed ? 
+              `<span style="background:rgba(139,92,246,0.15); color:var(--brand-primary); padding:3px 10px; border-radius:100px; font-size:9px; font-weight:800; display:flex; align-items:center; gap:4px;">📢 RECOMMENDED</span>` : ''
+            }
+            <div style="font-size:10px; color:var(--text-description); font-weight:700;">Batch of ${a.batch}</div>
+          </div>
+        </div>
+
+        <div>
+          <h4 style="font-size:16px; font-weight:800; color:#fff; letter-spacing:-0.01em;">${a.name}</h4>
+          <div style="font-size:12px; font-weight:600; color:var(--brand-primary); margin-top:2px;">${a.role} @ ${a.company}</div>
+          <div style="font-size:11px; color:var(--text-muted); margin-top:4px; display:flex; align-items:center; gap:6px;">
+            <span>📍 ${a.location}</span>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          ${a.expertise.map(e => `<span style="font-size:10px; padding:3px 10px; background:rgba(255,255,255,0.02); border:1px solid var(--border-main); border-radius:6px; color:var(--text-description); font-weight:600;">${e}</span>`).join('')}
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; padding:16px; background:rgba(255,255,255,0.01); border:1px solid var(--border-main); border-radius:12px;">
+          <div>
+            <div style="font-size:13px; font-weight:800; color:#fff;">${a.sessions}</div>
+            <div style="font-size:9px; color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-top:2px;">Consultations</div>
+          </div>
+          <div style="border-left:1px solid var(--border-main); padding-left:12px;">
+            <div style="font-size:13px; font-weight:800; color:var(--brand-secondary);">${a.rating} ★</div>
+            <div style="font-size:9px; color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-top:2px;">Global Rating</div>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:10px; margin-top:auto;">
+          <div style="display:flex; gap:10px; width:100%;">
+            <button class="btn-premium" style="flex:1; height:36px; font-size:11px; border-radius:10px;" 
+                    onclick="window.requestMentor('${a.name}')" ${!a.mentoring ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>
+              Initiate Consultation
+            </button>
+            <button class="btn-premium-ghost" style="width:36px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; border-radius:10px;"
+                    onclick="window.open('https://linkedin.com', '_blank')">
+              <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+            </button>
+          </div>
+          ${role !== 'student' ? `
+            <button class="btn-premium-push" style="height:36px; font-size:11px; border-radius:10px; width:100%; font-weight:700; cursor:pointer;" 
+                    onclick="window.pushAlumni('${a.name}')" ${a.pushed ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>
+              ${a.pushed ? '📢 Broadcasted to Students' : '📢 Push to Students'}
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  };
+
   const renderUI = (list) => {
     root.innerHTML = `
     <div style="padding: 24px 40px; max-width: 1560px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
@@ -39,54 +103,7 @@ export async function loadAlumniPage(root, Store) {
 
       <!-- Alumni Registry Grid -->
       <div id="alumni-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 24px;">
-        ${list.map(a => `
-          <div class="card-ent alumni-card" style="padding:24px; display:flex; flex-direction:column; gap:20px; transition:all 0.3s ease;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-              <div style="width:48px; height:48px; background:var(--brand-primary); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; color:white; box-shadow: 0 4px 12px rgba(139,92,246,0.2);">${a.avatar}</div>
-              <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-                ${a.mentoring ? 
-                  `<span style="background:rgba(16,185,129,0.1); color:var(--brand-secondary); padding:3px 10px; border-radius:100px; font-size:9px; font-weight:800;">ACTIVE MENTOR</span>` : 
-                  `<span style="background:rgba(255,255,255,0.05); color:var(--text-muted); padding:3px 10px; border-radius:100px; font-size:9px; font-weight:800;">OFFLINE</span>`
-                }
-                <div style="font-size:10px; color:var(--text-description); font-weight:700;">Batch of ${a.batch}</div>
-              </div>
-            </div>
-
-            <div>
-              <h4 style="font-size:16px; font-weight:800; color:#fff; letter-spacing:-0.01em;">${a.name}</h4>
-              <div style="font-size:12px; font-weight:600; color:var(--brand-primary); margin-top:2px;">${a.role} @ ${a.company}</div>
-              <div style="font-size:11px; color:var(--text-muted); margin-top:4px; display:flex; align-items:center; gap:6px;">
-                <span>📍 ${a.location}</span>
-              </div>
-            </div>
-
-            <div style="display:flex; flex-wrap:wrap; gap:6px;">
-              ${a.expertise.map(e => `<span style="font-size:10px; padding:3px 10px; background:rgba(255,255,255,0.02); border:1px solid var(--border-main); border-radius:6px; color:var(--text-description); font-weight:600;">${e}</span>`).join('')}
-            </div>
-
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; padding:16px; background:rgba(255,255,255,0.01); border:1px solid var(--border-main); border-radius:12px;">
-              <div>
-                <div style="font-size:13px; font-weight:800; color:#fff;">${a.sessions}</div>
-                <div style="font-size:9px; color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-top:2px;">Consultations</div>
-              </div>
-              <div style="border-left:1px solid var(--border-main); padding-left:12px;">
-                <div style="font-size:13px; font-weight:800; color:var(--brand-secondary);">${a.rating} ★</div>
-                <div style="font-size:9px; color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-top:2px;">Global Rating</div>
-              </div>
-            </div>
-
-            <div style="display:flex; gap:10px; margin-top:auto;">
-              <button class="btn-premium" style="flex:1; height:36px; font-size:11px; border-radius:10px;" 
-                      onclick="window.requestMentor('${a.name}')" ${!a.mentoring ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>
-                Initiate Consultation
-              </button>
-              <button class="btn-premium-ghost" style="width:36px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; border-radius:10px;"
-                      onclick="window.open('https://linkedin.com', '_blank')">
-                <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
-              </button>
-            </div>
-          </div>
-        `).join('')}
+        ${list.map(renderCard).join('')}
       </div>
     </div>
 
@@ -104,6 +121,19 @@ export async function loadAlumniPage(root, Store) {
         font-weight: 700; cursor: pointer; transition: all 0.2s;
       }
       .btn-premium-ghost:hover { background: rgba(255,255,255,0.05); color: #fff; border-color: var(--brand-primary); }
+      .btn-premium-push {
+        background: linear-gradient(135deg, rgba(139,92,246,0.1) 0%, rgba(16,185,129,0.05) 100%);
+        color: #fff;
+        border: 1px dashed var(--brand-primary);
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .btn-premium-push:hover:not(:disabled) {
+        background: linear-gradient(135deg, rgba(139,92,246,0.2) 0%, rgba(16,185,129,0.1) 100%);
+        border-style: solid;
+        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+      }
     </style>
     `;
 
@@ -128,34 +158,70 @@ export async function loadAlumniPage(root, Store) {
   const updateGrid = (list) => {
     const grid = document.getElementById('alumni-grid');
     if (!grid) return;
-    grid.innerHTML = list.length ? list.map(a => `
-      <!-- Recycled Card Template -->
-      <div class="card-ent alumni-card" style="padding:24px; display:flex; flex-direction:column; gap:20px; transition:all 0.3s ease;">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-          <div style="width:48px; height:48px; background:var(--brand-primary); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; color:white;">${a.avatar}</div>
-          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-            ${a.mentoring ? `<span style="background:rgba(16,185,129,0.1); color:var(--brand-secondary); padding:3px 10px; border-radius:100px; font-size:9px; font-weight:800;">ACTIVE MENTOR</span>` : `<span style="background:rgba(255,255,255,0.05); color:var(--text-muted); padding:3px 10px; border-radius:100px; font-size:9px; font-weight:800;">OFFLINE</span>`}
-            <div style="font-size:10px; color:var(--text-description); font-weight:700;">Batch of ${a.batch}</div>
-          </div>
-        </div>
-        <div>
-          <h4 style="font-size:16px; font-weight:800; color:#fff;">${a.name}</h4>
-          <div style="font-size:12px; font-weight:600; color:var(--brand-primary); margin-top:2px;">${a.role} @ ${a.company}</div>
-        </div>
-        <div style="display:flex; flex-wrap:wrap; gap:6px;">
-          ${a.expertise.map(e => `<span style="font-size:10px; padding:3px 10px; background:rgba(255,255,255,0.02); border:1px solid var(--border-main); border-radius:6px; color:var(--text-description); font-weight:600;">${e}</span>`).join('')}
-        </div>
-        <div style="display:flex; gap:10px; margin-top:auto;">
-          <button class="btn-premium" style="flex:1; height:36px; font-size:11px; border-radius:10px;" onclick="window.requestMentor('${a.name}')" ${!a.mentoring ? 'disabled style="opacity:0.5;"' : ''}>Initiate Consultation</button>
-          <button class="btn-premium-ghost" style="width:36px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; border-radius:10px;" onclick="window.open('https://linkedin.com', '_blank')">🔗</button>
-        </div>
-      </div>
-    `).join('') : `<div style="grid-column: 1 / -1; padding:100px; text-align:center; color:var(--text-description);">No alumni nodes found in the current sector.</div>`;
+    grid.innerHTML = list.length ? list.map(renderCard).join('') : `<div style="grid-column: 1 / -1; padding:100px; text-align:center; color:var(--text-description);">No alumni nodes found in the current sector.</div>`;
   };
 
   window.requestMentor = (name) => {
     alert(`Consultation request submitted to ${name}. The mentor will review your professional metadata and respond via the secure communication node.`);
   };
 
+  window.pushAlumni = (name) => {
+    const alum = Store.alumni.find(a => a.name === name);
+    if (!alum) return;
+
+    alum.pushed = true;
+
+    // Add student notification
+    if (!Store.notifications) Store.notifications = [];
+    
+    const roleLabel = Store.session?.role === 'tpo' ? 'Training & Placement Officer' : 
+                      Store.session?.role === 'admin' ? 'Institutional Admin' : 
+                      Store.session?.role === 'department' ? 'Department Coordinator' : 
+                      Store.session?.role === 'coordinator' ? 'Department Coordinator' : 
+                      Store.session?.role === 'faculty' ? 'Faculty Advisor' : 'Placements Office';
+    
+    Store.notifications.unshift({
+      id: 'n_push_' + Date.now(),
+      type: 'alumni',
+      title: `Alumni Recommended: ${alum.name}`,
+      desc: `${alum.name} (${alum.role} @ ${alum.company}) has been recommended as a mentor by the ${roleLabel}.`,
+      time: 'Just now',
+      read: false
+    });
+
+    // Save Store
+    localStorage.setItem('placenix_alumni', JSON.stringify(Store.alumni));
+    localStorage.setItem('placenix_notifications', JSON.stringify(Store.notifications));
+
+    // Dispatch update
+    window.dispatchEvent(new CustomEvent('store-updated'));
+
+    alert(`Alumni metadata for ${alum.name} has been broadcasted to all student workspaces.`);
+  };
+
+  const onStoreUpdate = () => {
+    const searchVal = document.getElementById('alumni-search')?.value.toLowerCase() || '';
+    const filterVal = document.getElementById('alumni-filter')?.value || '';
+    const filtered = Store.alumni.filter(a => {
+      const matchesSearch = !searchVal || 
+        a.name.toLowerCase().includes(searchVal) || 
+        a.company.toLowerCase().includes(searchVal) || 
+        a.expertise.some(ex => ex.toLowerCase().includes(searchVal));
+      const matchesFilter = !filterVal || a.company === filterVal;
+      return matchesSearch && matchesFilter;
+    });
+    updateGrid(filtered);
+  };
+  window.addEventListener('store-updated', onStoreUpdate);
+
   renderUI(Store.alumni);
+
+  // Cleanup observer
+  const observer = new MutationObserver(() => {
+    if (!document.body.contains(root)) {
+      window.removeEventListener('store-updated', onStoreUpdate);
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 }

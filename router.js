@@ -25,6 +25,9 @@ import {
 import { loadFacultyAdvisorPage } from './pages/faculty-advisor.js';
 import { loadAdminControl } from './pages/admin-control.js';
 import { loadKanbanPage } from './pages/kanban.js';
+import { loadSlotAllocationPage } from './pages/slot-allocation.js';
+import { loadMySlotsPage } from './pages/my-slots.js';
+import { loadAttendanceTrackerPage } from './pages/attendance-tracker.js';
 
 import { renderSidebar, renderTopbar } from './components/sidebar.js';
 import { supabase   } from './supabase.js';
@@ -39,7 +42,7 @@ const DASHBOARD_PAGES = [
   'faculty-advisor', 'faculty-dashboard', 'fa-students', 'fa-resume', 'fa-skills', 'fa-new-jobs', 'fa-prev-jobs',
   'admin-dept', 'resume', 'resume-analysis', 'kanban', 'saas-admin',
   'dept-students', 'dept-resume', 'dept-skills', 'dept-new-jobs', 'dept-prev-jobs', 'dept-announcements', 'dept-queries',
-  'admin-setup', 'admin-staff', 'admin-roles', 'admin-mapping'
+  'admin-setup', 'admin-staff', 'admin-roles', 'admin-mapping', 'slot-allocation', 'my-slots', 'attendance-tracker'
 ];
 
 const routes = {
@@ -48,6 +51,7 @@ const routes = {
   'signup':            (r,s,sb) => loadAuthPage(r,s,'signup',sb),
   'onboarding':        loadOnboardingPage,
   'student-dashboard': loadStudentDash,
+  'my-slots':          loadMySlotsPage,
   'tpo-dashboard':     loadTPODash,
   'coordinator-dashboard': loadDeptDash,
   'department-dashboard':  loadDeptDash,
@@ -76,6 +80,8 @@ const routes = {
   'resume':            loadResumePage,
   'resume-analysis':   loadResumePage,
   'kanban':            loadKanbanPage,
+  'attendance-tracker': loadAttendanceTrackerPage,
+  'slot-allocation':   loadSlotAllocationPage,
   'saas-admin':        loadLandingPage,
   'dept-students':      loadDeptStudents,
   'dept-resume':        loadDeptResume,
@@ -96,10 +102,14 @@ function getRoute() {
   const hash = window.location.hash || '#';
   let raw = hash.replace('#', '') || '';
   if (raw.startsWith('/')) raw = raw.substring(1);
-  return raw.replace(/_/g, '-').toLowerCase(); 
+  const routePart = raw.split('?')[0];
+  return routePart.replace(/_/g, '-').toLowerCase(); 
 }
 
 async function handleRoute() {
+  const overlay = document.getElementById('placenix-error-overlay');
+  if (overlay) overlay.style.display = 'none';
+
   const route = getRoute();
   console.log('🧭 Router: Transitioning to node ->', route);
   console.table(Object.keys(routes));
@@ -125,6 +135,8 @@ async function handleRoute() {
             </div>
           </main>
         </div>`;
+      // Initialize sidebar controls immediately so that logout is responsive during asynchronous page loads
+      initSidebar();
     } else {
       app.innerHTML = `<div id="page-root"></div>`;
     }
@@ -134,7 +146,6 @@ async function handleRoute() {
     
     console.log(`🚀 Router: Executing loader for [${route}] ->`, loader.name || 'Anonymous');
     await loader(pageRoot, Store, supabase);
-    if (isDash) initSidebar();
 
   } catch (err) {
     console.error('❌ Router Error:', err);
@@ -150,9 +161,28 @@ async function handleRoute() {
 }
 
 function initSidebar() {
-  document.getElementById('logout-btn')?.addEventListener('click', async () => {
-    if (supabase) await supabase.auth.signOut();
-    location.reload();
+  document.getElementById('logout-btn')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    
+    // Reset all session and application state locally immediately
+    Store.students = [];
+    Store.drives = [];
+    Store.alumni = [];
+    Store.interviews = [];
+    Store.session.user = null;
+    Store.session.role = 'guest';
+    
+    // Redirect to login screen instantly
+    window.location.hash = 'login';
+    
+    // Process server-side logout in the background
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error('Error during Supabase signOut:', err);
+      }
+    }
   });
 }
 

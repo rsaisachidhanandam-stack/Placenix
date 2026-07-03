@@ -2,6 +2,8 @@
 // PLACENIX — ENTERPRISE AUTHENTICATION WORKSPACE
 // ============================================================
 
+import { loadStoreFromLocalStorage } from '../store.js';
+
 export function loadAuthPage(root, Store, mode = 'login', supabase) {
   const hash = window.location.hash.replace('#','');
   const m = hash === 'signup' ? 'signup' : hash === 'otp' ? 'otp' : 'login';
@@ -272,7 +274,7 @@ function initAuth(mode, Store, supabase) {
         const userRole = data.user.user_metadata?.role || selectedRole;
 
         // Institutional Staff Authorization Firewall
-        if (['faculty', 'coordinator', 'tpo', 'admin'].includes(userRole)) {
+        if (['faculty', 'coordinator', 'department', 'tpo', 'admin'].includes(userRole)) {
           console.log('🛡️ Firewall Authentication Query initiated for:', email);
           const { data: profile, error: profileErr } = await supabase
             .from('staff_profiles')
@@ -300,6 +302,7 @@ function initAuth(mode, Store, supabase) {
         }
         
         // Sync Store
+        loadStoreFromLocalStorage();
         Store.session.user = { id: data.user.id, email: data.user.email, ...(data.user.user_metadata || {}) };
         Store.session.role = Store.session.user.role || userRole;
         
@@ -309,11 +312,30 @@ function initAuth(mode, Store, supabase) {
         const fname = document.getElementById('signup-fname').value.trim();
         const lname = document.getElementById('signup-lname').value.trim();
         const role = document.getElementById('signup-role').value;
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email, password,
           options: { data: { first_name: fname, last_name: lname, full_name: `${fname} ${lname}`, role } }
         });
         if (error) throw error;
+
+        if (role !== 'student') {
+          console.log('📡 Creating pending staff profile for role:', role);
+          const { error: staffErr } = await supabase
+            .from('staff_profiles')
+            .insert([{
+              name: `${fname} ${lname}`,
+              email: email,
+              status: 'Pending',
+              role: role === 'department' ? 'coordinator' : role,
+              mapping: 'None'
+            }]);
+          if (staffErr) {
+            console.warn('⚠️ staff_profiles registration failed:', staffErr.message);
+          } else {
+            console.log('📡 Pending staff profile successfully registered.');
+          }
+        }
+
         alert('Registration successful! Please check your email inbox.');
         window.location.hash = 'login';
       }

@@ -512,6 +512,7 @@ function renderStaff(state) {
                     <option value="none" selected>Select Role...</option>
                     <option value="faculty">Faculty Advisor</option>
                     <option value="coordinator">Dept. Coordinator</option>
+                    <option value="department">Department Login</option>
                     <option value="tpo">TPO Login</option>
                   </select>
                 </td>
@@ -548,6 +549,7 @@ function renderStaff(state) {
                   <select onchange="handleRoleUpdate(${s.id}, this.value)" class="admin-select" style="height:32px; font-size:12px; width:180px;">
                     <option value="faculty" ${s.role === 'faculty' ? 'selected' : ''}>Faculty Advisor</option>
                     <option value="coordinator" ${s.role === 'coordinator' ? 'selected' : ''}>Dept. Coordinator</option>
+                    <option value="department" ${s.role === 'department' ? 'selected' : ''}>Department Login</option>
                     <option value="tpo" ${s.role === 'tpo' ? 'selected' : ''}>TPO Login</option>
                   </select>
                 </td>

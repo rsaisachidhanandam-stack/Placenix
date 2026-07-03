@@ -10,6 +10,7 @@ const ICONS = {
   'network': `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
   'support': `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
   'log-out': `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+  'clock': `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
 };
 
 const SECTIONS = {
@@ -25,6 +26,7 @@ const SECTIONS = {
     ]},
     { label: 'RECRUITMENT', items: [
       { label: 'Opportunity Hub', icon: 'recruitment', route: 'new-applications' },
+      { label: 'My Interview Slots', icon: 'clock', route: 'my-slots' },
     ]},
     { label: 'ECOSYSTEM', items: [
       { label: 'Alumni Network', icon: 'network', route: 'alumni-connect' },
@@ -46,10 +48,12 @@ const SECTIONS = {
     { label: 'RECRUITMENT', items: [
       { label: 'New Job Applications', icon: 'recruitment', route: 'dept-new-jobs' },
       { label: 'Previous Applications', icon: 'recruitment', route: 'dept-prev-jobs' },
+      { label: 'Attendance Tracker', icon: 'clock', route: 'attendance-tracker' },
     ]},
     { label: 'COMMUNICATION', items: [
       { label: 'Announcements', icon: 'support', route: 'dept-announcements' },
       { label: 'Queries', icon: 'support', route: 'dept-queries' },
+      { label: 'Alumni Network', icon: 'network', route: 'alumni-connect' },
     ]}
   ],
   admin: [
@@ -62,6 +66,9 @@ const SECTIONS = {
     ]},
     { label: 'OPERATIONAL LOGISTICS', items: [
       { label: 'Work Mapping', icon: 'dashboard', route: 'admin-mapping' },
+    ]},
+    { label: 'ECOSYSTEM', items: [
+      { label: 'Alumni Network', icon: 'network', route: 'alumni-connect' },
     ]}
   ],
   faculty: [
@@ -78,6 +85,9 @@ const SECTIONS = {
     { label: 'RECRUITMENT', items: [
       { label: 'New Job Application', icon: 'recruitment', route: 'fa-new-jobs' },
       { label: 'Previous Job Application', icon: 'recruitment', route: 'fa-prev-jobs' },
+    ]},
+    { label: 'ECOSYSTEM', items: [
+      { label: 'Alumni Network', icon: 'network', route: 'alumni-connect' },
     ]}
   ],
   tpo: [
@@ -85,6 +95,9 @@ const SECTIONS = {
       { label: 'Dept. Placement Report', icon: 'dashboard', route: 'tpo-dashboard' },
       { label: 'Create Job Application', icon: 'recruitment', route: 'drives' },
       { label: 'Previous Job Application', icon: 'recruitment', route: 'kanban' },
+      { label: 'Attendance Tracker', icon: 'clock', route: 'attendance-tracker' },
+      { label: 'Slot Allocation', icon: 'intelligence', route: 'slot-allocation' },
+      { label: 'Alumni Network', icon: 'network', route: 'alumni-connect' },
     ]}
   ]
 };
