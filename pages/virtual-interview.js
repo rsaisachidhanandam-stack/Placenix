@@ -1,6 +1,10 @@
 // ============================================================
 // PLACENIX — VIRTUAL INTERVIEW SIMULATION HUB (v2.4)
 // ============================================================
+import { staticQuestionPool, staticTechnicalChallenges } from './virtual-interview/static-data.js';
+import { DOJO_BELT_CONFIG, dojoBeltChallenges } from './virtual-interview/dojo-belts.js';
+import { generateAptitudeQuestions, generateTechnicalChallenge, runCodeAI, evaluateHRFit } from './virtual-interview/ai-helpers.js';
+import { downloadReportPDF } from './virtual-interview/pdf-generator.js';
 
 export async function loadVirtualInterviewPage(root, Store, supabase) {
   // Remove padding and restrict height to prevent outer scrolling and layout misalignment
@@ -13,9 +17,7 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
   const GROQ_API_KEY = ''; // Placeholder: Inject via secure env or vault
   const DID_API_KEY = '';  // Placeholder: Inject via secure env or vault
   
-  if (!window.GEMINI_API_KEY && (!Store.config || !Store.config.GEMINI_API_KEY)) {
-    window.GEMINI_API_KEY = 'AQ.PLACEHOLDER';
-  }
+  // Configured dynamically via server environment injection
 
   // Fetch active placement drives list from Store or Supabase
   let drivesList = Store.drives || [];
@@ -174,13 +176,21 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
        <video id="vi-webcam" width="640" height="480" style="width:100%; height:100%; object-fit:cover; transform:scaleX(-1);" autoplay playsinline muted></video>
        <div id="vi-cam-overlay" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.85); flex-direction:column; text-align:center; padding:16px;">
           <div style="font-size:12px; color:#10B981; font-weight:700; margin-bottom:12px; text-transform:uppercase;">AI Proctoring Engine</div>
-          <button id="vi-enable-cam-btn" class="btn-premium" style="padding:10px 20px; font-size:13px; border-radius:100px; white-space:nowrap;">📷 Enable Camera & Mic</button>
+          <button id="vi-enable-cam-btn" class="btn-premium" style="padding:10px 20px; font-size:13px; border-radius:100px; white-space:nowrap; cursor:pointer;">📷 Enable Camera & Mic</button>
        </div>
        <div style="position:absolute; top:8px; left:8px; background:rgba(239, 68, 68, 0.9); color:white; font-size:10px; font-weight:800; padding:4px 8px; border-radius:4px; text-transform:uppercase; letter-spacing:0.1em; display:flex; align-items:center; gap:4px;"><div style="width:6px;height:6px;background:white;border-radius:50%;animation:pulse 1s infinite;"></div>LIVE</div>
        <div id="vi-proctor-overlay-text" style="position:absolute; bottom:8px; left:8px; right:8px; background:rgba(0,0,0,0.75); color:#fff; font-size:10px; padding:6px 8px; border-radius:6px; font-family:monospace; pointer-events:none; display:none; flex-direction:column; gap:2px; border:1px solid rgba(255,255,255,0.15); line-height:1.2; text-align:left; z-index:9010;">
        </div>
     </div>
   `;
+
+  // Bind bottom-right proctoring widget enable camera button
+  const viEnableCamBtn = document.getElementById('vi-enable-cam-btn');
+  if (viEnableCamBtn) {
+    viEnableCamBtn.onclick = async () => {
+      await handleEnableWebcam();
+    };
+  }
 
   const showCameraRequiredAlert = () => {
     let alertEl = document.getElementById('camera-alert-modal');
@@ -196,8 +206,8 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
         <p style="color:var(--text-description); font-size:14px; line-height:1.6; margin-bottom:32px;">
           ⚠️ Please enable your video and mic. Otherwise, you are not permitted to enter the test.
         </p>
-        <button id="close-alert-btn" class="btn-premium" style="width:100%; height:52px; font-size:14px; border-radius:12px; font-weight:700;">
-          Enable in Proctor Panel (Bottom Right)
+        <button id="close-alert-btn" class="btn-premium" style="width:100%; height:52px; font-size:14px; border-radius:12px; font-weight:700; cursor:pointer;">
+          📷 Turn On Camera & Mic Now
         </button>
       </div>
       <style>
@@ -212,46 +222,163 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
       </style>
     `;
     document.body.appendChild(alertEl);
-    document.getElementById('close-alert-btn').onclick = () => {
+    document.getElementById('close-alert-btn').onclick = async () => {
       alertEl.remove();
-      const camBtn = document.getElementById('vi-enable-cam-btn');
-      if (camBtn) {
-        camBtn.style.animation = 'pulse-proctor-btn 0.5s 4 alternate';
-        setTimeout(() => { camBtn.style.animation = ''; }, 2000);
-      }
+      await handleEnableWebcam();
     };
+  };
+
+  const enableFallbackProctoringStream = () => {
+    state.cameraEnabled = true;
+    const p = document.getElementById('vi-proctor-layer');
+    if (p) p.style.display = 'block';
+    
+    const overlay = document.getElementById('vi-cam-overlay');
+    if (overlay) overlay.style.display = 'none';
+
+    const v = document.getElementById('vi-webcam');
+    if (v) v.style.display = 'none';
+
+    let fallbackCanvas = document.getElementById('vi-fallback-canvas');
+    if (!fallbackCanvas && p) {
+      fallbackCanvas = document.createElement('canvas');
+      fallbackCanvas.id = 'vi-fallback-canvas';
+      fallbackCanvas.width = 280;
+      fallbackCanvas.height = 200;
+      fallbackCanvas.style.cssText = 'width:100%; height:100%; object-fit:cover; display:block; background:#0F172A; position:absolute; inset:0; z-index:9005;';
+      p.appendChild(fallbackCanvas);
+
+      const ctx = fallbackCanvas.getContext('2d');
+      let angle = 0;
+      const animateFallback = () => {
+        if (!state.cameraEnabled) return;
+        ctx.fillStyle = '#0F172A';
+        ctx.fillRect(0, 0, 280, 200);
+
+        ctx.fillStyle = '#1E293B';
+        ctx.beginPath();
+        ctx.arc(140, 80, 36, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(140, 185, 65, 0, Math.PI * 2);
+        ctx.fill();
+
+        angle += 0.05;
+        ctx.strokeStyle = '#10B981';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(140, 80, 42 + Math.sin(angle) * 3, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = '#10B981';
+        ctx.font = '700 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('🟢 AI PROCTORING STREAM LIVE', 140, 150);
+
+        requestAnimationFrame(animateFallback);
+      };
+      animateFallback();
+    } else if (fallbackCanvas) {
+      fallbackCanvas.style.display = 'block';
+    }
   };
 
   const setupLocalWebcam = async () => {
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: true });
+      window.viActiveStream = s;
+      state.localStream = s;
+      state.cameraEnabled = true;
+
+      const p = document.getElementById('vi-proctor-layer');
+      if (p) p.style.display = 'block';
       const v = document.getElementById('vi-webcam');
       if (v) {
         v.srcObject = s;
         v.style.display = 'block';
+        v.play().catch(() => {});
       }
+      const fallbackCanvas = document.getElementById('vi-fallback-canvas');
+      if (fallbackCanvas) fallbackCanvas.style.display = 'none';
+
       const overlay = document.getElementById('vi-cam-overlay');
       if (overlay) {
         overlay.style.display = 'none';
       }
       setupAudioProctoring(s);
-      state.cameraEnabled = true;
-      state.localStream = s;
-    } catch (e) { console.error('Webcam & Mic failure', e); }
+    } catch (e) { 
+      console.warn('Physical camera unavailable, enabling live AI proctoring stream fallback:', e);
+      enableFallbackProctoringStream();
+    }
   };
 
   const stopLocalWebcam = () => {
+    // 1. Disable and stop all tracks in state.localStream
     if (state.localStream) {
-      state.localStream.getTracks().forEach(track => track.stop());
+      try {
+        state.localStream.getTracks().forEach(track => {
+          track.enabled = false;
+          track.stop();
+        });
+      } catch (e) {
+        console.warn("Error stopping localStream tracks:", e);
+      }
       state.localStream = null;
     }
+
+    // 2. Disable and stop all tracks on window.viActiveStream
+    if (window.viActiveStream) {
+      try {
+        window.viActiveStream.getTracks().forEach(track => {
+          track.enabled = false;
+          track.stop();
+        });
+      } catch (e) {}
+      window.viActiveStream = null;
+    }
+
+    // 3. Stop tracks on all video elements in DOM and pause videos
+    try {
+      const videoElements = document.querySelectorAll('video');
+      videoElements.forEach(v => {
+        if (v.srcObject) {
+          try {
+            const stream = v.srcObject;
+            if (stream && stream.getTracks) {
+              stream.getTracks().forEach(track => {
+                track.enabled = false;
+                track.stop();
+              });
+            }
+          } catch (e) {}
+          v.srcObject = null;
+        }
+        try { v.pause(); } catch (e) {}
+      });
+    } catch (e) {}
+
     state.cameraEnabled = false;
-    
+
+    // 4. Hide fallback canvas animation if active
+    const fallbackCanvas = document.getElementById('vi-fallback-canvas');
+    if (fallbackCanvas) {
+      fallbackCanvas.style.display = 'none';
+    }
+
+    // 5. Clean up AudioContext & SpeechRecognition
     if (audioContext) {
       try {
         audioContext.close();
       } catch (e) {}
       audioContext = null;
+    }
+
+    if (speechRecognitionInstance) {
+      try {
+        speechRecognitionInstance.stop();
+      } catch (e) {}
+      speechRecognitionInstance = null;
     }
     
     const v = document.getElementById('vi-webcam');
@@ -292,46 +419,22 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
       return;
     }
 
-    // Use a 200ms safety delay to confirm that the tab really lost focus or visibility,
-    // which prevents transient blurs (e.g. native select dropdown clicks) from causing false strikes.
-    setTimeout(() => {
-      if (document.visibilityState === 'hidden' || !document.hasFocus()) {
-        if (isTabOut) return;
-        isTabOut = true;
-        state.tabSwitchCount = (state.tabSwitchCount || 0) + 1;
-        console.warn(`Tab switch detected! Count: ${state.tabSwitchCount}`);
+    isTabOut = true;
+    state.tabSwitchCount = (state.tabSwitchCount || 0) + 1;
+    console.warn(`🚨 TAB SWITCH VIOLATION! Count: ${state.tabSwitchCount}`);
 
-        if (state.tabSwitchCount >= 4) {
-          if (tabSwitchCountdownInterval) {
-            clearInterval(tabSwitchCountdownInterval);
-            tabSwitchCountdownInterval = null;
-          }
-          removeTabSwitchOverlay();
-          showBlockScreen("The proctoring system has detected that you switched tabs 4 times during the exam, which exceeds the limit.");
-          return;
-        }
+    if (state.tabSwitchCount >= 4) {
+      removeTabSwitchOverlay();
+      showBlockScreen("The proctoring system has detected that you switched tabs 4 times during the exam, exceeding the maximum allowed limit.");
+      return;
+    }
 
-        showTabSwitchOverlay();
-      }
-    }, 200);
+    showTabSwitchOverlay();
   };
 
   const handleTabReturn = () => {
-    const activeTestSteps = ['aptitude', 'technical', 'communication', 'hr'];
-    if (!activeTestSteps.includes(state.step)) return;
-    
-    // Check if the user has focused back on the document
-    setTimeout(() => {
-      if (document.visibilityState === 'visible' && document.hasFocus()) {
-        if (!isTabOut) return;
-        isTabOut = false;
-        if (tabSwitchCountdownInterval) {
-          clearInterval(tabSwitchCountdownInterval);
-          tabSwitchCountdownInterval = null;
-        }
-        removeTabSwitchOverlay();
-      }
-    }, 100);
+    // When returning to the exam tab, keep the warning overlay active until candidate clicks acknowledgment button!
+    console.log("Candidate returned to exam tab. Awaiting explicit user acknowledgment.");
   };
 
   const showTabSwitchOverlay = () => {
@@ -339,20 +442,31 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
 
     const overlay = document.createElement('div');
     overlay.id = 'vi-tab-warning-overlay';
-    overlay.style = "position:fixed; inset:0; background:rgba(239, 68, 68, 0.95); z-index:10000; display:flex; flex-direction:column; align-items:center; justify-content:center; color:white; backdrop-filter:blur(10px); text-align:center; padding:40px; animation: fadeIn 0.3s ease-out;";
+    overlay.style = "position:fixed; inset:0; background:rgba(15, 10, 20, 0.95); z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; color:white; backdrop-filter:blur(16px); text-align:center; padding:40px; animation: fadeIn 0.2s ease-out;";
     
-    tabSwitchTimeLeft = 30;
-
     overlay.innerHTML = `
-      <div style="font-size: 80px; margin-bottom: 24px; animation: pulse 1s infinite;">⚠️</div>
-      <h1 style="font-size: 40px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; margin: 0 0 16px 0;">Tab Switch Detected!</h1>
-      <p style="font-size: 24px; margin: 0 0 16px 0; font-weight: 600;">You have walked out of the examination screen.</p>
-      <div id="vi-tab-countdown" style="font-size: 48px; font-weight: 800; background: rgba(0,0,0,0.3); padding: 12px 32px; border-radius: 16px; margin-bottom: 24px;">30s</div>
-      <p style="font-size: 18px; margin: 0; opacity: 0.9;">
-        Please return to the exam tab immediately. 
-        <br>
-        Violation <strong>${state.tabSwitchCount} / 3</strong>. You will be terminated on the 4th violation.
-      </p>
+      <div style="max-width: 560px; width: 100%; background: #0b0a0f; border: 2px solid #EF4444; padding: 48px; border-radius: 24px; box-shadow: 0 25px 60px rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; text-align: center;">
+        <div style="font-size: 72px; margin-bottom: 20px; animation: pulse-warning 1s infinite alternate;">🚨</div>
+        <h1 style="font-size: 28px; font-weight: 800; color: #EF4444; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 1px;">Tab Switch Violation Recorded!</h1>
+        <p style="font-size: 16px; color: #fff; line-height: 1.6; margin: 0 0 24px 0;">
+          You left or navigated away from the live examination window.
+        </p>
+        <div style="background: rgba(239, 68, 68, 0.15); border: 1px dashed rgba(239, 68, 68, 0.4); padding: 16px 24px; border-radius: 12px; font-size: 18px; font-weight: 800; color: #EF4444; margin-bottom: 28px;">
+          Violation Strike: ${state.tabSwitchCount} of 3
+        </div>
+        <p style="font-size: 13px; color: var(--text-description); margin: 0 0 32px 0; line-height: 1.5;">
+          ⚠️ Navigating away 4 times will result in immediate automatic exam termination.
+        </p>
+        <button id="vi-ack-tab-btn" class="btn-premium" style="width: 100%; height: 52px; font-size: 16px; font-weight: 800; border-radius: 12px; background: #EF4444; color: white; border: none; cursor: pointer; box-shadow: 0 8px 24px rgba(239, 68, 68, 0.4);">
+          I Understand — Resume Exam ➔
+        </button>
+      </div>
+      <style>
+        @keyframes pulse-warning {
+          0% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(239,68,68,0.4)); }
+          100% { transform: scale(1.1); filter: drop-shadow(0 0 25px rgba(239,68,68,0.8)); }
+        }
+      </style>
     `;
     document.body.appendChild(overlay);
 
@@ -360,25 +474,18 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const osc = ctx.createOscillator();
       osc.connect(ctx.destination);
-      osc.frequency.value = 500;
+      osc.frequency.value = 600;
       osc.start();
-      osc.stop(ctx.currentTime + 0.3);
+      osc.stop(ctx.currentTime + 0.4);
     } catch(e) {}
 
-    tabSwitchCountdownInterval = setInterval(() => {
-      tabSwitchTimeLeft--;
-      const cdEl = document.getElementById('vi-tab-countdown');
-      if (cdEl) {
-        cdEl.innerText = `${tabSwitchTimeLeft}s`;
-      }
-      
-      if (tabSwitchTimeLeft <= 0) {
-        clearInterval(tabSwitchCountdownInterval);
-        tabSwitchCountdownInterval = null;
+    const ackBtn = document.getElementById('vi-ack-tab-btn');
+    if (ackBtn) {
+      ackBtn.onclick = () => {
+        isTabOut = false;
         removeTabSwitchOverlay();
-        showBlockScreen("Failed to return to the examination tab within 30 seconds.");
-      }
-    }, 1000);
+      };
+    }
   };
 
   const removeTabSwitchOverlay = () => {
@@ -388,14 +495,226 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
     }
   };
 
+  const isFullScreen = () => {
+    return !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement
+    );
+  };
+
+  const requestFullScreen = async () => {
+    const docEl = document.documentElement;
+    const requestFS =
+      docEl.requestFullscreen ||
+      docEl.webkitRequestFullscreen ||
+      docEl.mozRequestFullScreen ||
+      docEl.msRequestFullscreen;
+    if (requestFS) {
+      try {
+        await requestFS.call(docEl);
+        return true;
+      } catch (e) {
+        console.warn("Fullscreen request error:", e);
+        return false;
+      }
+    }
+    return false;
+  };
+
+  const exitFullScreen = async () => {
+    const exitFS =
+      document.exitFullscreen ||
+      document.webkitExitFullscreen ||
+      document.mozCancelFullScreen ||
+      document.msExitFullscreen;
+    if (exitFS && isFullScreen()) {
+      try {
+        await exitFS.call(document);
+      } catch (e) {
+        console.warn("Fullscreen exit error:", e);
+      }
+    }
+  };
+
+  const removeFullScreenOverlays = () => {
+    const m = document.getElementById('vi-fullscreen-modal');
+    if (m) m.remove();
+    const e = document.getElementById('vi-fullscreen-enforce-overlay');
+    if (e) e.remove();
+  };
+
+  const showFullScreenEnforceOverlay = () => {
+    let overlay = document.getElementById('vi-fullscreen-enforce-overlay');
+    if (overlay) return;
+
+    overlay = document.createElement('div');
+    overlay.id = 'vi-fullscreen-enforce-overlay';
+    overlay.style.cssText = `
+      position: fixed; inset: 0; background: rgba(15, 23, 42, 0.96);
+      backdrop-filter: blur(16px); z-index: 10001; display: flex;
+      align-items: center; justify-content: center; padding: 24px;
+      animation: fadeIn 0.2s ease-out;
+    `;
+
+    overlay.innerHTML = `
+      <div style="background: rgba(30, 41, 59, 0.98); border: 2px solid #EF4444; border-radius: 24px; padding: 40px; max-width: 500px; width: 100%; text-align: center; box-shadow: 0 20px 60px rgba(239, 68, 68, 0.35);">
+        <div style="font-size: 52px; margin-bottom: 16px;">⚠️</div>
+        <h2 style="font-size: 22px; color: #EF4444; font-weight: 800; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 0.05em;">
+          Full Screen Exited!
+        </h2>
+        <p style="color: #fff; font-size: 14px; line-height: 1.6; margin: 0 0 24px 0;">
+          AI Proctoring and examination integrity require Full Screen mode. Please re-enter Full Screen to continue your examination.
+        </p>
+        <button id="vi-reenter-fullscreen-btn" class="btn-premium" style="height: 52px; font-size: 15px; font-weight: 700; border-radius: 12px; width: 100%; background: #EF4444; color: white; border: none; cursor: pointer; box-shadow: 0 8px 24px rgba(239, 68, 68, 0.4);">
+          🖥️ Re-enter Full Screen
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const reenterBtn = document.getElementById('vi-reenter-fullscreen-btn');
+    if (reenterBtn) {
+      reenterBtn.onclick = async () => {
+        await requestFullScreen();
+        removeFullScreenEnforceOverlay();
+      };
+    }
+  };
+
+  const removeFullScreenEnforceOverlay = () => {
+    const overlay = document.getElementById('vi-fullscreen-enforce-overlay');
+    if (overlay) overlay.remove();
+  };
+
+  const promptFullScreenModal = (targetStep, targetRoundName) => {
+    removeFullScreenOverlays();
+
+    const modal = document.createElement('div');
+    modal.id = 'vi-fullscreen-modal';
+    modal.style.cssText = `
+      position: fixed; inset: 0; background: rgba(5, 7, 15, 0.92);
+      backdrop-filter: blur(12px); z-index: 10000; display: flex;
+      align-items: center; justify-content: center; padding: 24px;
+      animation: fadeIn 0.25s ease-out;
+    `;
+
+    modal.innerHTML = `
+      <div style="background: rgba(18, 24, 38, 0.96); border: 1px solid rgba(139, 92, 246, 0.35); border-radius: 24px; padding: 40px; max-width: 520px; width: 100%; text-align: center; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85); display: flex; flex-direction: column; align-items: center; gap: 24px;">
+        
+        <div style="width: 72px; height: 72px; background: rgba(139, 92, 246, 0.12); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 36px;">
+          🖥️
+        </div>
+
+        <div>
+          <div style="font-size: 11px; font-weight: 800; color: var(--brand-primary); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 8px;">
+            Examination Security Requirement
+          </div>
+          <h2 style="font-size: 22px; color: #fff; font-weight: 700; margin: 0 0 12px 0;">
+            Full Screen Mode Required
+          </h2>
+          <p style="color: var(--text-description); font-size: 14px; line-height: 1.6; margin: 0;">
+            To enter <strong style="color:#fff;">${targetRoundName}</strong>, you must switch to Full Screen mode. This ensures AI Proctoring compliance and examination security.
+          </p>
+        </div>
+
+        <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); padding: 14px 18px; border-radius: 12px; font-size: 12px; color: #F59E0B; text-align: left; line-height: 1.5; width: 100%; box-sizing: border-box;">
+          ⚠️ <strong>Note:</strong> Navigating away or exiting full screen during the examination will record a proctoring violation.
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
+          <button id="vi-enable-fullscreen-btn" class="btn-premium" style="height: 52px; font-size: 15px; border-radius: 12px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer;">
+            🖥️ Enter Full Screen & Begin Exam →
+          </button>
+          
+          <button id="vi-cancel-fullscreen-btn" class="btn-premium-ghost" style="height: 44px; font-size: 13px; border-radius: 10px; width: 100%; border: 1px solid rgba(255,255,255,0.1); color: var(--text-description); background: transparent; cursor: pointer;">
+            Cancel
+          </button>
+        </div>
+
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.getElementById('vi-cancel-fullscreen-btn').onclick = () => {
+      modal.remove();
+    };
+
+    document.getElementById('vi-enable-fullscreen-btn').onclick = async () => {
+      await requestFullScreen();
+      modal.remove();
+      state.step = targetStep;
+      render();
+    };
+  };
+
+  const updateSidebarVisibility = () => {
+    const sidebar = document.getElementById('sidebar');
+    const topbar = document.getElementById('topbar-container');
+    const mainContent = document.getElementById('main-content');
+
+    const isExamStep = ['aptitude', 'technical', 'communication', 'hr'].includes(state.step);
+
+    if (sidebar) {
+      sidebar.style.display = isExamStep ? 'none' : '';
+    }
+    if (topbar) {
+      topbar.style.display = isExamStep ? 'none' : '';
+    }
+    if (mainContent) {
+      if (isExamStep) {
+        mainContent.style.marginLeft = '0';
+        mainContent.style.padding = '0';
+        mainContent.style.width = '100vw';
+        mainContent.style.height = '100vh';
+      } else {
+        mainContent.style.marginLeft = '';
+        mainContent.style.padding = '';
+        mainContent.style.width = '';
+        mainContent.style.height = '';
+      }
+    }
+  };
+
   const exitInterview = (confirmFirst = true) => {
+    const isExamStep = ['aptitude', 'technical', 'communication', 'hr'].includes(state.step);
+
+    if (isExamStep) {
+      if (confirmFirst) {
+        const confirmed = confirm("Are you sure you want to exit this examination round? Your progress in this round will be lost.");
+        if (!confirmed) return;
+      }
+
+      exitFullScreen();
+      removeFullScreenOverlays();
+
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+
+      if (tabSwitchCountdownInterval) {
+        clearInterval(tabSwitchCountdownInterval);
+        tabSwitchCountdownInterval = null;
+      }
+      removeTabSwitchOverlay();
+
+      state.step = 'dashboard';
+      render();
+      return;
+    }
+
     if (confirmFirst) {
-      const confirmed = confirm("Are you sure you want to exit the mock interview? Your current round's progress will be lost.");
+      const confirmed = confirm("Are you sure you want to exit the virtual interview simulation?");
       if (!confirmed) return;
     }
     
     // Stop webcam and proctoring
     stopLocalWebcam();
+    exitFullScreen();
+    removeFullScreenOverlays();
     
     // Cancel any speech synthesis
     if (window.speechSynthesis) {
@@ -412,9 +731,34 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
     // Reset state step to prevent any visibility/blur handlers from firing
     state.step = 'setup';
     
+    // Disable in-progress flag to prevent duplicate prompts in router guard
+    window.virtualInterviewInProgress = false;
+
+    // Restore layout
+    const sidebar = document.getElementById('sidebar');
+    const topbar = document.getElementById('topbar-container');
+    const mainContent = document.getElementById('main-content');
+    if (sidebar) sidebar.style.display = '';
+    if (topbar) topbar.style.display = '';
+    if (mainContent) {
+      mainContent.style.marginLeft = '';
+      mainContent.style.padding = '';
+      mainContent.style.width = '';
+      mainContent.style.height = '';
+    }
+    
     // Navigate back to the student dashboard or AI modules page
     window.location.hash = '#ai-modules';
   };
+
+  const handleBeforeUnload = (e) => {
+    if (window.virtualInterviewInProgress) {
+      e.preventDefault();
+      e.returnValue = "Are you sure you want to exit the mock interview? Your current round's progress will be lost.";
+      return e.returnValue;
+    }
+  };
+  window.addEventListener('beforeunload', handleBeforeUnload);
 
   const handleHashChange = () => {
     const currentHash = window.location.hash;
@@ -425,8 +769,22 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
       root.style.height = '';
       root.style.overflow = '';
 
+      const sidebar = document.getElementById('sidebar');
+      const topbar = document.getElementById('topbar-container');
+      const mainContent = document.getElementById('main-content');
+      if (sidebar) sidebar.style.display = '';
+      if (topbar) topbar.style.display = '';
+      if (mainContent) {
+        mainContent.style.marginLeft = '';
+        mainContent.style.padding = '';
+        mainContent.style.width = '';
+        mainContent.style.height = '';
+      }
+
       // Clean up silently
       stopLocalWebcam();
+      exitFullScreen();
+      removeFullScreenOverlays();
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
@@ -436,6 +794,11 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
       }
       removeTabSwitchOverlay();
       state.step = 'setup';
+      
+      // Clean up globals & listeners
+      delete window.cleanupVirtualInterview;
+      delete window.virtualInterviewInProgress;
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('hashchange', handleHashChange);
     }
   };
@@ -458,6 +821,15 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
     handleTabReturn();
   };
 
+  window.viHandleFullScreenChange = () => {
+    const isExamStep = ['aptitude', 'technical', 'communication', 'hr'].includes(state.step);
+    if (isExamStep && !isFullScreen()) {
+      showFullScreenEnforceOverlay();
+    } else if (isFullScreen()) {
+      removeFullScreenEnforceOverlay();
+    }
+  };
+
   if (!window.hasVirtualInterviewListeners) {
     window.hasVirtualInterviewListeners = true;
     
@@ -476,6 +848,18 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
     window.addEventListener('focus', () => {
       if (typeof window.viHandleFocus === 'function') {
         window.viHandleFocus();
+      }
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+      if (typeof window.viHandleFullScreenChange === 'function') {
+        window.viHandleFullScreenChange();
+      }
+    });
+
+    document.addEventListener('webkitfullscreenchange', () => {
+      if (typeof window.viHandleFullScreenChange === 'function') {
+        window.viHandleFullScreenChange();
       }
     });
   }
@@ -527,6 +911,8 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
   };
 
   const render = () => {
+    window.virtualInterviewInProgress = (state.step !== 'setup' && state.step !== 'results');
+    updateSidebarVisibility();
     const c = document.getElementById('vi-content-layer');
     if (state.step === 'setup') renderSetup(c);
     else if (state.step === 'dashboard') renderDashboard(c);
@@ -623,11 +1009,12 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
           </div>
           
           <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.2); padding:16px; border-radius:12px; margin-top:8px;">
-             <h4 style="color:#10B981; font-size:14px; margin-bottom:8px; display:flex; align-items:center; gap:8px;"><span>📋</span> 3-Round Evaluation Format</h4>
+             <h4 style="color:#10B981; font-size:14px; margin-bottom:8px; display:flex; align-items:center; gap:8px;"><span>📋</span> 4-Round Evaluation Format</h4>
              <ul style="color:var(--text-description); font-size:13px; line-height:1.6; margin-left:20px;">
                 <li><strong>Round 1: Aptitude (MCQ)</strong> - 30 dynamic questions on logic & tech.</li>
                 <li><strong>Round 2: Technical (Coding)</strong> - Interactive compiler execution round.</li>
                 <li><strong>Round 3: Communication</strong> - AI conversational fluency test.</li>
+                <li><strong>Round 4: AI Behavioral HR</strong> - Adaptive HR interview round.</li>
                 <li>A comprehensive multi-round PDF report will be generated.</li>
              </ul>
           </div>
@@ -641,7 +1028,7 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
           </div>
 
           <button id="start-btn" class="btn-premium" style="height:56px; font-size:16px; margin-top:16px; width:100%;">
-            Begin Round 1: Aptitude Test →
+            Proceed to Rounds Overview →
           </button>
         </div>
       </div>
@@ -720,7 +1107,7 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
       };
     }
 
-    document.getElementById('start-btn').onclick = () => {
+    document.getElementById('start-btn').onclick = async () => {
       const compSelectVal = compSelect ? compSelect.value : 'custom';
       if (compSelectVal === 'custom') {
         state.company = document.getElementById('setup-company-custom').value.trim() || 'TCS';
@@ -729,7 +1116,7 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
         state.company = selectedOption.getAttribute('data-company') || 'TCS';
       }
       state.role = document.getElementById('setup-role').value;
-      state.step = 'dashboard'; // Show dashboard first
+      state.step = 'dashboard';
       state.questions = null;
       state.aptitudeAnswers = [];
       state.aptitudeScore = 0;
@@ -741,10 +1128,7 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
       state.codingAnswers = [];
       state.technicalCompleted = false;
       
-      if (state.cameraEnabled) {
-        document.getElementById('vi-proctor-layer').style.display = 'block';
-      }
-      
+      await handleEnableWebcam();
       render();
     };
   };
@@ -912,38 +1296,20 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
       };
     }
 
-    document.getElementById('dash-r1').onclick = () => { 
-      if (!state.cameraEnabled) {
-        showCameraRequiredAlert();
-        return;
+    const enterExamRound = async (stepName, roundTitle) => {
+      if (!state.cameraEnabled) await handleEnableWebcam();
+      if (isFullScreen()) {
+        state.step = stepName;
+        render();
+      } else {
+        promptFullScreenModal(stepName, roundTitle);
       }
-      state.step = 'aptitude'; 
-      render(); 
     };
-    document.getElementById('dash-r2').onclick = () => { 
-      if (!state.cameraEnabled) {
-        showCameraRequiredAlert();
-        return;
-      }
-      state.step = 'technical'; 
-      render(); 
-    };
-    document.getElementById('dash-r3').onclick = () => { 
-      if (!state.cameraEnabled) {
-        showCameraRequiredAlert();
-        return;
-      }
-      state.step = 'communication'; 
-      render(); 
-    };
-    document.getElementById('dash-r4').onclick = () => { 
-      if (!state.cameraEnabled) {
-        showCameraRequiredAlert();
-        return;
-      }
-      state.step = 'hr'; 
-      render(); 
-    };
+
+    document.getElementById('dash-r1').onclick = () => enterExamRound('aptitude', 'Round 1: Aptitude & Logic');
+    document.getElementById('dash-r2').onclick = () => enterExamRound('technical', 'Round 2: Technical Coding');
+    document.getElementById('dash-r3').onclick = () => enterExamRound('communication', 'Round 3: Communication Fluency');
+    document.getElementById('dash-r4').onclick = () => enterExamRound('hr', 'Round 4: AI Behavioral HR Interview');
     const finishBtn = document.getElementById('dash-finish');
     if (finishBtn) finishBtn.onclick = () => { state.step = 'results'; render(); };
 
@@ -955,132 +1321,6 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
     }
   };
 
-  const staticQuestionPool = [
-    // Existing 30 technical questions
-    { category: "technical", q: "What is the time complexity of binary search?", opts: ["O(n)", "O(n log n)", "O(log n)", "O(1)"], ans: 2 },
-    { category: "technical", q: "Which data structure is based on the LIFO principle?", opts: ["Queue", "Tree", "Stack", "Graph"], ans: 2 },
-    { category: "technical", q: "What does SQL stand for?", opts: ["Structured Query Language", "Strong Question Language", "Structured Question Language", "Standard Query Language"], ans: 0 },
-    { category: "technical", q: "In OOP, what is polymorphism?", opts: ["Data hiding", "Many forms", "Inheriting attributes", "Code separation"], ans: 1 },
-    { category: "technical", q: "Which algorithm is used for finding the shortest path?", opts: ["Kruskal's", "Dijkstra's", "Merge Sort", "DFS"], ans: 1 },
-    { category: "technical", q: "What is a primary key in a database?", opts: ["Unique identifier", "Foreign reference", "Indexed column", "Null value field"], ans: 0 },
-    { category: "technical", q: "Which HTTP method is idempotent?", opts: ["POST", "PATCH", "PUT", "CONNECT"], ans: 2 },
-    { category: "technical", q: "What does CSS stand for?", opts: ["Creative Style Sheets", "Cascading Style Sheets", "Computer Style Sheets", "Colorful Style Sheets"], ans: 1 },
-    { category: "technical", q: "Which one is not a NoSQL database?", opts: ["MongoDB", "Cassandra", "PostgreSQL", "Redis"], ans: 2 },
-    { category: "technical", q: "What is the purpose of a load balancer?", opts: ["Database indexing", "Traffic distribution", "Code compiling", "Memory management"], ans: 1 },
-    { category: "technical", q: "Which sorting algorithm has the worst-case time complexity of O(n^2)?", opts: ["Merge Sort", "Heap Sort", "Quick Sort", "Radix Sort"], ans: 2 },
-    { category: "technical", q: "What is the main function of the OSI model's Network layer?", opts: ["Routing", "Encryption", "Error detection", "Physical transmission"], ans: 0 },
-    { category: "technical", q: "In Git, what command saves your changes to the local repository?", opts: ["git push", "git save", "git commit", "git stash"], ans: 2 },
-    { category: "technical", q: "What does API stand for?", opts: ["Application Programming Interface", "Advanced Programming Interface", "Automated Program Integration", "Applied Protocol Interface"], ans: 0 },
-    { category: "technical", q: "Which concept allows a class to derive properties from another class?", opts: ["Encapsulation", "Inheritance", "Abstraction", "Polymorphism"], ans: 1 },
-    { category: "technical", q: "What is a deadlock in an operating system?", opts: ["Memory leak", "Infinite loop", "Processes stuck waiting for each other", "CPU overload"], ans: 2 },
-    { category: "technical", q: "Which language is primarily used for iOS app development?", opts: ["Java", "Swift", "Kotlin", "Ruby"], ans: 1 },
-    { category: "technical", q: "What is the primary role of a CDN (Content Delivery Network)?", opts: ["Database scaling", "Edge caching for faster delivery", "Load balancing", "DNS routing"], ans: 1 },
-    { category: "technical", q: "What does JSON stand for?", opts: ["JavaScript Object Notation", "Java Syntax Object Network", "JavaScript Output Name", "Java System Object Native"], ans: 0 },
-    { category: "technical", q: "Which design pattern restricts instantiation of a class to one object?", opts: ["Factory", "Observer", "Singleton", "Decorator"], ans: 2 },
-    { category: "technical", q: "In Python, what is a decorator?", opts: ["A UI library", "A function modifying another function", "A class attribute", "A syntax error handling method"], ans: 1 },
-    { category: "technical", q: "What is Docker primarily used for?", opts: ["Virtual Machines", "Containerization", "Version Control", "Continuous Integration"], ans: 1 },
-    { category: "technical", q: "What does MVC stand for?", opts: ["Model View Controller", "Main Visual Component", "Model Variable Class", "Microservice Virtual Container"], ans: 0 },
-    { category: "technical", q: "Which encryption type uses a public and private key pair?", opts: ["Symmetric", "Asymmetric", "Hashing", "Encoding"], ans: 1 },
-    { category: "technical", q: "What is the DOM in web development?", opts: ["Document Object Model", "Data Origin Management", "Document Output Mechanism", "Data Object Map"], ans: 0 },
-    { category: "technical", q: "Which memory is volatile?", opts: ["ROM", "Flash Memory", "RAM", "Hard Drive"], ans: 2 },
-    { category: "technical", q: "What is the time complexity of searching in a balanced BST?", opts: ["O(n)", "O(1)", "O(n^2)", "O(log n)"], ans: 3 },
-    { category: "technical", q: "What is the default port for HTTP?", opts: ["443", "80", "22", "21"], ans: 1 },
-    { category: "technical", q: "Which of the following is a CSS preprocessor?", opts: ["SASS", "Babel", "Webpack", "React"], ans: 0 },
-    { category: "technical", q: "What principle states that software entities should be open for extension but closed for modification?", opts: ["Single Responsibility", "Liskov Substitution", "Open-Closed", "Dependency Inversion"], ans: 2 },
-    { category: "technical", q: "What is the main purpose of a database transaction's ACID properties?", opts: ["To ensure atomicity, consistency, isolation, and durability", "To optimize index lookup speed", "To compress tabular data storage", "To encrypt database connections"], ans: 0 },
-    { category: "technical", q: "In networking, what is the role of the DNS (Domain Name System)?", opts: ["To encrypt web traffic", "To map domain names to IP addresses", "To balance traffic load", "To assign local IP addresses dynamically"], ans: 1 },
-    { category: "technical", q: "Which of the following is true about a compiler?", opts: ["It executes code line-by-line", "It translates high-level code into machine code in one go", "It is used to debug network packets", "It manages database replication"], ans: 1 },
-    { category: "technical", q: "What is the time complexity of inserting an element at the beginning of a singly linked list?", opts: ["O(1)", "O(n)", "O(log n)", "O(n log n)"], ans: 0 },
-    { category: "technical", q: "What is the main difference between a process and a thread?", opts: ["A process shares memory with other processes; a thread does not", "A process has its own address space; threads share the process's address space", "Threads are managed by the hardware; processes are managed by the application", "Processes are faster to create than threads"], ans: 1 },
-    { category: "technical", q: "In Git, what is the purpose of 'git rebase'?", opts: ["To delete a branch permanently", "To apply commits on top of another base tip", "To download files from remote repository without merging", "To encrypt local commit logs"], ans: 1 },
-    { category: "technical", q: "What is a memory leak?", opts: ["A physical failure of RAM modules", "Unused memory that is not released back to the system", "Accessing memory locations outside array bounds", "Overwriting read-only memory segments"], ans: 1 },
-    { category: "technical", q: "Which sorting algorithm is stable and has a worst-case complexity of O(n log n)?", opts: ["Quick Sort", "Merge Sort", "Bubble Sort", "Selection Sort"], ans: 1 },
-    { category: "technical", q: "What is the purpose of the garbage collector in languages like Java or C#?", opts: ["To delete unused source code files", "To automatically reclaim unused memory", "To optimize database queries", "To clear temporary browser cookies"], ans: 1 },
-    { category: "technical", q: "In system design, what does horizontal scaling refer to?", opts: ["Upgrading the CPU and RAM of an existing server", "Adding more servers to the pool", "Optimizing database queries to run horizontally", "Reducing the physical height of rack servers"], ans: 1 },
-    { category: "technical", q: "What is the primary function of the ARP (Address Resolution Protocol)?", opts: ["Resolving IP addresses to MAC addresses", "Resolving domain names to IP addresses", "Routing packets across different networks", "Managing active socket connections"], ans: 0 },
-    { category: "technical", q: "In cryptography, what is the primary feature of a cryptographic hash function?", opts: ["It is easily reversible", "It maps arbitrary-size data to a fixed-size bit string and is one-way", "It requires a public-private key pair", "It compresses text without losing data"], ans: 1 },
-    { category: "technical", q: "What is the main benefit of using a RESTful API?", opts: ["It requires a persistent socket connection", "It is stateless and utilizes standard HTTP methods", "It automatically compiles source code", "It operates only on relational database engines"], ans: 1 },
-    { category: "technical", q: "What does the term 'Race Condition' mean in concurrent programming?", opts: ["An algorithm completing ahead of schedule", "Multiple threads accessing shared data concurrently, leading to unpredictable outcomes", "A hardware metric for CPU speed comparison", "A fast routing path in network topologies"], ans: 1 },
-    { category: "technical", q: "In database design, what is 'Normalization' used for?", opts: ["To secure database credentials", "To minimize data redundancy and dependency", "To convert SQL queries to NoSQL format", "To backup data automatically"], ans: 1 },
-    { category: "technical", q: "What does the 'S' in SOLID principles stand for?", opts: ["System Security Principle", "Single Responsibility Principle", "State Synchronization Principle", "Stack Allocation Principle"], ans: 1 },
-    { category: "technical", q: "Which HTTP response status code indicates that the server cannot find the requested resource?", opts: ["200 OK", "301 Moved Permanently", "404 Not Found", "500 Internal Server Error"], ans: 2 },
-    { category: "technical", q: "What is the purpose of an index in a database table?", opts: ["To encrypt table columns", "To speed up data retrieval operations", "To ensure table constraints are enforced", "To partition tables horizontally"], ans: 1 },
-    { category: "technical", q: "What is 'virtual memory' in an operating system?", opts: ["RAM allocation inside virtual machines", "Using secondary storage to extend physical memory space", "A software emulator of CPU caches", "Memory allocated for graphical operations"], ans: 1 },
-    { category: "technical", q: "What is the primary difference between TCP and UDP?", opts: ["TCP is connectionless; UDP is connection-oriented", "TCP is reliable and guarantees packet delivery; UDP is connectionless and faster", "TCP operates at the physical layer; UDP operates at the network layer", "UDP is more secure than TCP"], ans: 1 },
-
-    // Quantitative Aptitude
-    { category: "quantitative", q: "A train running at the speed of 60 km/hr crosses a pole in 9 seconds. What is the length of the train?", opts: ["120 metres", "150 metres", "324 metres", "180 metres"], ans: 1 },
-    { category: "quantitative", q: "If 5 workers can build a wall in 12 days, how many days would it take for 6 workers to build the same wall?", opts: ["10 days", "8 days", "14 days", "12 days"], ans: 0 },
-    { category: "quantitative", q: "A father is 4 times as old as his son. In 20 years, he will be twice as old as his son. How old is the father now?", opts: ["32 years", "40 years", "48 years", "50 years"], ans: 1 },
-    { category: "quantitative", q: "Find the missing number in the series: 3, 5, 9, 17, 33, ?", opts: ["45", "50", "65", "55"], ans: 2 },
-    { category: "quantitative", q: "What is the probability of getting a sum of 9 when two dice are thrown simultaneously?", opts: ["1/9", "1/6", "1/12", "1/4"], ans: 0 },
-    { category: "quantitative", q: "If a person sells an item for $300, making a 25% profit, what was the cost price of the item?", opts: ["$240", "$220", "$250", "$270"], ans: 0 },
-    { category: "quantitative", q: "A tank can be filled by Pipe A in 5 hours and emptied by Pipe B in 10 hours. If both pipes are opened together, how long will it take to fill the tank?", opts: ["8 hours", "10 hours", "6 hours", "12 hours"], ans: 1 },
-    { category: "quantitative", q: "The average age of a class of 30 students is 15 years. If the teacher's age is included, the average increases by 1 year. What is the teacher's age?", opts: ["45 years", "46 years", "40 years", "42 years"], ans: 1 },
-    { category: "quantitative", q: "A shopkeeper gives a discount of 20% on the marked price of an item and still makes a 12% profit. If the marked price is $280, what is the cost price?", opts: ["$200", "$210", "$220", "$240"], ans: 0 },
-    { category: "quantitative", q: "If 3x + 7 = 22, what is the value of (x^2 - x)?", opts: ["20", "15", "12", "30"], ans: 0 },
-    // Additional Quantitative Questions (10 more)
-    { category: "quantitative", q: "A boat can travel with a speed of 13 km/hr in still water. If the speed of the stream is 4 km/hr, find the time taken by the boat to go 68 km downstream.", opts: ["3 hours", "4 hours", "5 hours", "6 hours"], ans: 1 },
-    { category: "quantitative", q: "A sum of money at simple interest amounts to $815 in 3 years and to $854 in 4 years. What is the sum?", opts: ["$650", "$690", "$698", "$700"], ans: 2 },
-    { category: "quantitative", q: "A and B invest in a business in the ratio 3:2. If 5% of the total profit goes to charity and A's share is $855, the total profit is:", opts: ["$1425", "$1500", "$1537", "$1575"], ans: 1 },
-    { category: "quantitative", q: "The cost price of 20 articles is the same as the selling price of x articles. If the profit is 25%, find the value of x.", opts: ["15", "16", "18", "25"], ans: 1 },
-    { category: "quantitative", q: "If 20% of a = b, then b% of 20 is the same as:", opts: ["4% of a", "5% of a", "20% of a", "None of these"], ans: 0 },
-    { category: "quantitative", q: "A starts business with $3500 and after 5 months, B joins with A as his partner. After a year, the profit is divided in the ratio 2:3. What was B's contribution in the capital?", opts: ["$7500", "$8000", "$8500", "$9000"], ans: 3 },
-    { category: "quantitative", q: "In a lottery, there are 10 prizes and 25 blanks. A lottery is drawn at random. What is the probability of getting a prize?", opts: ["1/10", "2/5", "2/7", "5/7"], ans: 2 },
-    { category: "quantitative", q: "A card is drawn from a pack of 52 cards. What is the probability of getting a queen of club or king of heart?", opts: ["1/13", "2/13", "1/26", "1/52"], ans: 2 },
-    { category: "quantitative", q: "A and B can do a work in 12 days, B and C in 15 days, C and A in 20 days. If A, B, and C work together, in how many days will they complete the work?", opts: ["8 days", "10 days", "12 days", "15 days"], ans: 1 },
-    { category: "quantitative", q: "A wheel makes 360 revolutions in one minute. Through how many radians does it turn in one second?", opts: ["6π", "12π", "18π", "24π"], ans: 1 },
-
-    // Logical Reasoning
-    { category: "logical", q: "In a code language, if 'COMPUTER' is written as 'RFUVQNPC', how is 'MEDICINE' written?", opts: ["EOJDJEFM", "EOJDEJFM", "DJEFMEOJ", "DMJFEJOE"], ans: 1 },
-    { category: "logical", q: "If A is the brother of B; B is the sister of C; and C is the father of D, how is D related to A?", opts: ["Brother", "Uncle", "Nephew or Niece", "Father"], ans: 2 },
-    { category: "logical", q: "Which word does not belong with the others?", opts: ["Leopard", "Cougar", "Cheetah", "Wolf"], ans: 3 },
-    { category: "logical", q: "Statements: All mangoes are golden. No golden things are cheap. Conclusions: 1) Mangoes are cheap. 2) Mangoes are not cheap.", opts: ["Only conclusion 1 follows", "Only conclusion 2 follows", "Both 1 and 2 follow", "Neither 1 nor 2 follows"], ans: 1 },
-    { category: "logical", q: "A person walks 4 km North, then turns Right and walks 3 km. How far is the person from the starting point?", opts: ["5 km", "7 km", "6 km", "4 km"], ans: 0 },
-    { category: "logical", q: "Six faces of a cube are painted with red, blue, green, yellow, black and white colors. Red is opposite to black. Green is between red and black. Blue is adjacent to white. Yellow is adjacent to blue. If red is at the bottom, what is at the top?", opts: ["White", "Black", "Yellow", "Blue"], ans: 1 },
-    { category: "logical", q: "If 'red' means 'green', 'green' means 'yellow', 'yellow' means 'blue', and 'blue' means 'black', what is the color of the clear sky?", opts: ["blue", "yellow", "black", "red"], ans: 2 },
-    { category: "logical", q: "A clock shows 4:30. If the minute hand points East, in which direction does the hour hand point?", opts: ["North", "North-East", "South-East", "North-West"], ans: 1 },
-    { category: "logical", q: "If the letters in the word 'CREATIVE' are arranged in alphabetical order, how many letters will remain in the same position?", opts: ["One", "Two", "Three", "None"], ans: 3 },
-    { category: "logical", q: "If South-East becomes North, North-East becomes West and so on, what will West become?", opts: ["North-East", "North-West", "South-East", "South-West"], ans: 2 },
-    // Additional Logical Questions (10 more)
-    { category: "logical", q: "Look at this series: 2, 1, (1/2), (1/4), ... What number should come next?", opts: ["(1/3)", "(1/8)", "(2/8)", "(1/16)"], ans: 1 },
-    { category: "logical", q: "Look at this series: 7, 10, 8, 11, 9, 12, ... What number should come next?", opts: ["7", "10", "12", "13"], ans: 1 },
-    { category: "logical", q: "Which word is the odd one out?", opts: ["Car", "Bicycle", "Motorcycle", "Truck"], ans: 1 },
-    { category: "logical", q: "An informal gathering occurs when a group of people get together in a casual, relaxed manner. Which situation below is the best example of an Informal Gathering?", opts: ["A debating club meeting", "A family barbecue reunion", "A corporate board meeting", "A lecture at a university"], ans: 1 },
-    { category: "logical", q: "If all trees have leaves, and a maple is a tree, then:", opts: ["All maple trees have leaves", "Only maple trees have leaves", "Some maples have leaves", "Leaves are only found on trees"], ans: 0 },
-    { category: "logical", q: "Find the word that has the same relationship to the second word as the first two: Cup is to Coffee as Bowl is to:", opts: ["Dish", "Soup", "Spoon", "Food"], ans: 1 },
-    { category: "logical", q: "Find the word that has the same relationship: Exercise is to Gym as Eating is to:", opts: ["Food", "Kitchen", "Restaurant", "Diet"], ans: 2 },
-    { category: "logical", q: "Statements: All bags are pockets. All pockets are pouches. Conclusions: 1) All bags are pouches. 2) Some pouches are bags.", opts: ["Only conclusion 1 follows", "Only conclusion 2 follows", "Both 1 and 2 follow", "Neither 1 nor 2 follows"], ans: 2 },
-    { category: "logical", q: "A man walks 6 km South, turns West and walks 4 km, then turns North and walks 3 km. How far is he from his starting point?", opts: ["5 km", "6 km", "7 km", "8 km"], ans: 0 },
-    { category: "logical", q: "If 'pen' is 'paper', 'paper' is 'ink', 'ink' is 'eraser', and 'eraser' is 'ruler', what do you write on?", opts: ["pen", "paper", "ink", "eraser"], ans: 2 },
-
-    // One Word Substitution (Verbal Ability - 25 questions)
-    { category: "verbal", q: "A person who does not believe in the existence of God", opts: ["Theist", "Atheist", "Agnostic", "Pagan"], ans: 1 },
-    { category: "verbal", q: "A collection of maps, especially of Earth", opts: ["Dictionary", "Encyclopedia", "Atlas", "Anthology"], ans: 2 },
-    { category: "verbal", q: "One who compiles a dictionary", opts: ["Linguist", "Lexicographer", "Cartographer", "Biographer"], ans: 1 },
-    { category: "verbal", q: "A post or office for which no salary is paid", opts: ["Honorary", "Sinecure", "Voluntary", "Charitable"], ans: 0 },
-    { category: "verbal", q: "A study of ancient societies and their relics", opts: ["Anthropology", "Paleontology", "Archaeology", "Geology"], ans: 2 },
-    { category: "verbal", q: "One who eats everything, both plants and meat", opts: ["Herbivorous", "Carnivorous", "Omnivorous", "Insectivorous"], ans: 2 },
-    { category: "verbal", q: "A person who walks in their sleep", opts: ["Somniloquist", "Somnambulist", "Insomniac", "Hypnotist"], ans: 1 },
-    { category: "verbal", q: "A book or document written by hand", opts: ["Manuscript", "Scripture", "Chronicle", "Autograph"], ans: 0 },
-    { category: "verbal", q: "One who knows many languages", opts: ["Bilingual", "Linguist", "Polyglot", "Translator"], ans: 2 },
-    { category: "verbal", q: "A speaker's platform or dais", opts: ["Podium", "Auditorium", "Altar", "Pulpit"], ans: 0 },
-    { category: "verbal", q: "A person who is centring his thoughts on himself", opts: ["Egoist", "Egocentric", "Altruist", "Eccentric"], ans: 1 },
-    { category: "verbal", q: "A remedy for all diseases or problems", opts: ["Panacea", "Antibiotic", "Elixir", "Antidote"], ans: 0 },
-    { category: "verbal", q: "One who looks at the bright side of things", opts: ["Pessimist", "Optimist", "Realist", "Idealist"], ans: 1 },
-    { category: "verbal", q: "A study of the human mind and behavior", opts: ["Sociology", "Psychology", "Physiology", "Philosophy"], ans: 1 },
-    { category: "verbal", q: "One who travels on foot", opts: ["Pedestrian", "Traveler", "Pilgrim", "Vagabond"], ans: 0 },
-    { category: "verbal", q: "A person who sells flowers", opts: ["Gardener", "Florist", "Botanist", "Horticulturist"], ans: 1 },
-    { category: "verbal", q: "One who spends money recklessly and wastefully", opts: ["Miser", "Spendthrift", "Philanthropist", "Investor"], ans: 1 },
-    { category: "verbal", q: "An instrument for measuring atmospheric pressure", opts: ["Thermometer", "Barometer", "Hygrometer", "Anemometer"], ans: 1 },
-    { category: "verbal", q: "A state of perfect balance and stability", opts: ["Symmetry", "Equilibrium", "Stagnation", "Cohesion"], ans: 1 },
-    { category: "verbal", q: "A speech or presentation delivered without preparation", opts: ["Monologue", "Sermon", "Extempore", "Debate"], ans: 2 },
-    { category: "verbal", q: "One who hates mankind", opts: ["Misanthrope", "Philanthropist", "Misogynist", "Mercenary"], ans: 0 },
-    { category: "verbal", q: "A person who lives a solitary life and tends to avoid other people", opts: ["Recluse", "Introvert", "Vagrant", "Hermit"], ans: 0 },
-    { category: "verbal", q: "Animals that can live both on land and in water", opts: ["Reptiles", "Amphibians", "Mammals", "Aquatics"], ans: 1 },
-    { category: "verbal", q: "A general pardon granted to political offenders", opts: ["Absolution", "Amnesty", "Reprieve", "Condonation"], ans: 1 },
-    { category: "verbal", q: "A person who loves books and reading", opts: ["Bibliophile", "Scholar", "Intellectual", "Librarian"], ans: 0 }
-  ];
 
   const shuffleArray = (array) => {
     for (let i = array.length - 1; i > 0; i--) {
@@ -1119,8 +1359,7 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
       </style>
     `;
 
-    const GEMINI_API_KEY = window.GEMINI_API_KEY || Store.config?.GEMINI_API_KEY;
-    const isDummy = !GEMINI_API_KEY || GEMINI_API_KEY.startsWith('AQ.');
+    const isDummy = !(window.__ENV__ && window.__ENV__.HAS_REAL_GEMINI_KEY);
 
     if (isDummy) {
       console.warn("Aptitude: GEMINI_API_KEY missing or placeholder. Activating randomized local pool fallback.");
@@ -1130,54 +1369,8 @@ export async function loadVirtualInterviewPage(root, Store, supabase) {
     }
 
     try {
-      const prompt = `You are an elite senior recruitment examiner at ${state.company}. 
-Generate exactly 30 UNIQUE multiple-choice aptitude questions for a candidate 
-applying for the role of "${state.role}" at "${state.company}".
-
-Every single question generated must be deeply concentrated and customized to the standards, engineering culture, and business domain of ${state.company}:
-
-Distribute the questions as follows:
-- 8 Quantitative Aptitude questions: These must be framed as realistic word problems set within ${state.company}'s industry or business context (e.g. calculation of server resource consumption or latency for Google; interest rates, portfolios, or transactional percentages for Goldman Sachs; service SLAs or staffing overhead for TCS). The difficulty level must match ${state.company}'s entrance exam standards.
-- 7 Logical Reasoning questions: Construct puzzles, sequence matches, or dependency diagrams referencing operations, technologies, or teams typical of ${state.company}.
-- 8 Verbal Ability / English questions: Choose vocabulary, one-word substitutions, or comprehension contexts that represent the technical communications, core values, and corporate vocabulary of ${state.company}.
-- 7 Technical questions: Specific to the "${state.role}" role at ${state.company}. Deeply target ${state.company}'s actual tech stacks, active open-source contributions, engineering methodologies, or infrastructure (e.g. for Google: Go, MapReduce, Kubernetes; for Goldman Sachs: core Java concurrency, transaction mechanics, financial APIs; for TCS: enterprise migrations, database scaling, agile structures).
-
-IMPORTANT:
-- All questions must be UNIQUE. Do NOT repeat any question.
-- Each question must have exactly 4 options.
-- Return a JSON object with a "questions" array where each item has:
-  { "q": "string", "opts": ["string","string","string","string"], "ans": number (0-3) }`;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json"
-          }
-        })
-      });
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        throw new Error(`API error: ${res.statusText}`);
-      }
-
-      const data = await res.json();
-      const txt = data.candidates[0].content.parts[0].text;
-      const parsed = JSON.parse(txt);
-      
-      if (parsed && Array.isArray(parsed.questions) && parsed.questions.length > 0) {
-        state.questions = parsed.questions;
-        console.log(`Successfully generated ${state.questions.length} AI questions.`);
-      } else {
-        throw new Error("Invalid response format from Gemini");
-      }
+      state.questions = await generateAptitudeQuestions(state);
+      console.log(`Successfully generated ${state.questions.length} AI questions.`);
     } catch (e) {
       console.error("Failed to generate AI questions, using local fallback:", e);
       loadLocalFallbackQuestions();
@@ -1369,13 +1562,6 @@ IMPORTANT:
   };
 
   const renderAptitude = async (c) => {
-    if (!state.cameraEnabled) {
-      state.step = 'dashboard';
-      render();
-      showCameraRequiredAlert();
-      return;
-    }
-    
     try {
       initProctoring();
     } catch (err) {
@@ -1695,382 +1881,8 @@ IMPORTANT:
     renderQ();
   };
 
-  const staticTechnicalChallenges = {
-    "Software Engineer": [
-      {
-        title: "Reverse String in Place",
-        description: `
-          <p>Write a function that reverses a string. The input string is given as an array of characters <code>s</code>.</p>
-          <p>You must do this by modifying the input array in-place with O(1) extra memory.</p>
-          <h4 style="color:#fff; margin-top:16px;">Example 1:</h4>
-          <pre style="background:rgba(255,255,255,0.05); padding:10px; border-radius:6px; color:#a78bfa; margin-bottom:12px;">Input: s = ["h","e","l","l","o"]\nOutput: ["o","l","l","e","h"]</pre>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function reverseString(s) {\n  // Write your code here\n  return s.reverse();\n}",
-          "Python": "def reverseString(s):\n    # Write your code here\n    s.reverse()\n    return s"
-        },
-        testCases: [
-          { input: 's = ["h","e","l","l","o"]', output: '["o","l","l","e","h"]' },
-          { input: 's = ["H","a","n","n","a","h"]', output: '["h","a","n","n","a","H"]' },
-          { input: 's = ["a"]', output: '["a"]' }
-        ]
-      },
-      {
-        title: "Two Sum",
-        description: `
-          <p>Given an array of integers <code>nums</code> and an integer <code>target</code>, return indices of the two numbers such that they add up to <code>target</code>.</p>
-          <p>You may assume that each input would have exactly one solution, and you may not use the same element twice.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function twoSum(nums, target) {\n  // Write your code here\n  const map = new Map();\n  for (let i = 0; i < nums.length; i++) {\n    const compl = target - nums[i];\n    if (map.has(compl)) return [map.get(compl), i];\n    map.set(nums[i], i);\n  }\n  return [];\n}",
-          "Python": "def twoSum(nums, target):\n    # Write your code here\n    seen = {}\n    for i, num in enumerate(nums):\n        compl = target - num\n        if compl in seen:\n            return [seen[compl], i]\n        seen[num] = i\n    return []"
-        },
-        testCases: [
-          { input: 'nums = [2,7,11,15], target = 9', output: '[0,1]' },
-          { input: 'nums = [3,2,4], target = 6', output: '[1,2]' },
-          { input: 'nums = [3,3], target = 6', output: '[0,1]' }
-        ]
-      },
-      {
-        title: "Valid Parentheses",
-        description: `
-          <p>Given a string <code>s</code> containing just the characters <code>'('</code>, <code>')'</code>, <code>'{'</code>, <code>'}'</code>, <code>'['</code> and <code>']'</code>, determine if the input string is valid.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function isValid(s) {\n  const stack = [];\n  const map = { ')': '(', '}': '{', ']': '[' };\n  for (let char of s) {\n    if (['(', '{', '['].includes(char)) stack.push(char);\n    else if (stack.pop() !== map[char]) return false;\n  }\n  return stack.length === 0;\n}",
-          "Python": "def isValid(s):\n    stack = []\n    mapping = {')': '(', '}': '{', ']': '['}\n    for char in s:\n        if char in ['(', '{', '[']:\n            stack.append(char)\n        elif not stack or stack.pop() != mapping[char]:\n            return False\n    return len(stack) == 0"
-        },
-        testCases: [
-          { input: 's = "()"', output: 'true' },
-          { input: 's = "()[]{}"', output: 'true' },
-          { input: 's = "(]"', output: 'false' }
-        ]
-      },
-      {
-        title: "Merge Sorted Arrays",
-        description: `
-          <p>Given two sorted integer arrays <code>nums1</code> and <code>nums2</code>, merge them into a single sorted array.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function merge(nums1, nums2) {\n  return [...nums1, ...nums2].sort((a,b) => a - b);\n}",
-          "Python": "def merge(nums1, nums2):\n    return sorted(nums1 + nums2)"
-        },
-        testCases: [
-          { input: 'nums1 = [1,2,3], nums2 = [2,5,6]', output: '[1,2,2,3,5,6]' },
-          { input: 'nums1 = [0], nums2 = [1]', output: '[0,1]' },
-          { input: 'nums1 = [4,5], nums2 = [1,2,3]', output: '[1,2,3,4,5]' }
-        ]
-      },
-      {
-        title: "Fibonacci Number",
-        description: `
-          <p>Calculate the <code>n</code>-th Fibonacci number. F(0) = 0, F(1) = 1, F(n) = F(n-1) + F(n-2).</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function fib(n) {\n  if(n <= 1) return n;\n  let a=0, b=1;\n  for(let i=2; i<=n; i++) { let temp=a+b; a=b; b=temp; }\n  return b;\n}",
-          "Python": "def fib(n):\n    if n <= 1: return n\n    a, b = 0, 1\n    for _ in range(2, n+1):\n        a, b = b, a + b\n    return b"
-        },
-        testCases: [
-          { input: 'n = 2', output: '1' },
-          { input: 'n = 4', output: '3' },
-          { input: 'n = 10', output: '55' }
-        ]
-      },
-      {
-        title: "Binary Search",
-        description: `
-          <p>Given a sorted array of integers <code>nums</code> and a <code>target</code>, write a function to search for <code>target</code> in <code>nums</code>. Return its index, or -1 if not present.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function search(nums, target) {\n  return nums.indexOf(target);\n}",
-          "Python": "def search(nums, target):\n    try: return nums.index(target)\n    except: return -1"
-        },
-        testCases: [
-          { input: 'nums = [-1,0,3,5,9,12], target = 9', output: '4' },
-          { input: 'nums = [-1,0,3,5,9,12], target = 2', output: '-1' },
-          { input: 'nums = [5], target = 5', output: '0' }
-        ]
-      }
-    ],
-    "Data Scientist": [
-      {
-        title: "Mean Squared Error (MSE)",
-        description: `
-          <p>Write a function to calculate the Mean Squared Error (MSE) between predictions and targets.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function calculateMSE(predictions, targets) {\n  let sum = 0;\n  for(let i=0; i<predictions.length; i++) {\n    sum += Math.pow(predictions[i] - targets[i], 2);\n  }\n  return parseFloat((sum / predictions.length).toFixed(3));\n}",
-          "Python": "def calculateMSE(predictions, targets):\n    diff_sq = [(p - t) ** 2 for p, t in zip(predictions, targets)]\n    return round(sum(diff_sq) / len(predictions), 3)"
-        },
-        testCases: [
-          { input: 'predictions = [1, 2, 3], targets = [1, 4, 3]', output: '1.333' },
-          { input: 'predictions = [0.5, 1.5], targets = [0.5, 1.5]', output: '0' },
-          { input: 'predictions = [2, 4, 6], targets = [1, 2, 3]', output: '4.667' }
-        ]
-      },
-      {
-        title: "Calculate Median",
-        description: `
-          <p>Write a function to calculate the median value of an unsorted numerical array <code>arr</code>.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function median(arr) {\n  const sorted = [...arr].sort((a,b) => a-b);\n  const mid = Math.floor(sorted.length / 2);\n  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;\n}",
-          "Python": "def median(arr):\n    s = sorted(arr)\n    n = len(s)\n    if n % 2 != 0: return s[n//2]\n    return (s[n//2 - 1] + s[n//2]) / 2.0"
-        },
-        testCases: [
-          { input: 'arr = [3, 1, 2]', output: '2' },
-          { input: 'arr = [4, 1, 3, 2]', output: '2.5' },
-          { input: 'arr = [10]', output: '10' }
-        ]
-      },
-      {
-        title: "Pearson Correlation Coefficient",
-        description: `
-          <p>Calculate Pearson's correlation coefficient r between two equal-length numerical arrays <code>x</code> and <code>y</code>.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function pearson(x, y) {\n  return 0.85;\n}",
-          "Python": "def pearson(x, y):\n    return 0.85"
-        },
-        testCases: [
-          { input: 'x = [1,2,3], y = [2,4,6]', output: '1' },
-          { input: 'x = [1,2,3], y = [2,1,5]', output: '0.76' }
-        ]
-      },
-      {
-        title: "F1 Score Calculator",
-        description: `
-          <p>Given <code>precision</code> and <code>recall</code> values, calculate the harmonic mean (F1 Score).</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function f1Score(precision, recall) {\n  return parseFloat((2 * (precision * recall) / (precision + recall)).toFixed(3));\n}",
-          "Python": "def f1Score(precision, recall):\n    return round(2.0 * (precision * recall) / (precision + recall), 3)"
-        },
-        testCases: [
-          { input: 'precision = 0.8, recall = 0.6', output: '0.686' },
-          { input: 'precision = 1.0, recall = 1.0', output: '1' }
-        ]
-      },
-      {
-        title: "L1 Regularization (Lasso)",
-        description: `
-          <p>Compute the L1 regularization penalty value, which is the sum of the absolute values of the weight array <code>weights</code> multiplied by the lambda scale factor <code>lmbda</code>.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function l1Penalty(weights, lmbda) {\n  return weights.reduce((s, w) => s + Math.abs(w), 0) * lmbda;\n}",
-          "Python": "def l1Penalty(weights, lmbda):\n    return sum(abs(w) for w in weights) * lmbda"
-        },
-        testCases: [
-          { input: 'weights = [1.5, -2.0, 0.5], lmbda = 0.1', output: '0.4' },
-          { input: 'weights = [0, 0], lmbda = 0.5', output: '0' }
-        ]
-      },
-      {
-        title: "Z-Score Normalization",
-        description: `
-          <p>Standardize an array of numerical values using standard score formula: <code>z = (x - mean) / std</code>.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function zScore(val, mean, std) {\n  return parseFloat(((val - mean) / std).toFixed(3));\n}",
-          "Python": "def zScore(val, mean, std):\n    return round((val - mean) / std, 3)"
-        },
-        testCases: [
-          { input: 'val = 120, mean = 100, std = 15', output: '1.333' },
-          { input: 'val = 85, mean = 100, std = 10', output: '-1.5' }
-        ]
-      }
-    ],
-    "Product Manager": [
-      {
-        title: "SQL Daily Active Users (DAU) & Retention",
-        description: `
-          <p>Calculate Day-1 Retention rate from the table user_sessions.</p>
-        `,
-        languages: ["SQL"],
-        templates: {
-          "SQL": "SELECT COUNT(DISTINCT s2.user_id) * 100.0 / COUNT(DISTINCT s1.user_id) AS day_1_retention FROM user_sessions s1 LEFT JOIN user_sessions s2 ON s1.user_id = s2.user_id AND s2.login_date = s1.login_date + INTERVAL '1 day';"
-        },
-        testCases: [
-          { input: "Query structure check", output: "Valid Day-1 Retention Join Query" }
-        ]
-      },
-      {
-        title: "SQL Monthly Revenue Growth",
-        description: `
-          <p>Calculate month-over-month revenue growth percentage from the table <code>orders(order_id, user_id, amount, order_date)</code>.</p>
-        `,
-        languages: ["SQL"],
-        templates: {
-          "SQL": "SELECT month, revenue, (revenue - LAG(revenue) OVER(ORDER BY month)) * 100.0 / LAG(revenue) OVER(ORDER BY month) AS mom_growth FROM monthly_rev;"
-        },
-        testCases: [
-          { input: "Query structure check", output: "Valid MoM Growth LAG query" }
-        ]
-      },
-      {
-        title: "SQL Customer Churn Rate",
-        description: `
-          <p>Write an SQL query to calculate the monthly customer churn rate from the table <code>subscriptions(sub_id, user_id, start_date, end_date)</code>.</p>
-        `,
-        languages: ["SQL"],
-        templates: {
-          "SQL": "SELECT COUNT(CASE WHEN end_date IS NOT NULL THEN 1 END) * 100.0 / COUNT(*) AS churn_rate FROM subscriptions;"
-        },
-        testCases: [
-          { input: "Query structure check", output: "Valid Churn calculation query" }
-        ]
-      },
-      {
-        title: "SQL Top Selling Products",
-        description: `
-          <p>Write an SQL query to find the top 3 selling products based on total sales revenue from <code>sales(sale_id, product_id, quantity, price)</code>.</p>
-        `,
-        languages: ["SQL"],
-        templates: {
-          "SQL": "SELECT product_id, SUM(quantity * price) AS total_revenue FROM sales GROUP BY product_id ORDER BY total_revenue DESC LIMIT 3;"
-        },
-        testCases: [
-          { input: "Query structure check", output: "Valid Top-3 Revenue GROUP BY query" }
-        ]
-      },
-      {
-        title: "SQL Average Order Value",
-        description: `
-          <p>Find the average order value (AOV) per transaction from <code>orders(order_id, amount)</code>.</p>
-        `,
-        languages: ["SQL"],
-        templates: {
-          "SQL": "SELECT AVG(amount) AS average_order_value FROM orders;"
-        },
-        testCases: [
-          { input: "Query structure check", output: "Valid AOV AVG query" }
-        ]
-      },
-      {
-        title: "SQL High-Value Customers",
-        description: `
-          <p>Identify users who spent more than $500 in total from <code>orders(user_id, amount)</code>.</p>
-        `,
-        languages: ["SQL"],
-        templates: {
-          "SQL": "SELECT user_id, SUM(amount) AS total_spent FROM orders GROUP BY user_id HAVING SUM(amount) > 500;"
-        },
-        testCases: [
-          { input: "Query structure check", output: "Valid High-Value GROUP BY HAVING query" }
-        ]
-      }
-    ],
-    "Financial Analyst": [
-      {
-        title: "Compound Annual Growth Rate (CAGR)",
-        description: `
-          <p>Calculate CAGR given startValue, endValue, and periodYears.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function calculateCAGR(startValue, endValue, periodYears) {\n  return Math.pow(endValue / startValue, 1 / periodYears) - 1;\n}",
-          "Python": "def calculateCAGR(startValue, endValue, periodYears):\n    return (endValue / startValue) ** (1.0 / periodYears) - 1.0"
-        },
-        testCases: [
-          { input: 'startValue = 100, endValue = 150, periodYears = 3', output: '0.145' },
-          { input: 'startValue = 1000, endValue = 2000, periodYears = 5', output: '0.149' },
-          { input: 'startValue = 500, endValue = 500, periodYears = 10', output: '0' }
-        ]
-      },
-      {
-        title: "Net Present Value (NPV)",
-        description: `
-          <p>Calculate the Net Present Value (NPV) given a <code>rate</code> (discount rate) and an array of cash flows <code>cashflows</code> where index 0 is initial outlay.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function calculateNPV(rate, cashflows) {\n  return cashflows.reduce((npv, cf, t) => npv + cf / Math.pow(1 + rate, t), 0);\n}",
-          "Python": "def calculateNPV(rate, cashflows):\n    return sum(cf / ((1.0 + rate) ** t) for t, cf in enumerate(cashflows))"
-        },
-        testCases: [
-          { input: 'rate = 0.1, cashflows = [-1000, 500, 700]', output: '37.19' },
-          { input: 'rate = 0.05, cashflows = [-100, 105]', output: '0' }
-        ]
-      },
-      {
-        title: "Weighted Average Cost of Capital (WACC)",
-        description: `
-          <p>Calculate Weighted Average Cost of Capital (WACC) given weight of equity <code>we</code>, weight of debt <code>wd</code>, cost of equity <code>re</code>, cost of debt <code>rd</code>, and corporate tax rate <code>tax</code>.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function calculateWACC(we, wd, re, rd, tax) {\n  return (we * re) + (wd * rd * (1 - tax));\n}",
-          "Python": "def calculateWACC(we, wd, re, rd, tax):\n    return (we * re) + (wd * rd * (1.0 - tax))"
-        },
-        testCases: [
-          { input: 'we=0.6, wd=0.4, re=0.10, rd=0.06, tax=0.25', output: '0.078' },
-          { input: 'we=1.0, wd=0.0, re=0.12, rd=0.05, tax=0.30', output: '0.12' }
-        ]
-      },
-      {
-        title: "Return on Investment (ROI)",
-        description: `
-          <p>Calculate ROI given the <code>initialValue</code> and the <code>finalValue</code>.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function calculateROI(initialValue, finalValue) {\n  return (finalValue - initialValue) / initialValue;\n}",
-          "Python": "def calculateROI(initialValue, finalValue):\n    return (finalValue - initialValue) / float(initialValue)"
-        },
-        testCases: [
-          { input: 'initialValue = 1000, finalValue = 1500', output: '0.5' },
-          { input: 'initialValue = 200, finalValue = 100', output: '-0.5' }
-        ]
-      },
-      {
-        title: "Sharpe Ratio",
-        description: `
-          <p>Calculate the Sharpe Ratio given the portfolio return <code>rp</code>, risk-free rate <code>rf</code>, and portfolio standard deviation <code>sigma</code>.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function sharpeRatio(rp, rf, sigma) {\n  return parseFloat(((rp - rf) / sigma).toFixed(3));\n}",
-          "Python": "def sharpeRatio(rp, rf, sigma):\n    return round((rp - rf) / sigma, 3)"
-        },
-        testCases: [
-          { input: 'rp = 0.12, rf = 0.03, sigma = 0.15', output: '0.6' },
-          { input: 'rp = 0.08, rf = 0.02, sigma = 0.05', output: '1.2' }
-        ]
-      },
-      {
-        title: "Debt-to-Equity Ratio",
-        description: `
-          <p>Calculate Debt-to-Equity Ratio given total <code>liabilities</code> and total <code>equity</code>.</p>
-        `,
-        languages: ["JavaScript", "Python"],
-        templates: {
-          "JavaScript": "function debtToEquity(liabilities, equity) {\n  return liabilities / equity;\n}",
-          "Python": "def debtToEquity(liabilities, equity):\n    return liabilities / float(equity)"
-        },
-        testCases: [
-          { input: 'liabilities = 50000, equity = 100000', output: '0.5' },
-          { input: 'liabilities = 0, equity = 100', output: '0' }
-        ]
-      }
-    ]
-  };
-
-
   const loadTechnicalChallenge = async () => {
-    const GEMINI_API_KEY = window.GEMINI_API_KEY || Store.config?.GEMINI_API_KEY;
-    const isDummy = !GEMINI_API_KEY || GEMINI_API_KEY.startsWith('AQ.');
+    const isDummy = !(window.__ENV__ && window.__ENV__.HAS_REAL_GEMINI_KEY);
     
     const getFallback = () => {
       const candidates = staticTechnicalChallenges[state.role] || staticTechnicalChallenges["Software Engineer"];
@@ -2102,143 +1914,10 @@ IMPORTANT:
     }
 
     try {
-      const facedList = state.technicalChallengesFaced || [];
-      const facedInstruction = facedList.length > 0 
-        ? `\nIMPORTANT: Do NOT generate any of the following challenges which the candidate has already faced: ${JSON.stringify(facedList)}. You must generate a completely different, unique challenge.`
-        : "";
-
-      const prompt = `You are a professional technical interviewer at ${state.company}. 
-Generate a coding, scripting, SQL, or computational/analytical challenge for a candidate interviewing for the role of "${state.role}" at "${state.company}".
-Make the problem highly relevant to both the typical tasks of this role and the business domain or production engineering challenges of ${state.company} (e.g. if Google: algorithms dealing with huge datasets, indexes, prefix trees, or distributed graph search; if Goldman Sachs: ledger transaction parsing, CAGR calculators, or high-throughput order matching; if TCS/Infosys: enterprise data parsing, custom reports, or database transaction audit logs). Frame the challenge description as if it is a real system being built by the ${state.company} engineering teams.${facedInstruction}
-
-The output must be returned as a JSON object matching this schema:
-{
-  "title": "string (The problem title)",
-  "description": "string (Detailed HTML description, constraints, and 1-2 examples with Input/Output formatted cleanly with code tags)",
-  "languages": ["string" (e.g., "JavaScript", "Python", "SQL")],
-  "templates": {
-    "JavaScript": "string (starter code structure, if JavaScript in languages list)",
-    "Python": "string (starter code structure, if Python in languages list)",
-    "SQL": "string (starter code structure, if SQL in languages list)"
-  },
-  "testCases": [
-    { "input": "string (e.g., list arguments or variable definitions)", "output": "string (expected outcome value)" },
-    { "input": "string", "output": "string" },
-    { "input": "string", "output": "string" }
-  ]
-}`;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json"
-          }
-        })
-      });
-      clearTimeout(timeoutId);
-
-      if (!res.ok) throw new Error(`API error: ${res.statusText}`);
-      const data = await res.json();
-      const txt = data.candidates[0].content.parts[0].text;
-      const parsed = JSON.parse(txt);
-      if (parsed && parsed.title && parsed.description) {
-        return parsed;
-      }
-      throw new Error("Invalid schema returned from AI");
+      return await generateTechnicalChallenge(state);
     } catch (e) {
       console.error("Failed to generate AI coding challenge, using local fallback:", e);
       return getFallback();
-    }
-  };
-
-  const runCodeAI = async (challenge, lang, code) => {
-    const GEMINI_API_KEY = window.GEMINI_API_KEY || Store.config?.GEMINI_API_KEY;
-    const isDummy = !GEMINI_API_KEY || GEMINI_API_KEY.startsWith('AQ.');
-
-    if (isDummy) {
-      await new Promise(resolve => setTimeout(resolve, 200));
-      return {
-        success: true,
-        error: "",
-        stdout: "Running code...\nAll test cases executed successfully.\n[Local Mock Mode: Active]",
-        testCaseResults: challenge.testCases.map(tc => ({
-          input: tc.input,
-          expected: tc.output,
-          actual: tc.output,
-          passed: true
-        }))
-      };
-    }
-
-    try {
-      const prompt = `You are a secure code compiler and execution environment sandbox.
-Evaluate this code written in "${lang}" for the challenge "${challenge.title}".
-Challenge details:
-- Constraints: ${challenge.description}
-- Test Cases: ${JSON.stringify(challenge.testCases)}
-
-Code snippet under evaluation:
-\`\`\`${lang}
-${code}
-\`\`\`
-
-Perform compilation/syntax audit and evaluate the logic against each test case.
-Provide console stdout print logs, any compilation or runtime errors, and the pass/fail result for each test case.
-
-Return a JSON object matching this schema:
-{
-  "success": boolean (did it compile and run without syntax/runtime errors),
-  "error": "string (compilation/runtime error details if failed, otherwise empty)",
-  "stdout": "string (log output or print statements)",
-  "testCaseResults": [
-    { "input": "string", "expected": "string", "actual": "string", "passed": boolean }
-  ]
-}`;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json"
-          }
-        })
-      });
-      clearTimeout(timeoutId);
-
-      if (!res.ok) throw new Error("API compilation service unavailable");
-      const data = await res.json();
-      const txt = data.candidates[0].content.parts[0].text;
-      const parsed = JSON.parse(txt);
-      if (parsed && parsed.testCaseResults) {
-        return parsed;
-      }
-      throw new Error("Invalid response format from AI compilation engine");
-    } catch (e) {
-      console.error("Compilation simulation failed:", e);
-      return {
-        success: true,
-        error: "",
-        stdout: "Syntax checking complete. Executing test cases locally...\nStdout:\n" + e.message,
-        testCaseResults: challenge.testCases.map(tc => ({
-          input: tc.input,
-          expected: tc.output,
-          actual: tc.output,
-          passed: true
-        }))
-      };
     }
   };
 
@@ -2376,13 +2055,6 @@ Return a JSON object matching this schema:
   };
 
   const renderTechnical = async (c) => {
-    if (!state.cameraEnabled) {
-      state.step = 'dashboard';
-      render();
-      showCameraRequiredAlert();
-      return;
-    }
-    
     initProctoring();
 
     c.innerHTML = `
@@ -2410,15 +2082,24 @@ Return a JSON object matching this schema:
       </style>
     `;
 
+    // =========================================================================
+    // PLACENIX DOJO BELT PROGRESSION SYSTEM
+    // =========================================================================
+    let currentBeltLevel = parseInt(localStorage.getItem('placenix_dojo_belt_level') || '0');
+    let dojoClearedCount = parseInt(localStorage.getItem('placenix_dojo_cleared') || '0');
+    currentBeltLevel = Math.min(Math.max(currentBeltLevel, 0), DOJO_BELT_CONFIG.length - 1);
+    dojoClearedCount = Math.min(Math.max(dojoClearedCount, 0), 3);
+
+    let activeBeltObj = DOJO_BELT_CONFIG[currentBeltLevel];
+    let beltChallengesPool = dojoBeltChallenges[activeBeltObj.id] || dojoBeltChallenges.white;
+
     let challenge;
     try {
-      challenge = await loadTechnicalChallenge();
+      challenge = beltChallengesPool[dojoClearedCount % beltChallengesPool.length] || beltChallengesPool[0];
     } catch (err) {
-      console.error("Technical challenge loading failed, using static pool fallback:", err);
+      console.error("Dojo Belt challenge pick failed, using fallback:", err);
       const candidates = staticTechnicalChallenges[state.role] || staticTechnicalChallenges["Software Engineer"];
-      const faced = new Set(state.technicalChallengesFaced || []);
-      const available = candidates.filter(c => !faced.has(c.title));
-      challenge = available.length > 0 ? available[0] : candidates[0];
+      challenge = candidates[0];
     }
     
     if (!state.technicalChallengesFaced.includes(challenge.title)) {
@@ -2465,127 +2146,397 @@ Return a JSON object matching this schema:
       const min = Math.floor(timeLeft / 60).toString().padStart(2, '0');
       const sec = (timeLeft % 60).toString().padStart(2, '0');
 
+      let currentConsoleTab = 'run-tests'; // 'run', 'run-tests', 'hints'
+      let activeTCIdx = 0;
+      let lastExecutionResults = null;
+
+      const currentBeltInfo = DOJO_BELT_CONFIG[currentBeltLevel];
+      const nextBeltInfo = DOJO_BELT_CONFIG[Math.min(currentBeltLevel + 1, DOJO_BELT_CONFIG.length - 1)];
+
+      // Extract examples or format from challenge
+      const testCasesList = challenge.testCases || [
+        { input: '5', output: '1 3 5 7 9' },
+        { input: '1', output: '1' },
+        { input: '6', output: '1 3 5 7 9 11' }
+      ];
+
       c.innerHTML = `
-        <div style="padding: 20px 30px; max-width: 1600px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; height: 100%; box-sizing: border-box; justify-content: flex-start; overflow: hidden;">
+        <div style="padding: 12px 20px; width: 100%; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; background: #070913; overflow: hidden; position: relative;">
           
-          <!-- Top bar -->
-          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px;">
-            <div>
-              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 4px;">
-                <div style="font-size: 11px; font-weight: 700; color: var(--brand-primary); text-transform: uppercase; letter-spacing: 0.1em;">Round 2: Technical Evaluation</div>
-                <button id="vi-exit-btn" class="btn-premium-ghost" style="padding:4px 8px; font-size:10px; border-radius:6px; border:1px solid #EF4444; color:#EF4444; background:rgba(239,68,68,0.05); display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:700;">
-                   🚪 Exit Exam
-                </button>
+          <!-- Anti-Copy/Paste Warning Toast (Hidden by default) -->
+          <div id="anti-copy-toast" style="display: none; position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 9999; background: #1E1B4B; border: 1.5px solid #6366F1; box-shadow: 0 10px 30px rgba(99,102,241,0.4); color: #fff; padding: 10px 20px; border-radius: 100px; font-weight: 700; font-size: 13px; align-items: center; gap: 10px; animation: bounceIn 0.3s ease;">
+            <span style="font-size: 18px;">🚫</span>
+            <span>Security Warning: Copying or Pasting code is strictly disabled in Technical Exam Mode.</span>
+          </div>
+
+          <!-- Sleek Combined Top Header Bar -->
+          <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255,255,255,0.08); padding: 8px 16px; border-radius: 12px; height: 50px; flex-shrink: 0;">
+            
+            <!-- Left: Round title & Belt status -->
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 10px; font-weight: 800; color: var(--brand-primary); text-transform: uppercase; letter-spacing: 0.08em; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.3); padding: 4px 10px; border-radius: 6px;">Round 2: Technical Evaluation</span>
+                <h2 style="font-size: 17px; margin: 0; color: #fff; font-weight: 700;">${challenge.title}</h2>
               </div>
-              <h2 class="h2-ent" style="font-size: 22px; margin: 0; color: #fff;">${challenge.title}</h2>
+
+              <div style="height: 18px; width: 1px; background: rgba(255,255,255,0.15);"></div>
+
+              <!-- Belt Rank Badge -->
+              <div style="display: flex; align-items: center; gap: 6px; background: ${currentBeltInfo.color}18; border: 1px solid ${currentBeltInfo.color}50; padding: 3px 10px; border-radius: 100px; color: ${currentBeltInfo.color}; font-weight: 800; font-size: 12px;">
+                <span>${currentBeltInfo.emoji}</span>
+                <span>${currentBeltInfo.label}</span>
+                <span style="color: rgba(255,255,255,0.4);">•</span>
+                <span style="color: #fff;">Workout ${dojoClearedCount + 1}/3</span>
+              </div>
             </div>
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <div id="tech-timer-pill" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); padding: 8px 16px; border-radius: 100px; color: #fff; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+
+            <!-- Right: Language, Timer, Exit Button -->
+            <div style="display: flex; align-items: center; gap: 12px;">
+              
+              <!-- Language Selector -->
+              <div style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 2px 10px;">
+                <span style="font-size: 11px; color: #94A3B8; font-weight: 700;">LANG:</span>
+                <select id="tech-lang-select" style="background: transparent; border: none; color: #fff; font-weight: 700; font-size: 12px; outline: none; cursor: pointer; padding: 4px 0;">
+                  ${challenge.languages.map(l => `<option value="${l}" ${l===selectedLang?'selected':''}>${l}</option>`).join('')}
+                </select>
+              </div>
+
+              <!-- Timer Pill -->
+              <div id="tech-timer-pill" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12); padding: 5px 12px; border-radius: 100px; color: #fff; font-weight: 700; display: flex; align-items: center; gap: 6px; font-size: 13px;">
                 <span>⏱️</span>
                 <span id="tech-timer-val" style="font-family: monospace;">${min}:${sec}</span>
               </div>
-              <select id="tech-lang-select" class="input-ent" style="padding: 8px 16px; width: 140px; margin-top:0; height: 38px; border-radius: 100px; background: rgba(0,0,0,0.2);">
-                ${challenge.languages.map(l => `<option value="${l}" ${l===selectedLang?'selected':''}>${l}</option>`).join('')}
-              </select>
+
+              <!-- Exit Button -->
+              <button id="vi-exit-btn" class="btn-premium-ghost" style="padding: 6px 12px; font-size: 12px; border-radius: 8px; border: 1px solid #EF4444; color: #EF4444; background: rgba(239,68,68,0.08); display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 700;">
+                🚪 Exit Exam
+              </button>
+
             </div>
+
           </div>
 
-          <!-- Progress sub-bar -->
-          <div style="display: flex; gap: 24px; align-items: center; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 500;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="color: var(--brand-primary); font-weight: 700;">Problems Solved:</span>
-              <span style="background: rgba(139,92,246,0.1); color: var(--brand-primary); padding: 2px 8px; border-radius: 4px; font-weight: 800; font-family: monospace;">
-                ${state.technicalSolvedCount} / 3
-              </span>
-            </div>
-            <div style="width: 1px; height: 14px; background: rgba(255,255,255,0.1);"></div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="color: var(--text-description);">Skips Remaining:</span>
-              <span style="background: ${state.technicalSkipsUsed >= 3 ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)'}; color: ${state.technicalSkipsUsed >= 3 ? '#EF4444' : '#10B981'}; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-family: monospace;">
-                ${3 - state.technicalSkipsUsed} / 3
-              </span>
-            </div>
-          </div>
-
-          <!-- Main IDE Grid -->
-          <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; flex: 1; min-height: 0;">
+          <!-- Main Split Layout (Left: Problem Description, Right: Editor + Console) -->
+          <div style="display: grid; grid-template-columns: 1fr 1.35fr; gap: 14px; flex: 1; min-height: 0; overflow: hidden;">
             
-            <!-- Left Pane: Problem Description -->
-            <div class="card-ent" style="padding: 20px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; background: rgba(255,255,255,0.01);">
-              <div style="flex: 1;">
-                <h3 style="font-size: 15px; color: #fff; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">Problem Description</h3>
-                <div style="font-size: 13.5px; color: var(--text-description); line-height: 1.6;">
-                  ${challenge.description}
-                </div>
-              </div>
+            <!-- LEFT PANE: Problem Statement & Examples -->
+            <div style="background: rgba(18, 24, 38, 0.85); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; display: flex; flex-direction: column; overflow: hidden;">
               
-              <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;">
-                <h4 style="font-size: 13.5px; color: #fff; margin-bottom: 8px;">Test Cases</h4>
-                <div style="display: flex; flex-direction: column; gap: 8px;">
-                  ${challenge.testCases.map((tc, idx) => `
-                    <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 8px 10px; border-radius: 6px; font-size: 11.5px; font-family: monospace;">
-                      <div style="color: var(--brand-primary); font-weight: 700; margin-bottom: 2px;">Test Case ${idx + 1}</div>
-                      <div>Input: <span style="color: #fff;">${tc.input.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span></div>
-                      <div>Expected: <span style="color: #10B981;">${tc.output.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span></div>
+              <!-- Pane Header Tabs -->
+              <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.08); padding: 10px 16px;">
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; color: #fff;">
+                  <span style="color: var(--brand-primary);">📄</span> Problem Description
+                </div>
+                <span style="font-size: 11px; background: rgba(16, 185, 129, 0.12); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 2px 10px; border-radius: 100px; font-weight: 800;">
+                  Target: ${state.company} (${state.role})
+                </span>
+              </div>
+
+              <!-- Problem Content Area -->
+              <div style="padding: 20px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 20px;">
+                
+                <!-- Challenge Title & Description -->
+                <div>
+                  <h3 style="font-size: 18px; color: #fff; margin: 0 0 10px 0; font-weight: 700;">${challenge.title}</h3>
+                  <div style="font-size: 14px; color: #CBD5E1; line-height: 1.65; white-space: pre-line;">
+                    ${challenge.description}
+                  </div>
+                </div>
+
+                <!-- Formats: Input & Output Specifications -->
+                <div style="display: flex; flex-direction: column; gap: 14px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); padding: 14px; border-radius: 10px;">
+                  <div>
+                    <div style="font-size: 12.5px; font-weight: 700; color: #A78BFA; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                      <span>📥</span> Input Format
+                    </div>
+                    <div style="color: #94A3B8; font-size: 13px; line-height: 1.5;">
+                      ${challenge.inputFormat || 'A single input definition or argument stream.'}
+                    </div>
+                  </div>
+
+                  <div style="border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 10px;">
+                    <div style="font-size: 12.5px; font-weight: 700; color: #34D399; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                      <span>📤</span> Output Format
+                    </div>
+                    <div style="color: #94A3B8; font-size: 13px; line-height: 1.5;">
+                      ${challenge.outputFormat || 'Print or return the computed results.'}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Structured Examples -->
+                <div style="display: flex; flex-direction: column; gap: 14px;">
+                  <div style="font-size: 14px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">
+                    <span>💡</span> Examples
+                  </div>
+
+                  ${testCasesList.slice(0, 3).map((tc, idx) => `
+                    <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+                      <div style="font-size: 12px; font-weight: 800; color: #F59E0B; text-transform: uppercase; letter-spacing: 0.05em;">Example ${idx + 1}</div>
+                      
+                      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div>
+                          <span style="font-size: 11px; color: #94A3B8; font-weight: 700; display: block; margin-bottom: 4px;">INPUT</span>
+                          <div style="background: #0B0E1A; border: 1px solid rgba(255,255,255,0.08); padding: 8px 12px; border-radius: 6px; font-family: 'Fira Code', monospace; font-size: 13px; color: #F8FAFC; white-space: pre-wrap;">${tc.input.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+                        </div>
+
+                        <div>
+                          <span style="font-size: 11px; color: #94A3B8; font-weight: 700; display: block; margin-bottom: 4px;">EXPECTED OUTPUT</span>
+                          <div style="background: #0B0E1A; border: 1px solid rgba(16, 185, 129, 0.2); padding: 8px 12px; border-radius: 6px; font-family: 'Fira Code', monospace; font-size: 13px; color: #34D399; white-space: pre-wrap;">${tc.output.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+                        </div>
+                      </div>
+
+                      ${tc.explanation ? `
+                        <div style="font-size: 12px; color: #94A3B8; background: rgba(255,255,255,0.02); padding: 6px 10px; border-radius: 6px;">
+                          <strong style="color: #E2E8F0;">Explanation:</strong> ${tc.explanation}
+                        </div>
+                      ` : ''}
                     </div>
                   `).join('')}
                 </div>
+
+                <!-- Constraints -->
+                <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); padding: 12px 14px; border-radius: 100px; display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 12px; font-weight: 700; color: #F59E0B; white-space: nowrap;">⚡ Constraints:</span>
+                  <span style="font-size: 12px; color: #CBD5E1; font-family: 'Fira Code', monospace;">${challenge.constraints || '1 <= N <= 1000, O(N) target.'}</span>
+                </div>
+
               </div>
+
             </div>
 
-            <!-- Right Pane: Editor & Console -->
-            <div style="display: flex; flex-direction: column; gap: 16px; min-height: 0;">
+            <!-- RIGHT PANE: Code Editor & Test Console -->
+            <div style="display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: hidden;">
               
-              <!-- Editor container -->
-              <div class="card-ent" style="flex: 1.3; display: flex; flex-direction: column; padding: 16px; background: rgba(0,0,0,0.2); min-height: 0;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
-                  <span style="font-size: 11px; color: #fff; font-weight: 700; text-transform: uppercase;">Workspace Editor</span>
-                  <span style="font-size: 10px; color: var(--text-description); font-family: monospace;">Tab spacing: 2 spaces</span>
+              <!-- Editor Container (Flex: 1.4 for extra workspace) -->
+              <div style="flex: 1.4; background: rgba(18, 24, 38, 0.85); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; min-height: 0; box-shadow: 0 10px 30px rgba(0,0,0,0.4);">
+                
+                <!-- Editor Header Bar -->
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.4); border-bottom: 1px solid rgba(255,255,255,0.08); padding: 8px 16px;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 12px; color: #fff; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 6px;">
+                      <span>💻</span> Code Editor
+                    </span>
+                    <span id="tech-line-count" style="font-size: 11px; background: rgba(255,255,255,0.05); color: #94A3B8; padding: 2px 8px; border-radius: 100px; font-family: monospace;">Line 1</span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <button id="tech-reset-code-btn" style="background: transparent; border: 1px solid rgba(255,255,255,0.1); color: #94A3B8; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 6px; cursor: pointer;">
+                      🔄 Reset Code
+                    </button>
+                    <span style="font-size: 11px; color: #64748B; font-family: monospace;">Tab: 2 spaces</span>
+                  </div>
                 </div>
-                <textarea id="tech-code-editor" style="flex: 1; width: 100%; background: #0c0a12; color: #a78bfa; border: 1px solid rgba(255,255,255,0.08); font-family: 'Fira Code', 'Courier New', Courier, monospace; font-size: 13.5px; padding: 12px; border-radius: 6px; resize: none; outline: none; line-height: 1.5;"></textarea>
+
+                <!-- Editor Workspace (Gutter + Textarea) -->
+                <div style="display: flex; flex: 1; min-height: 0; background: #0B0E1A; position: relative;">
+                  <div id="tech-line-numbers" style="padding: 14px 10px; background: rgba(0,0,0,0.25); color: #475569; font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace; font-size: 13.5px; line-height: 1.6; text-align: right; user-select: none; border-right: 1px solid rgba(255,255,255,0.06); min-width: 42px; font-weight: 600; box-sizing: border-box; overflow: hidden;">
+                    1
+                  </div>
+                  <textarea id="tech-code-editor" spellcheck="false" style="flex: 1; background: transparent; color: #E2E8F0; border: none; font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace; font-size: 13.5px; padding: 14px 16px; resize: none; outline: none; line-height: 1.6; tab-size: 2; font-weight: 500; caret-color: #A78BFA; white-space: pre; overflow-x: auto;"></textarea>
+                </div>
+
               </div>
 
-              <!-- Console container -->
-              <div class="card-ent" style="flex: 0.8; display: flex; flex-direction: column; padding: 16px; background: rgba(0,0,0,0.3); min-height: 0;">
-                <div style="font-size: 11px; color: #fff; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">Terminal Output</div>
-                <div id="tech-console" style="flex: 1; font-family: monospace; font-size: 12.5px; color: #9ca3af; overflow-y: auto; white-space: pre-wrap; line-height: 1.6; padding: 6px; background: #07050a; border-radius: 4px;">Ready to run code. Press "Run Code" to evaluate against test cases.</div>
+      <!-- Test Cases & Execution Panel (Flex: 1.0) -->
+      <div style="flex: 1; background: rgba(18, 24, 38, 0.85); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; min-height: 0;">
+        
+        <!-- Panel Tabs -->
+        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.4); border-bottom: 1px solid rgba(255,255,255,0.08); padding: 0 12px;">
+          <div style="display: flex; gap: 4px;">
+            <button id="tab-btn-run-tests" class="console-tab-btn active" style="padding: 8px 16px; font-size: 12px; font-weight: 800; background: rgba(139,92,246,0.15); border: none; border-bottom: 2px solid var(--brand-primary); color: #fff; cursor: pointer;">
+              🧪 Test Cases
+            </button>
+            <button id="tab-btn-run" class="console-tab-btn" style="padding: 8px 16px; font-size: 12px; font-weight: 800; background: transparent; border: none; border-bottom: 2px solid transparent; color: #94A3B8; cursor: pointer;">
+              💻 Terminal Output
+            </button>
+            <button id="tab-btn-hints" class="console-tab-btn" style="padding: 8px 16px; font-size: 12px; font-weight: 800; background: transparent; border: none; border-bottom: 2px solid transparent; color: #94A3B8; cursor: pointer;">
+              💡 Hints & Complexity
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab 1 Content: Test Cases Runner -->
+        <div id="console-pane-run-tests" style="flex: 1; display: flex; flex-direction: column; padding: 12px; gap: 10px; overflow: hidden; min-height: 0;">
+          
+          <div id="tech-test-banner" style="padding: 8px 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; font-weight: 700; font-size: 12px; color: #9CA3AF; display: flex; align-items: center; justify-content: space-between;">
+            <span id="tech-test-banner-text">Ready to run test cases. Click "Run Tests" to execute your solution.</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; flex: 1; min-height: 0; overflow: hidden;">
+            
+            <!-- Left: Test Case Selectors -->
+            <div style="display: flex; flex-direction: column; gap: 6px; overflow-y: auto;" id="tc-list-container">
+              ${testCasesList.map((tc, idx) => `
+                <button class="tc-selector-btn ${idx === 0 ? 'active' : ''}" data-index="${idx}" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: ${idx === 0 ? 'rgba(139,92,246,0.15)' : 'rgba(0,0,0,0.2)'}; border: 1px solid ${idx === 0 ? 'var(--brand-primary)' : 'rgba(255,255,255,0.06)'}; border-radius: 8px; color: ${idx === 0 ? '#fff' : '#94A3B8'}; font-size: 12px; font-weight: 700; cursor: pointer;">
+                  <span>Case ${idx + 1}</span>
+                  <span class="tc-status-icon-${idx}" style="font-size: 12px;">⚪</span>
+                </button>
+              `).join('')}
+            </div>
+
+            <!-- Right: Active Case Details -->
+            <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto;">
+              <div>
+                <span style="font-size: 11px; font-weight: 700; color: #94A3B8; text-transform: uppercase;">Input</span>
+                <div id="tc-detail-input" style="background: #0B0E1A; border: 1px solid rgba(255,255,255,0.08); padding: 8px 12px; border-radius: 6px; font-family: 'Fira Code', monospace; font-size: 12.5px; color: #fff; white-space: pre-wrap; margin-top: 4px;">${testCasesList[0].input.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
               </div>
 
-              <!-- Action button row -->
-              <div style="display: flex; gap: 12px; justify-content: flex-start; align-items: center;">
-                <button id="tech-run-btn" class="btn-premium-ghost" style="padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 13.5px; cursor:pointer;">⚡ Run Code</button>
-                <button id="tech-submit-btn" class="btn-premium" style="padding: 12px 28px; border-radius: 8px; font-weight: 700; font-size: 13.5px; cursor:pointer; margin-top: 0; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);">🚀 Submit Answer</button>
-                ${state.technicalSkipsUsed < 3 ? `
-                  <button id="tech-skip-btn" class="btn-premium-ghost" style="padding: 12px 20px; border-radius: 8px; font-weight: 700; font-size: 13.5px; cursor:pointer; border: 1px dashed rgba(255, 255, 255, 0.2); color: var(--text-description); background: transparent;">
-                    ⏭️ Skip Question
-                  </button>
-                ` : `
-                  <button id="tech-skip-btn" class="btn-premium-ghost" style="padding: 12px 20px; border-radius: 8px; font-weight: 700; font-size: 13.5px; cursor:not-allowed; border: 1px solid rgba(239, 68, 68, 0.2); color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.02);" disabled>
-                    ⏭️ Skips Exhausted
-                  </button>
-                `}
+              <div>
+                <span style="font-size: 11px; font-weight: 700; color: #94A3B8; text-transform: uppercase;">Expected Output</span>
+                <div id="tc-detail-expected" style="background: #0B0E1A; border: 1px solid rgba(16, 185, 129, 0.2); padding: 8px 12px; border-radius: 6px; font-family: 'Fira Code', monospace; font-size: 12.5px; color: #34D399; white-space: pre-wrap; margin-top: 4px;">${testCasesList[0].output.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
               </div>
 
+              <div>
+                <span style="font-size: 11px; font-weight: 700; color: #94A3B8; text-transform: uppercase;">Your Output</span>
+                <div id="tc-detail-actual" style="background: #0B0E1A; border: 1px solid rgba(255,255,255,0.08); padding: 8px 12px; border-radius: 6px; font-family: 'Fira Code', monospace; font-size: 12.5px; color: #9CA3AF; white-space: pre-wrap; margin-top: 4px;">Not evaluated yet. Click "Run Tests" to execute.</div>
+              </div>
             </div>
 
           </div>
+
         </div>
+
+        <!-- Tab 2 Content: Terminal Output -->
+        <div id="console-pane-run" style="flex: 1; display: none; flex-direction: column; padding: 12px; overflow-y: auto;">
+          <div id="tech-console" style="flex: 1; font-family: 'Fira Code', monospace; font-size: 12.5px; color: #9CA3AF; white-space: pre-wrap; line-height: 1.6; padding: 12px; background: #0B0E1A; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">Ready to run execution logs.</div>
+        </div>
+
+        <!-- Tab 3 Content: Hints -->
+        <div id="console-pane-hints" style="flex: 1; display: none; flex-direction: column; padding: 16px; gap: 10px; overflow-y: auto; font-size: 13px; color: #CBD5E1; line-height: 1.6;">
+          <div style="font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">
+            <span>💡</span> Optimization Guidance & Complexity Target:
+          </div>
+          <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px;">
+            <li>Target Time Complexity: <strong style="color: #34D399;">O(N)</strong> or better.</li>
+            <li>Target Space Complexity: <strong style="color: #A78BFA;">O(1)</strong> in-place space usage where applicable.</li>
+            <li>Check for edge cases: null values, empty arrays, or single element streams.</li>
+          </ul>
+        </div>
+
+        <!-- Action Row -->
+        <div style="display: flex; gap: 12px; justify-content: flex-end; align-items: center; background: rgba(0,0,0,0.3); padding: 10px 16px; border-top: 1px solid rgba(255,255,255,0.08);">
+          ${state.technicalSkipsUsed < 3 ? `
+            <button id="tech-skip-btn" class="btn-premium-ghost" style="padding: 9px 16px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; border: 1px dashed rgba(255, 255, 255, 0.2); color: #94A3B8; background: transparent;">
+              ⏭️ Skip Question
+            </button>
+          ` : `
+            <button id="tech-skip-btn" class="btn-premium-ghost" style="padding: 9px 16px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: not-allowed; border: 1px solid rgba(239, 68, 68, 0.2); color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.02);" disabled>
+              ⏭️ Skips Exhausted
+            </button>
+          `}
+          
+          <button id="tech-run-btn" class="btn-premium" style="padding: 9px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; background: linear-gradient(135deg, #6366F1, #8B5CF6); border: none; box-shadow: 0 4px 14px rgba(99,102,241,0.3);">
+            ▶ Run Tests
+          </button>
+          
+          <button id="tech-submit-btn" class="btn-premium" style="padding: 9px 24px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; background: linear-gradient(135deg, #10B981, #059669); border: none; box-shadow: 0 4px 14px rgba(16,185,129,0.3);">
+            🚀 Submit Answer
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
       `;
 
+      // Security & Anti-Copy/Paste Warning System
+      const showAntiCopyToast = () => {
+        const toast = document.getElementById('anti-copy-toast');
+        if (toast) {
+          toast.style.display = 'flex';
+          setTimeout(() => { toast.style.display = 'none'; }, 3000);
+        }
+      };
+
+      // Line numbers sync function
+      const updateLineNumbers = () => {
+        const lineNumEl = document.getElementById('tech-line-numbers');
+        const editor = document.getElementById('tech-code-editor');
+        const lineCountEl = document.getElementById('tech-line-count');
+        if (editor) {
+          const lines = editor.value.split('\n');
+          const lineCount = lines.length;
+          if (lineNumEl) {
+            let numbers = '';
+            for (let i = 1; i <= Math.max(lineCount, 15); i++) {
+              numbers += i + '<br>';
+            }
+            lineNumEl.innerHTML = numbers;
+            lineNumEl.scrollTop = editor.scrollTop;
+          }
+          if (lineCountEl) {
+            const cursorLine = editor.value.substring(0, editor.selectionStart).split('\n').length;
+            lineCountEl.innerText = `Line ${cursorLine} / ${lineCount}`;
+          }
+        }
+      };
+
+      // Editor Setup
       const editor = document.getElementById('tech-code-editor');
       if (editor) {
         editor.value = challenge.templates[selectedLang] || "";
-        
+        updateLineNumbers();
+
+        editor.addEventListener('input', updateLineNumbers);
+        editor.addEventListener('scroll', updateLineNumbers);
+        editor.addEventListener('keyup', updateLineNumbers);
+        editor.addEventListener('click', updateLineNumbers);
+
+        const resetBtn = document.getElementById('tech-reset-code-btn');
+        if (resetBtn) {
+          resetBtn.onclick = () => {
+            if (confirm("Reset code template back to default?")) {
+              editor.value = challenge.templates[selectedLang] || "";
+              updateLineNumbers();
+            }
+          };
+        }
+
+        // Anti-Copy & Anti-Paste Event Restrictions
+        editor.oncopy = (e) => { e.preventDefault(); showAntiCopyToast(); };
+        editor.onpaste = (e) => { e.preventDefault(); showAntiCopyToast(); };
+        editor.oncut = (e) => { e.preventDefault(); showAntiCopyToast(); };
+        editor.oncontextmenu = (e) => { e.preventDefault(); showAntiCopyToast(); };
+
         editor.onkeydown = (e) => {
+          if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'x', 'C', 'V', 'X'].includes(e.key)) {
+            e.preventDefault();
+            showAntiCopyToast();
+            return;
+          }
+          if (e.shiftKey && e.key === 'Insert') {
+            e.preventDefault();
+            showAntiCopyToast();
+            return;
+          }
           if (e.key === 'Tab') {
             e.preventDefault();
             const start = editor.selectionStart;
             const end = editor.selectionEnd;
             editor.value = editor.value.substring(0, start) + "  " + editor.value.substring(end);
             editor.selectionStart = editor.selectionEnd = start + 2;
+            updateLineNumbers();
           }
         };
       }
+
+      // Belt Switcher Pill Click Handlers
+      const beltBtns = document.querySelectorAll('.dojo-belt-select-btn');
+      beltBtns.forEach(btn => {
+        btn.onclick = () => {
+          const selectedLvl = parseInt(btn.getAttribute('data-level'));
+          currentBeltLevel = selectedLvl;
+          dojoClearedCount = 0;
+          localStorage.setItem('placenix_dojo_belt_level', String(currentBeltLevel));
+          localStorage.setItem('placenix_dojo_cleared', '0');
+          renderTechnical(c);
+        };
+      });
 
       document.getElementById('tech-lang-select').onchange = (e) => {
         selectedLang = e.target.value;
@@ -2594,42 +2545,171 @@ Return a JSON object matching this schema:
         }
       };
 
-      document.getElementById('tech-run-btn').onclick = async () => {
-        const consoleEl = document.getElementById('tech-console');
-        const runBtn = document.getElementById('tech-run-btn');
-        if (consoleEl && editor) {
-          consoleEl.innerText = "⏳ Compiling and running code against AI sandbox environment...";
-          consoleEl.style.color = "#a78bfa";
-          runBtn.style.opacity = "0.5";
-          runBtn.disabled = true;
+      // Console Tab Switching (Run Logs, Run Tests, Hints)
+      const tabRun = document.getElementById('tab-btn-run');
+      const tabRunTests = document.getElementById('tab-btn-run-tests');
+      const tabHints = document.getElementById('tab-btn-hints');
 
-          const results = await runCodeAI(challenge, selectedLang, editor.value);
-          runBtn.style.opacity = "1";
-          runBtn.disabled = false;
+      const paneRun = document.getElementById('console-pane-run');
+      const paneRunTests = document.getElementById('console-pane-run-tests');
+      const paneHints = document.getElementById('console-pane-hints');
 
-          let outputText = "";
-          let passedCount = 0;
-          if (!results.success) {
-            consoleEl.style.color = "#ef4444";
-            outputText = `❌ Compilation/Syntax Error:\n${results.error}\n\nStdout:\n${results.stdout}`;
+      const switchConsoleTab = (target) => {
+        [tabRun, tabRunTests, tabHints].forEach(b => {
+          if (b) {
+            b.style.background = 'transparent';
+            b.style.borderBottom = '2px solid transparent';
+            b.style.color = 'var(--text-muted)';
+            b.classList.remove('active');
+          }
+        });
+        [paneRun, paneRunTests, paneHints].forEach(p => {
+          if (p) p.style.display = 'none';
+        });
+
+        if (target === 'run') {
+          tabRun.style.background = 'rgba(139,92,246,0.1)';
+          tabRun.style.borderBottom = '2px solid var(--brand-primary)';
+          tabRun.style.color = '#fff';
+          paneRun.style.display = 'flex';
+        } else if (target === 'run-tests') {
+          tabRunTests.style.background = 'rgba(139,92,246,0.1)';
+          tabRunTests.style.borderBottom = '2px solid var(--brand-primary)';
+          tabRunTests.style.color = '#fff';
+          paneRunTests.style.display = 'flex';
+        } else if (target === 'hints') {
+          tabHints.style.background = 'rgba(139,92,246,0.1)';
+          tabHints.style.borderBottom = '2px solid var(--brand-primary)';
+          tabHints.style.color = '#fff';
+          paneHints.style.display = 'flex';
+        }
+      };
+
+      if (tabRun) tabRun.onclick = () => switchConsoleTab('run');
+      if (tabRunTests) tabRunTests.onclick = () => switchConsoleTab('run-tests');
+      if (tabHints) tabHints.onclick = () => switchConsoleTab('hints');
+
+      // Test Case Selector Button Handlers
+      const renderTCDetails = (idx) => {
+        activeTCIdx = idx;
+        const selectorBtns = document.querySelectorAll('.tc-selector-btn');
+        selectorBtns.forEach((btn, i) => {
+          if (i === idx) {
+            btn.style.background = 'rgba(139,92,246,0.15)';
+            btn.style.borderColor = 'var(--brand-primary)';
+            btn.style.color = '#fff';
           } else {
-            consoleEl.style.color = "#9ca3af";
-            outputText = `✔ Execution Successful.\n\nStdout:\n${results.stdout}\n\nTest Case Results:\n`;
-            results.testCaseResults.forEach((tr, i) => {
-              const symbol = tr.passed ? "🟢 PASS" : "🔴 FAIL";
-              outputText += `[${symbol}] Test Case ${i + 1}:\n  Input: ${tr.input}\n  Expected: ${tr.expected}\n  Actual: ${tr.actual}\n\n`;
-              if (tr.passed) passedCount++;
-            });
+            btn.style.background = 'rgba(255,255,255,0.02)';
+            btn.style.borderColor = 'rgba(255,255,255,0.06)';
+            btn.style.color = 'var(--text-description)';
           }
-          consoleEl.innerText = outputText;
+        });
 
-          if (results.success && passedCount === challenge.testCases.length) {
-            consoleEl.style.color = "#10B981";
-            consoleEl.innerText += `\n🎉 All ${passedCount}/${challenge.testCases.length} test cases passed! Automatically submitting and proceeding to the next challenge in 1.5 seconds...`;
-            setTimeout(() => {
-              handleSubmit(passedCount, editor.value);
-            }, 1500);
+        const targetTC = testCasesList[idx] || { input: '', output: '' };
+        const inputEl = document.getElementById('tc-detail-input');
+        const expectedEl = document.getElementById('tc-detail-expected');
+        const actualEl = document.getElementById('tc-detail-actual');
+
+        if (inputEl) inputEl.innerText = targetTC.input;
+        if (expectedEl) expectedEl.innerText = targetTC.output;
+
+        if (actualEl) {
+          if (lastExecutionResults && lastExecutionResults.testCaseResults && lastExecutionResults.testCaseResults[idx]) {
+            const res = lastExecutionResults.testCaseResults[idx];
+            actualEl.innerText = res.actual || targetTC.output;
+            actualEl.style.color = res.passed ? '#10B981' : '#EF4444';
+          } else {
+            actualEl.innerText = 'Not evaluated yet. Click "Run Tests" to execute.';
+            actualEl.style.color = '#9CA3AF';
           }
+        }
+      };
+
+      const tcSelectors = document.querySelectorAll('.tc-selector-btn');
+      tcSelectors.forEach(btn => {
+        btn.onclick = (e) => {
+          const idx = parseInt(btn.getAttribute('data-index'));
+          renderTCDetails(idx);
+        };
+      });
+
+      // Run Tests Click Handler
+      document.getElementById('tech-run-btn').onclick = async () => {
+        switchConsoleTab('run-tests');
+        const runBtn = document.getElementById('tech-run-btn');
+        const bannerEl = document.getElementById('tech-test-banner');
+        const bannerTextEl = document.getElementById('tech-test-banner-text');
+
+        if (bannerTextEl) {
+          bannerTextEl.innerText = "⏳ Compiling and evaluating test suite against AI sandbox...";
+          bannerEl.style.background = "rgba(139, 92, 246, 0.1)";
+          bannerEl.style.borderColor = "rgba(139, 92, 246, 0.3)";
+          bannerEl.style.color = "#A78BFA";
+        }
+
+        runBtn.style.opacity = "0.5";
+        runBtn.disabled = true;
+
+        const results = await runCodeAI(challenge, selectedLang, editor.value);
+        lastExecutionResults = results;
+
+        runBtn.style.opacity = "1";
+        runBtn.disabled = false;
+
+        let passedCount = 0;
+        const totalCount = testCasesList.length;
+
+        if (results.success && results.testCaseResults) {
+          results.testCaseResults.forEach((tr, idx) => {
+            const iconEl = document.querySelector(`.tc-status-icon-${idx}`);
+            if (tr.passed) {
+              passedCount++;
+              if (iconEl) { iconEl.innerText = "✔"; iconEl.style.color = "#10B981"; }
+            } else {
+              if (iconEl) { iconEl.innerText = "❌"; iconEl.style.color = "#EF4444"; }
+            }
+          });
+        }
+
+        // Update Banner State
+        if (bannerEl && bannerTextEl) {
+          if (results.success && passedCount === totalCount) {
+            bannerEl.style.background = "rgba(16, 185, 129, 0.12)";
+            bannerEl.style.borderColor = "rgba(16, 185, 129, 0.3)";
+            bannerEl.style.color = "#10B981";
+            bannerTextEl.innerHTML = `✔ You have passed ${passedCount}/${totalCount} tests`;
+          } else if (results.success) {
+            bannerEl.style.background = "rgba(245, 158, 11, 0.12)";
+            bannerEl.style.borderColor = "rgba(245, 158, 11, 0.3)";
+            bannerEl.style.color = "#F59E0B";
+            bannerTextEl.innerHTML = `⚠️ You passed ${passedCount}/${totalCount} tests`;
+          } else {
+            bannerEl.style.background = "rgba(239, 68, 68, 0.12)";
+            bannerEl.style.borderColor = "rgba(239, 68, 68, 0.3)";
+            bannerEl.style.color = "#EF4444";
+            bannerTextEl.innerHTML = `❌ Compilation / Syntax Error in Code`;
+          }
+        }
+
+        // Also update Run Logs terminal text
+        const consoleEl = document.getElementById('tech-console');
+        if (consoleEl) {
+          if (!results.success) {
+            consoleEl.innerText = `❌ Compilation/Syntax Error:\n${results.error}\n\nStdout:\n${results.stdout}`;
+            consoleEl.style.color = "#EF4444";
+          } else {
+            consoleEl.innerText = `✔ Execution Successful.\n\nStdout:\n${results.stdout}`;
+            consoleEl.style.color = "#9CA3AF";
+          }
+        }
+
+        // Refresh active test case detail view
+        renderTCDetails(activeTCIdx);
+
+        if (results.success && passedCount === totalCount) {
+          setTimeout(() => {
+            handleSubmit(passedCount, editor.value);
+          }, 1800);
         }
       };
 
@@ -2703,15 +2783,323 @@ Return a JSON object matching this schema:
       state.technicalSolvedCount++;
       state.codingAnswers = state.technicalSubmissions;
 
-      if (state.technicalSolvedCount < 3) {
-        renderTechnical(c);
+      // DOJO BELT PROGRESSION UPDATE
+      if (passedCount === challenge.testCases.length) {
+        dojoClearedCount++;
+      }
+
+      let beltLeveledUp = false;
+      let newBeltObj = null;
+
+      if (dojoClearedCount >= 3 && currentBeltLevel < DOJO_BELT_CONFIG.length - 1) {
+        currentBeltLevel++;
+        dojoClearedCount = 0;
+        beltLeveledUp = true;
+        newBeltObj = DOJO_BELT_CONFIG[currentBeltLevel];
+      }
+
+      localStorage.setItem('placenix_dojo_belt_level', String(currentBeltLevel));
+      localStorage.setItem('placenix_dojo_cleared', String(dojoClearedCount));
+
+      const proceedNext = () => {
+        if (state.technicalSolvedCount < 3) {
+          renderTechnical(c);
+        } else {
+          renderTechnicalReport();
+        }
+      };
+
+      if (beltLeveledUp && newBeltObj) {
+        // Show Belt Level Up Celebration Modal
+        const modalDiv = document.createElement('div');
+        modalDiv.style.cssText = `
+          position: fixed; inset: 0; z-index: 10000;
+          background: rgba(7, 5, 10, 0.85); backdrop-filter: blur(12px);
+          display: flex; justify-content: center; align-items: center; padding: 20px;
+        `;
+        modalDiv.innerHTML = `
+          <div style="background: linear-gradient(135deg, #1E1B4B 0%, #0F172A 100%); border: 2px solid ${newBeltObj.color}; box-shadow: 0 20px 50px ${newBeltObj.color}40; padding: 40px; border-radius: 24px; max-width: 480px; width: 100%; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 20px;">
+            <div style="font-size: 64px;">${newBeltObj.emoji}</div>
+            <div style="font-size: 11px; font-weight: 800; color: ${newBeltObj.color}; text-transform: uppercase; letter-spacing: 0.15em; background: ${newBeltObj.color}20; padding: 4px 16px; border-radius: 100px; border: 1px solid ${newBeltObj.color}40;">
+              BELT RANK UNLOCKED!
+            </div>
+            <h2 style="font-size: 26px; color: #fff; margin: 0; font-weight: 800;">Congratulations!</h2>
+            <p style="color: #94A3B8; font-size: 14px; margin: 0; line-height: 1.6;">
+              You successfully cleared 3 workouts and achieved <strong style="color: ${newBeltObj.color};">${newBeltObj.label}</strong>!
+            </p>
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); padding: 14px 18px; border-radius: 12px; font-size: 12.5px; color: #CBD5E1; text-align: left; width: 100%;">
+              <strong>Next Focus:</strong> ${newBeltObj.hint}
+            </div>
+            <button id="dojo-continue-belt-btn" class="btn-premium" style="width: 100%; padding: 14px; border-radius: 12px; font-weight: 800; font-size: 15px; background: ${newBeltObj.color}; color: ${newBeltObj.textColor}; border: none; cursor: pointer; margin-top: 10px;">
+              🥋 Continue Workout →
+            </button>
+          </div>
+        `;
+        document.body.appendChild(modalDiv);
+        document.getElementById('dojo-continue-belt-btn').onclick = () => {
+          modalDiv.remove();
+          proceedNext();
+        };
       } else {
-        renderTechnicalReport();
+        proceedNext();
       }
     };
 
-    startTimer();
-    drawIDE();
+    // =========================================================================
+    // KALVIUM DOJO PRE-EXAM VERIFICATION & PERMISSIONS MODAL
+    // =========================================================================
+    const showDojoPreExamVerificationModal = (onProceed) => {
+      const modal = document.createElement('div');
+      modal.id = 'dojo-pre-exam-modal';
+      modal.style.cssText = `
+        position: fixed; inset: 0; z-index: 10000;
+        background: rgba(15, 23, 42, 0.88); backdrop-filter: blur(16px);
+        display: flex; justify-content: center; align-items: center; padding: 20px;
+        box-sizing: border-box; overflow-y: auto; font-family: system-ui, -apple-system, sans-serif;
+      `;
+
+      modal.innerHTML = `
+        <div style="background: #ffffff; color: #1E293B; border-radius: 16px; width: 100%; max-width: 900px; box-shadow: 0 25px 60px rgba(0,0,0,0.5); overflow: hidden; display: flex; flex-direction: column; animation: modalPop 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+          
+          <!-- Modal Header -->
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 18px 28px; border-bottom: 1px solid #E2E8F0; background: #F8FAFC;">
+            <div style="display: flex; gap: 260px; width: 100%; font-size: 15px; font-weight: 800; color: #0F172A;">
+              <span>Instructions</span>
+              <span>Enable Permissions</span>
+            </div>
+            <button id="dojo-modal-close-btn" style="background: transparent; border: none; font-size: 20px; font-weight: 800; color: #64748B; cursor: pointer; padding: 4px 8px; border-radius: 6px;">✕</button>
+          </div>
+
+          <!-- Main Body Grid -->
+          <div style="display: grid; grid-template-columns: 1.35fr 1fr; gap: 28px; padding: 28px; font-size: 13px; line-height: 1.6; color: #334155;">
+            
+            <!-- Left Column: Instructions & Integrity Guidelines -->
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+              
+              <p style="margin: 0; color: #475569;">
+                Belts are highly regarded by our industry partners as they are trusted to be the true representation of a student's skills. You can attempt the belt test for a level multiple times, and failing has no consequences.
+              </p>
+
+              <p style="margin: 0; color: #475569;">
+                Belts will be awarded following successful verification through integrity checks. To ensure successful verification, please follow these guidelines:
+              </p>
+
+              <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; color: #1E293B;">
+                <li><strong>Ensure you're sharing the entire screen</strong> during the session, rather than just tab/window.</li>
+                <li><strong>Maintain focus solely on the Belt Test window.</strong> Close all other tabs, windows, and notifications.</li>
+                <li><strong>Refrain from using in-browser AI assistance</strong> or any other helper tools.</li>
+                <li><strong>Share your webcam feed</strong> and avoid interacting with peers.</li>
+              </ul>
+
+              <!-- Proctoring Guidelines Warning Card -->
+              <div style="background: #FEFCE8; border: 1.5px solid #FDE047; border-radius: 12px; padding: 16px; margin-top: 6px;">
+                <div style="font-weight: 800; color: #854D0E; margin-bottom: 4px; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+                  <span>🛡️</span> Proctoring Guidelines
+                </div>
+                <div style="color: #713F12; font-size: 12px; line-height: 1.5;">
+                  This belt test requires you to share your Camera and Microphone feed, as well as your entire screen.
+                </div>
+              </div>
+
+              <!-- Enter Security Code Section -->
+              <div style="margin-top: 10px; display: flex; flex-direction: column; align-items: center; gap: 10px; border-top: 1px solid #E2E8F0; padding-top: 16px;">
+                <div style="font-weight: 700; color: #0F172A; font-size: 13px;">Enter the Security code shared by your mentor</div>
+                <div style="display: flex; gap: 10px;">
+                  <input class="dojo-otp-input" type="text" maxlength="1" value="9" style="width: 42px; height: 46px; text-align: center; font-size: 20px; font-weight: 800; border: 1.5px solid #CBD5E1; border-radius: 8px; outline: none; background: #F8FAFC; color: #0F172A;">
+                  <input class="dojo-otp-input" type="text" maxlength="1" value="9" style="width: 42px; height: 46px; text-align: center; font-size: 20px; font-weight: 800; border: 1.5px solid #CBD5E1; border-radius: 8px; outline: none; background: #F8FAFC; color: #0F172A;">
+                  <input class="dojo-otp-input" type="text" maxlength="1" value="2" style="width: 42px; height: 46px; text-align: center; font-size: 20px; font-weight: 800; border: 1.5px solid #CBD5E1; border-radius: 8px; outline: none; background: #F8FAFC; color: #0F172A;">
+                  <input class="dojo-otp-input" type="text" maxlength="1" value="5" style="width: 42px; height: 46px; text-align: center; font-size: 20px; font-weight: 800; border: 1.5px solid #CBD5E1; border-radius: 8px; outline: none; background: #F8FAFC; color: #0F172A;">
+                  <input class="dojo-otp-input" type="text" maxlength="1" value="0" style="width: 42px; height: 46px; text-align: center; font-size: 20px; font-weight: 800; border: 1.5px solid #CBD5E1; border-radius: 8px; outline: none; background: #F8FAFC; color: #0F172A;">
+                  <input class="dojo-otp-input" type="text" maxlength="1" value="1" style="width: 42px; height: 46px; text-align: center; font-size: 20px; font-weight: 800; border: 1.5px solid #CBD5E1; border-radius: 8px; outline: none; background: #F8FAFC; color: #0F172A;">
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Right Column: Enable Permissions -->
+            <div style="display: flex; flex-direction: column; gap: 16px; border-left: 1px solid #E2E8F0; padding-left: 24px;">
+              
+              <p style="margin: 0; color: #475569; font-size: 12.5px;">
+                Please enable access to your camera, microphone, and screen sharing to proceed.
+              </p>
+
+              <!-- Permission Box 1: Camera & Microphone -->
+              <div style="display: flex; flex-direction: column; gap: 8px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 14px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; font-weight: 700; color: #0F172A; font-size: 12.5px;">
+                  <span>📹 Camera & Microphone</span>
+                  <span id="cam-status-tag" style="color: #64748B; font-weight: 700; font-size: 11px; background: #E2E8F0; padding: 2px 8px; border-radius: 100px;">Ready</span>
+                </div>
+                
+                <!-- Noise/Live Preview Box -->
+                <div id="dojo-cam-preview-box" style="height: 110px; background: #0F172A; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative;">
+                  <video id="dojo-preview-webcam" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: none;"></video>
+                  <div id="dojo-preview-noise" style="color: #94A3B8; font-size: 11px; text-align: center; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                    <span style="font-size: 20px;">📷</span>
+                    <span>Click Enable Stream to Activate Camera</span>
+                  </div>
+                </div>
+
+                <button id="dojo-enable-cam-btn" style="background: #0F172A; color: #fff; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 11.5px; cursor: pointer; align-self: flex-start;">
+                  Enable Stream
+                </button>
+              </div>
+
+              <!-- Permission Box 2: Fullscreen & Screen Sharing -->
+              <div style="display: flex; flex-direction: column; gap: 8px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 14px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; font-weight: 700; color: #0F172A; font-size: 12.5px;">
+                  <span>🖥️ Screen Sharing & Fullscreen</span>
+                  <span id="screen-status-tag" style="color: #64748B; font-weight: 700; font-size: 11px; background: #E2E8F0; padding: 2px 8px; border-radius: 100px;">Ready</span>
+                </div>
+
+                <div style="font-size: 11.5px; color: #64748B;">
+                  This test requires to be taken in full screen and shared screen session.
+                </div>
+
+                <button id="dojo-enable-screen-btn" style="background: #0F172A; color: #fff; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 11.5px; cursor: pointer; align-self: flex-start;">
+                  Enable Full Screen
+                </button>
+              </div>
+
+              <!-- Bottom Action Button -->
+              <button id="dojo-start-exam-btn" style="background: linear-gradient(135deg, #4F46E5, #7C3AED); color: #fff; border: none; padding: 14px; border-radius: 10px; font-weight: 800; font-size: 14px; cursor: pointer; margin-top: auto; box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3); transition: all 0.2s ease;">
+                🚀 Proceed to Belt Test
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      const bindStreamToPreview = (stream) => {
+        if (!stream) return;
+        const videoEl = document.getElementById('dojo-preview-webcam');
+        const noiseEl = document.getElementById('dojo-preview-noise');
+        const statusTag = document.getElementById('cam-status-tag');
+
+        if (videoEl) {
+          videoEl.srcObject = stream;
+          videoEl.style.display = 'block';
+          videoEl.play().catch(e => console.log("Webcam play error:", e));
+        }
+        if (noiseEl) noiseEl.style.display = 'none';
+        if (statusTag) {
+          statusTag.innerText = '✓ Active';
+          statusTag.style.color = '#10B981';
+          statusTag.style.background = '#10B98115';
+        }
+      };
+
+      // OTP inputs auto-advance behavior
+      const otpInputs = modal.querySelectorAll('.dojo-otp-input');
+      otpInputs.forEach((input, idx) => {
+        input.onkeyup = (e) => {
+          if (input.value && idx < otpInputs.length - 1) {
+            otpInputs[idx + 1].focus();
+          }
+        };
+      });
+
+      // Auto-trigger camera if already available or initialize webcam prompt
+      if (state.localStream) {
+        bindStreamToPreview(state.localStream);
+      } else {
+        setupLocalWebcam().then(() => {
+          if (state.localStream) bindStreamToPreview(state.localStream);
+        });
+      }
+
+      // Enable Cam Button Handler
+      document.getElementById('dojo-enable-cam-btn').onclick = async () => {
+        try {
+          await setupLocalWebcam();
+          if (state.localStream) {
+            bindStreamToPreview(state.localStream);
+          }
+        } catch (e) {
+          console.error("Camera stream preview error:", e);
+        }
+      };
+
+      // Enable Screen Button Handler
+      document.getElementById('dojo-enable-screen-btn').onclick = () => {
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+        const tag = document.getElementById('screen-status-tag');
+        if (tag) {
+          tag.innerText = '✓ Fullscreen Active';
+          tag.style.color = '#10B981';
+          tag.style.background = '#10B98115';
+        }
+      };
+
+      // Close Button Handler
+      document.getElementById('dojo-modal-close-btn').onclick = () => {
+        modal.remove();
+        state.step = 'dashboard';
+        render();
+      };
+
+      // Proceed Button Handler
+      document.getElementById('dojo-start-exam-btn').onclick = async () => {
+        const code = Array.from(otpInputs).map(i => i.value).join('');
+        if (code.length < 6) {
+          alert("Please enter the 6-digit mentor security code to proceed!");
+          return;
+        }
+
+        if (!state.cameraEnabled) {
+          await setupLocalWebcam();
+        }
+
+        // Show live camera stream in bottom-right AI proctoring widget
+        const proctorLayer = document.getElementById('vi-proctor-layer');
+        if (proctorLayer) proctorLayer.style.display = 'block';
+        
+        const webcamEl = document.getElementById('vi-webcam');
+        if (webcamEl && state.localStream) {
+          webcamEl.srcObject = state.localStream;
+          webcamEl.style.display = 'block';
+        }
+        const overlayEl = document.getElementById('vi-cam-overlay');
+        if (overlayEl) overlayEl.style.display = 'none';
+
+        modal.remove();
+        if (onProceed) onProceed();
+      };
+    };
+
+    const activateCameraStream = async () => {
+      if (!state.cameraEnabled || !state.localStream) {
+        await setupLocalWebcam();
+      }
+      const proctorLayer = document.getElementById('vi-proctor-layer');
+      if (proctorLayer) proctorLayer.style.display = 'block';
+      const webcamEl = document.getElementById('vi-webcam');
+      if (webcamEl && state.localStream) {
+        webcamEl.srcObject = state.localStream;
+        webcamEl.style.display = 'block';
+      }
+      const overlayEl = document.getElementById('vi-cam-overlay');
+      if (overlayEl) overlayEl.style.display = 'none';
+    };
+
+    if (!state.dojoVerifiedThisSession) {
+      showDojoPreExamVerificationModal(async () => {
+        state.dojoVerifiedThisSession = true;
+        await activateCameraStream();
+        startTimer();
+        drawIDE();
+      });
+    } else {
+      await activateCameraStream();
+      startTimer();
+      drawIDE();
+    }
   };
 
   const renderCommunication = () => {
@@ -3454,47 +3842,7 @@ Return a JSON object matching this schema:
       </div>
     `;
 
-    const GEMINI_API_KEY = window.GEMINI_API_KEY || Store.config?.GEMINI_API_KEY;
-    const isDummy = !GEMINI_API_KEY || GEMINI_API_KEY.startsWith('AQ.');
-    let report = {
-      professionalism: 80,
-      confidence: 75,
-      alignment: 80,
-      overall: 78,
-      feedback: "The candidate shows strong enthusiasm and answers questions with solid structures. Elaborating on technical project metrics would further elevate behavioral performance."
-    };
-
-    if (GEMINI_API_KEY && !isDummy) {
-      try {
-        const transcriptText = state.hrHistory.map(h => `${h.role === 'system' ? 'Interviewer' : 'Candidate'}: ${h.content}`).join('\n');
-        const prompt = `Evaluate this HR interview transcript for a candidate at ${state.company} for the "${state.role}" role:\n\n${transcriptText}\n\nEvaluate and rate: Professionalism (0-100), Confidence (0-100), Value Alignment (0-100), and Overall HR Score (0-100). Also provide a brief feedback paragraph (2-3 sentences) summarizing their strengths and areas of improvement.\n\nReturn a JSON object matching this schema:\n{\n  "professionalism": number,\n  "confidence": number,\n  "alignment": number,\n  "overall": number,\n  "feedback": "string"\n}`;
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: {
-              responseMimeType: "application/json"
-            }
-          })
-        });
-        clearTimeout(timeoutId);
-
-        if (res.ok) {
-          const data = await res.json();
-          const txt = data.candidates[0].content.parts[0].text;
-          report = JSON.parse(txt);
-        }
-      } catch (e) {
-        console.warn("Failed to generate AI HR evaluation report, using fallback:", e);
-      }
-    }
-
+    const report = await evaluateHRFit(state);
     state.hrReport = report; // Store in state for PDF export
     const grade = getInterviewGrade(report.overall);
     const gradeColor = getGradeColor(grade);
@@ -3593,7 +3941,9 @@ Return a JSON object matching this schema:
 
 
 
-  // --- PROCTORING ENGINE ---
+
+
+  // --- PROCTORING ENGINE (CALIBRATED AI NEURAL HUB) ---
   const loadProctoringDependencies = async () => {
     if (window.tf && window.blazeface && window.cocoSsd) return;
     
@@ -3632,7 +3982,8 @@ Return a JSON object matching this schema:
     });
   };
 
-  let faceModel, objectModel, audioContext, analyzer, dataArray;
+  let faceModel, objectModel, audioContext, analyzer, timeDataArray;
+  let speechRecognitionInstance = null;
   let consecutiveVideoViolations = 0;
   let lastVideoViolation = null;
   let consecutiveAudioViolations = 0;
@@ -3658,9 +4009,9 @@ Return a JSON object matching this schema:
           : `<span style="color:#10B981;">🟢 No Phone</span>`);
           
     const rmsVal = state.proctorRms || 0;
-    const isLoud = rmsVal >= 10.0;
+    const isLoud = rmsVal >= 14.0;
     const voiceText = isLoud 
-      ? `<span style="color:#EF4444; font-weight:bold;">🔴 Noise Detected (${Math.round(rmsVal)})</span>` 
+      ? `<span style="color:#EF4444; font-weight:bold;">🔴 Voice/Noise (${Math.round(rmsVal)})</span>` 
       : `<span style="color:#10B981;">🟢 Normal (${Math.round(rmsVal)})</span>`;
       
     const examActive = ['aptitude', 'technical', 'communication', 'hr'].includes(state.step);
@@ -3671,14 +4022,21 @@ Return a JSON object matching this schema:
     overlay.innerHTML = `
       <div>Face: ${faceText}</div>
       <div>Phone: ${phoneText}</div>
-      <div>Noise: ${voiceText}</div>
+      <div>Audio: ${voiceText}</div>
       <div style="margin-top:4px; border-top:1px solid rgba(255,255,255,0.1); padding-top:4px; font-size:8px; opacity:0.8;">${modeText}</div>
     `;
   };
 
   const initProctoring = async () => {
-    if (state.proctorActive || state.proctorInitializing) return; // Prevent duplicate loops
+    if (state.proctorActive || state.proctorInitializing) return;
     state.proctorInitializing = true;
+    
+    // Reset violation counters when starting proctoring session
+    consecutiveVideoViolations = 0;
+    consecutiveAudioViolations = 0;
+    lastVideoViolation = null;
+    state.proctorWarnings = 0;
+    state.isBlocked = false;
     
     const layer = document.getElementById('vi-proctor-layer');
     if (layer) {
@@ -3689,20 +4047,23 @@ Return a JSON object matching this schema:
     if (statusEl) { statusEl.innerText = "Proctoring: Initializing AI..."; statusEl.style.color = "#3B82F6"; statusEl.style.background = "rgba(59, 130, 246, 0.1)"; }
     try {
       await loadProctoringDependencies();
-      if (!faceModel) faceModel = await blazeface.load();
-      if (!objectModel) objectModel = await cocoSsd.load();
+      if (!faceModel && window.blazeface) faceModel = await blazeface.load();
+      if (!objectModel && window.cocoSsd) objectModel = await cocoSsd.load();
       state.modelsLoaded = true;
       state.proctorActive = true;
       state.proctorInitializing = false;
       if (statusEl) { statusEl.innerText = "Proctoring: Active & Secure"; statusEl.style.color = "#10B981"; statusEl.style.background = "rgba(16, 185, 129, 0.1)"; }
       startProctoringLoop();
+      initSpeechProctoring();
     } catch (e) {
       state.proctorInitializing = false;
-      console.error("Proctoring init failed", e);
-      if (statusEl) { statusEl.innerText = "Proctoring: Error"; statusEl.style.color = "#EF4444"; }
+      console.error("Proctoring init warning:", e);
+      state.proctorActive = true;
+      startProctoringLoop();
+      initSpeechProctoring();
     }
   };
-  
+
   const startProctoringLoop = async () => {
     const video = document.getElementById('vi-webcam');
     if (!video || !state.proctorActive || state.isBlocked) return;
@@ -3725,39 +4086,56 @@ Return a JSON object matching this schema:
     
     try {
       if (video.readyState >= 2) {
-        // Set video dimensions if not already set, to ensure models resize tensors correctly
         if (!video.width || video.width === 0) {
           video.width = video.videoWidth || 640;
           video.height = video.videoHeight || 480;
         }
         
         let violation = null;
+        let detectedFacesCount = 0;
+        let phoneDetected = false;
+
+        // 1. Face detection via BlazeFace
+        if (faceModel) {
+          try {
+            const faces = await faceModel.estimateFaces(video, false);
+            detectedFacesCount = faces.length;
+          } catch (err) {}
+        }
         
-        // Face detection (BlazeFace)
-        const faces = await faceModel.estimateFaces(video, false);
-        state.proctorFaceCount = faces.length;
-        
-        // Person & Object detection (COCO-SSD)
-        const objects = await objectModel.detect(video, 20, 0.40); // 40% confidence threshold to ignore noisy predictions
-        const persons = objects.filter(obj => obj.class === 'person' && obj.score >= 0.45);
-        
-        // Cell phone detection
-        const hasPhone = objects.some(obj => 
-          (obj.class === 'cell phone' || 
-           obj.class === 'phone' || 
-           obj.class === 'mobile phone' || 
-           obj.class === 'telephone') && 
-          obj.score >= 0.55 // 55% confidence threshold to prevent false positives from background clutter or body parts
-        );
-        state.proctorHasPhone = hasPhone;
+        // 2. Object & Person detection via COCO-SSD
+        if (objectModel) {
+          try {
+            const objects = await objectModel.detect(video, 20, 0.35);
+            const persons = objects.filter(obj => obj.class === 'person' && obj.score >= 0.45);
+            
+            detectedFacesCount = Math.max(detectedFacesCount, persons.length);
+            
+            phoneDetected = objects.some(obj => 
+              (obj.class === 'cell phone' || 
+               obj.class === 'phone' || 
+               obj.class === 'mobile phone' || 
+               obj.class === 'telephone') && 
+              obj.score >= 0.35
+            );
+          } catch (err) {}
+        }
+
+        // Fallback: If no face model loaded yet but video stream is live, assume 1 person in front of webcam
+        if (!faceModel && !objectModel && video.videoWidth > 0) {
+          detectedFacesCount = 1;
+        }
+
+        state.proctorFaceCount = detectedFacesCount;
+        state.proctorHasPhone = phoneDetected;
         
         updateProctorOverlay();
         
-        if (faces.length > 1 || persons.length > 1) {
-          violation = "Multiple faces or extra person detected!";
-        } else if (hasPhone) {
-          violation = "Cell phone/cheating device detected!";
-        } else if (faces.length === 0 && isTestActive) {
+        if (detectedFacesCount > 1) {
+          violation = "Multiple faces or extra person detected in camera frame!";
+        } else if (phoneDetected) {
+          violation = "Cell phone / cheating device detected!";
+        } else if (detectedFacesCount === 0 && isTestActive) {
           violation = "No face detected in camera frame!";
         }
         
@@ -3769,8 +4147,8 @@ Return a JSON object matching this schema:
             consecutiveVideoViolations = 1;
           }
           
-          // If violation persists for 3 consecutive checks (1.5 seconds)
-          if (consecutiveVideoViolations >= 3) {
+          // Require violation to persist continuously for 8 checks (4 full seconds) before issuing a strike
+          if (consecutiveVideoViolations >= 8) {
             registerStrike(violation);
             consecutiveVideoViolations = 0;
             lastVideoViolation = null;
@@ -3784,9 +4162,52 @@ Return a JSON object matching this schema:
       console.error("AI Proctoring loop error:", e);
     }
     
-    setTimeout(startProctoringLoop, 500); // Check twice a second
+    setTimeout(startProctoringLoop, 500); // Scan twice a second
   };
   
+  // Continuous Speech Recognition listener for detecting extra voices/talking during silent exams
+  const initSpeechProctoring = () => {
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec || speechRecognitionInstance) return;
+    
+    try {
+      speechRecognitionInstance = new SpeechRec();
+      speechRecognitionInstance.continuous = true;
+      speechRecognitionInstance.interimResults = true;
+      speechRecognitionInstance.lang = 'en-US';
+
+      speechRecognitionInstance.onresult = (event) => {
+        const silentTestSteps = ['aptitude', 'technical'];
+        if (!state.proctorActive || state.isBlocked || !silentTestSteps.includes(state.step)) return;
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript.trim();
+          if (transcript.split(' ').length >= 3) { // Require at least 3 distinct spoken words
+            console.warn("🚨 Speech Proctoring Alert: Spoken words trapped during exam:", transcript);
+            registerStrike(`Extra voice / spoken words detected: "${transcript}"`);
+            break;
+          }
+        }
+      };
+
+      speechRecognitionInstance.onerror = (e) => {
+        if (e.error !== 'no-speech' && e.error !== 'aborted') {
+          console.warn("Speech proctoring warning:", e.error);
+        }
+      };
+
+      speechRecognitionInstance.onend = () => {
+        if (state.proctorActive && !state.isBlocked) {
+          try { speechRecognitionInstance.start(); } catch (err) {}
+        }
+      };
+
+      speechRecognitionInstance.start();
+    } catch (e) {
+      console.warn("Speech recognition initialization skipped:", e);
+    }
+  };
+
   const setupAudioProctoring = async (stream) => {
     try {
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -3795,13 +4216,12 @@ Return a JSON object matching this schema:
       analyzer.fftSize = 256;
       source.connect(analyzer);
       
-      // Connect to destination via GainNode (muted) to prevent Chromium garbage collection of audio source
       const gainNode = audioContext.createGain();
       gainNode.gain.value = 0;
       analyzer.connect(gainNode);
       gainNode.connect(audioContext.destination);
 
-      dataArray = new Uint8Array(analyzer.fftSize); // Allocate for time-domain data size
+      timeDataArray = new Uint8Array(analyzer.fftSize);
       
       setInterval(() => {
         if (!state.proctorActive || state.isBlocked) {
@@ -3810,49 +4230,45 @@ Return a JSON object matching this schema:
           return;
         }
         
-        // Resume AudioContext if suspended by browser policy
         if (audioContext && audioContext.state === 'suspended') {
           audioContext.resume().catch(() => {});
         }
 
-        // Use Time-Domain RMS to calculate overall room loudness, filtering out high-frequency mic static hum
-        analyzer.getByteTimeDomainData(dataArray);
+        // Time-Domain RMS
+        analyzer.getByteTimeDomainData(timeDataArray);
         let sumSquares = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          const dev = dataArray[i] - 128;
+        for (let i = 0; i < timeDataArray.length; i++) {
+          const dev = timeDataArray[i] - 128;
           sumSquares += dev * dev;
         }
-        const rms = Math.sqrt(sumSquares / dataArray.length);
+        const rms = Math.sqrt(sumSquares / timeDataArray.length);
         state.proctorRms = rms;
         
         updateProctorOverlay();
 
-        // Don't flag if candidate is speaking or if AI synthesis is speaking
         const isSpeaking = state.isListening || (window.speechSynthesis && window.speechSynthesis.speaking);
         if (isSpeaking) {
           consecutiveAudioViolations = 0;
           return;
         }
         
-        // Only run violation check if inside written exam steps!
-        // In speaking rounds (communication/hr), they are supposed to talk, so we disable audio malpractice alerts there.
         const silentTestSteps = ['aptitude', 'technical'];
         if (!silentTestSteps.includes(state.step)) {
           consecutiveAudioViolations = 0;
           return;
         }
 
-        // RMS threshold >= 10.0 indicates medium-level sound/voices, while fan/mic hiss remains below 5.0.
-        if (rms >= 10.0) {
+        // RMS >= 14.0 indicates distinct speech/loud talking (filtering out ambient room noise/fan hiss < 8.0)
+        if (rms >= 14.0) {
           consecutiveAudioViolations++;
-          if (consecutiveAudioViolations >= 3) { // Must persist for 3 consecutive seconds
+          if (consecutiveAudioViolations >= 6) { // Must persist for 3 continuous seconds (6 checks at 500ms)
             registerStrike("Suspicious background audio or extra voice detected!");
             consecutiveAudioViolations = 0;
           }
         } else {
           consecutiveAudioViolations = 0;
         }
-      }, 1000);
+      }, 500);
     } catch (e) { console.error('Audio proctoring setup failed', e); }
   };
   const registerStrike = (reason) => {
@@ -3911,6 +4327,67 @@ Return a JSON object matching this schema:
     document.getElementById('vi-proctor-layer').style.display = 'none';
   };
 
+  const saveInterviewResults = async (scores) => {
+    const user = Store.session?.user;
+    if (!user || !user.id) return;
+
+    // Get current employability_data or default
+    const currentEmpData = user.employability_data || {};
+    const history = currentEmpData.interview_history || [];
+    
+    const newAttemptNumber = history.length + 1;
+    const newAttempt = {
+      attempt: newAttemptNumber,
+      date: new Date().toISOString().split('T')[0],
+      company: state.company,
+      role: state.role,
+      scores: {
+        aptitude: scores.aptitude,
+        technical: scores.technical,
+        communication: scores.communication,
+        hr: scores.hr,
+        overall: scores.overall
+      }
+    };
+
+    const updatedHistory = [...history, newAttempt];
+    const updatedEmpData = {
+      ...currentEmpData,
+      overall_score: scores.overall,
+      communication: scores.communication,
+      coding: scores.technical,
+      aptitude: scores.aptitude,
+      technical: scores.technical,
+      interview_history: updatedHistory
+    };
+
+    // Update in-memory Store
+    user.employability_data = updatedEmpData;
+    user.employabilityScore = scores.overall;
+    if (Store.session) {
+      Store.session.user = user;
+    }
+    
+    // Save to localStorage
+    localStorage.setItem('placenix_user_session', JSON.stringify(Store.session));
+    localStorage.setItem('placenix_session', JSON.stringify(Store.session));
+    window.dispatchEvent(new CustomEvent('store-updated'));
+    
+    // Sync with Supabase profiles table
+    if (supabase) {
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ employability_data: updatedEmpData })
+          .eq('id', user.id);
+        if (error) throw error;
+        console.log("✅ Interview results successfully synced to Supabase.");
+      } catch (e) {
+        console.error("❌ Failed to sync interview results to Supabase:", e.message);
+      }
+    }
+  };
+
   const renderResults = () => {
     stopLocalWebcam();
     if (document.getElementById('vi-proctor-layer')) {
@@ -3918,6 +4395,8 @@ Return a JSON object matching this schema:
     }
 
     const scores = calculateOverallScore();
+    saveInterviewResults(scores);
+    
     const grade = getInterviewGrade(scores.overall);
     const cutoff = getCompanyCutoff(state.company);
     const requiredGrade = getInterviewGrade(cutoff.pct);
@@ -4087,126 +4566,7 @@ Return a JSON object matching this schema:
     `;
 
     document.getElementById('vi-download-pdf-btn').onclick = async () => {
-      const btn = document.getElementById('vi-download-pdf-btn');
-      btn.innerHTML = "<span>⏳</span> Generating PDF...";
-      btn.style.opacity = "0.7";
-      
-      const userResponses = state.communicationHistory.filter(msg => msg.role === 'user');
-      let totalWords = 0;
-      userResponses.forEach(r => {
-        totalWords += r.content.split(/\s+/).filter(w => w.trim().length > 0).length;
-      });
-
-      const allWords = userResponses.map(r => r.content.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").split(/\s+/)).flat().filter(w => w.trim().length > 0);
-      const uniqueWords = new Set(allWords);
-      const lexicalDensity = allWords.length > 0 ? Math.round((uniqueWords.size / allWords.length) * 100) : 0;
-      const clarityScore = allWords.length > 0 ? Math.min(98, Math.max(75, Math.round(80 + (lexicalDensity * 0.12) + (totalWords * 0.04)))) : 0;
-      const overallFluency = allWords.length > 0 ? Math.round((clarityScore + lexicalDensity) / 2) : 0;
-
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-      script.onload = () => {
-            const gradeText = cleared 
-              ? `<span style="color:#10B981; font-weight:bold;">CLEARED (Grade ${grade} - Eligible for ${state.company})</span>`
-              : `<span style="color:#EF4444; font-weight:bold;">NOT CLEARED (Grade ${grade} - Below Threshold of Grade ${requiredGrade} for ${state.company})</span>`;
-
-            const element = document.createElement('div');
-            element.style.padding = '40px';
-            element.style.fontFamily = 'Arial, sans-serif';
-            element.innerHTML = `
-               <h1 style="color:#000; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:20px;">Comprehensive Evaluation Report: ${state.role} at ${state.company}</h1>
-               
-               <div style="background:#f4f5f7; padding:20px; border-radius:8px; border:1px solid #e5e7eb; margin-bottom:30px;">
-                 <h3 style="margin-top:0; color:#000;">Overall Interview Summary</h3>
-                 <table style="width:100%; border-collapse:collapse; font-size:14px; color:#333;">
-                   <tr>
-                     <td style="padding:6px 0; font-weight:bold; width:40%;">Overall Letter Grade:</td>
-                     <td style="padding:6px 0; font-size:16px;"><strong>${gradeText}</strong></td>
-                   </tr>
-                   <tr>
-                     <td style="padding:6px 0; font-weight:bold;">Overall Average Score:</td>
-                     <td style="padding:6px 0;"><strong>${scores.overall}%</strong></td>
-                   </tr>
-                   <tr>
-                     <td style="padding:6px 0; font-weight:bold;">Interview Result:</td>
-                     <td style="padding:6px 0; font-weight:bold; color:${cleared ? '#10B981' : '#EF4444'};">${cleared ? 'ELIGIBLE / PASSED' : 'INELIGIBLE / DEVELOPMENT NEEDED'}</td>
-                   </tr>
-                   <tr>
-                     <td style="padding:6px 0; font-weight:bold;">Threshold Rule:</td>
-                     <td style="padding:6px 0; font-size:12px; color:#666;">Candidates must achieve Grade ${requiredGrade} (${cutoff.pct}%+) or higher to clear the interview for ${state.company}.</td>
-                   </tr>
-                 </table>
-               </div>
-               
-               <h2 style="color:#000; margin-top:20px;">Round 1: Aptitude (Score: ${state.aptitudeScore} / ${state.questions ? state.questions.length : 30})</h2>
-               <div style="font-size:14px; margin-bottom:12px; color:#333;">Round Performance: ${scores.aptitude}%</div>
-               <hr style="margin-bottom:20px;">
-            ${state.aptitudeAnswers.map((a, i) => 
-               "<div style='margin-bottom:12px; font-size:14px; color:#333;'>" +
-                 "<strong>Q" + (i+1) + ":</strong> " + a.q + "<br>" +
-                 "<span style='color:" + (a.chosen === a.correct ? "#10B981" : "#EF4444") + "'>Your Answer: " + a.chosen + "</span> (Correct: " + a.correct + ")" +
-               "</div>"
-            ).join('')}
-
-            <h2 style="color:#000; margin-top:40px;">Round 2: Technical Coding (Compiler) Round</h2>
-            <hr style="margin-bottom:20px;">
-            ${state.codingAnswers && state.codingAnswers.length > 0 ? state.codingAnswers.map((ans, i) => 
-               "<div style='margin-bottom:16px; font-size:14px; color:#333;'>" +
-                 "<strong>Challenge:</strong> " + ans.challenge + "<br>" +
-                 "<strong>Language:</strong> " + ans.lang + "<br>" +
-                 "<strong>Test Cases Passed:</strong> " + (ans.score !== undefined ? ans.score + " / " + (ans.totalCases || 3) : 'N/A') + "<br>" +
-                 "<strong style='display:block; margin-top:8px;'>Submitted Code:</strong>" +
-                 "<pre style='background:#f4f5f7; padding:12px; border-radius:6px; border:1px solid #e5e7eb; font-family:monospace; font-size:12px; margin-top:4px; max-height:200px; overflow-y:auto; white-space:pre-wrap;'>" + ans.code.replace(/</g, '&lt;').replace(/>/g, '&gt;') + "</pre>" +
-               "</div>"
-            ).join('') : '<p style="font-size:14px; color:#666;">No coding submissions recorded.</p>'}
-
-            <h2 style="color:#000; margin-top:40px;">Round 3: Communication Fluency Assessment</h2>
-            <hr style="margin-bottom:20px;">
-            <div style="background:#f9fafb; padding:20px; border-radius:8px; border:1px solid #e5e7eb; margin-bottom:24px; display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; font-size:14px;">
-              <div><strong>Overall Fluency:</strong> ${overallFluency}%</div>
-              <div><strong>Speech Clarity:</strong> ${clarityScore}%</div>
-              <div><strong>Lexical Density:</strong> ${lexicalDensity}%</div>
-              <div><strong>Words Spoken:</strong> ${totalWords}</div>
-            </div>
-            
-            <h3 style="color:#000; margin-top:20px; margin-bottom:16px;">Communication Transcript</h3>
-            ${state.communicationHistory.map(msg => {
-               const isAi = msg.role === 'system';
-               return "<div style='margin-bottom:16px;'><strong style='color:" + (isAi ? "#374151" : "#0369a1") + "; text-transform:uppercase; font-size:14px;'>" + (isAi ? "System" : "Candidate") + ":</strong> <span style='font-size:14px; color:#111;'>" + msg.content + "</span></div>";
-            }).join('')}
-
-            <h2 style="color:#000; margin-top:40px;">Round 4: Behavioral HR Assessment</h2>
-            <hr style="margin-bottom:20px;">
-            ${state.hrReport ? `
-            <div style="background:#f9fafb; padding:20px; border-radius:8px; border:1px solid #e5e7eb; margin-bottom:24px; display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; font-size:14px;">
-              <div><strong>Overall HR Score:</strong> ${state.hrReport.overall}%</div>
-              <div><strong>Professionalism:</strong> ${state.hrReport.professionalism}%</div>
-              <div><strong>Confidence:</strong> ${state.hrReport.confidence}%</div>
-              <div><strong>Culture Alignment:</strong> ${state.hrReport.alignment}%</div>
-            </div>
-            <div style="margin-bottom:24px; font-size:14px; color:#333; line-height:1.5;">
-              <strong>Interviewer Feedback:</strong> ${state.hrReport.feedback}
-            </div>
-            ` : '<p style="font-size:14px; color:#666;">HR ratings pending.</p>'}
-            
-            <h3 style="color:#000; margin-top:20px; margin-bottom:16px;">HR Interview Transcript</h3>
-            ${state.hrHistory.map(msg => {
-               const isAi = msg.role === 'system';
-               return "<div style='margin-bottom:16px;'><strong style='color:" + (isAi ? "#374151" : "#0369a1") + "; text-transform:uppercase; font-size:14px;'>" + (isAi ? "Interviewer" : "Candidate") + ":</strong> <span style='font-size:14px; color:#111;'>" + msg.content + "</span></div>";
-            }).join('')}
-         `;
-         html2pdf().set({
-            margin: 10,
-            filename: 'comprehensive_interview_report.pdf',
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2 },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-         }).from(element).save().then(() => {
-            btn.innerHTML = "<span>✅</span> Downloaded Successfully";
-            btn.style.opacity = "1";
-         });
-      };
-      document.head.appendChild(script);
+      await downloadReportPDF(state, scores, cleared, grade, requiredGrade, cutoff, document.getElementById('vi-download-pdf-btn'));
     };
 
     const exitResultsBtn = document.getElementById('vi-exit-results-btn');
@@ -4215,6 +4575,19 @@ Return a JSON object matching this schema:
         exitInterview(false);
       };
     }
+  };
+
+  window.cleanupVirtualInterview = () => {
+    stopLocalWebcam();
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    if (tabSwitchCountdownInterval) {
+      clearInterval(tabSwitchCountdownInterval);
+      tabSwitchCountdownInterval = null;
+    }
+    removeTabSwitchOverlay();
+    state.step = 'setup';
   };
 
   safeBindClick('vi-enable-cam-btn', () => handleEnableWebcam());

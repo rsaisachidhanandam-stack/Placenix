@@ -2,23 +2,13 @@
 // PLACENIX — CENTRALIZED INTELLIGENCE STORE (v2.6)
 // ============================================================
 
-if (!window.GEMINI_API_KEY) {
-  window.GEMINI_API_KEY = 'AQ.PLACEHOLDER';
-}
+
 
 const Store = {
   // ── Current session ───────────────────────────────────────
   session: {
-    role: 'tpo', 
-    user: {
-      id: 'u001',
-      name: 'shree V', // Updated from screenshot
-      email: 'admin@placenix.ai',
-      avatar: 'SV',
-      department: 'Placements & Training',
-      institution: 'Placenix Institutional Node', // Default
-      sessionYear: '2024-25',
-    }
+    role: 'guest',
+    user: null
   },
 
   // ── Core Data Node (Dynamic) ───────────────────────────────
@@ -69,7 +59,14 @@ const Store = {
       monthlyPlacements: (() => {
         const counts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; // Jul, Aug, Sep, Oct, Nov, Dec, Jan, Feb, Mar, Apr, May, Jun
         placedStudents.forEach((st, idx) => {
-          const mIdx = (idx * 2 + 3) % 12; // Dynamic spread
+          let mIdx = (idx * 2 + 3) % 12; // Deterministic fallback spread
+          if (st.placedDate) {
+            const date = new Date(st.placedDate);
+            if (!isNaN(date.getTime())) {
+              const month = date.getMonth(); // 0-11
+              mIdx = (month - 6 + 12) % 12; // Map Jul (6) to 0, Jan (0) to 6
+            }
+          }
           counts[mIdx]++;
         });
         return counts;
@@ -84,6 +81,7 @@ const Store = {
   },
 
   notifications: [],
+  sharedResources: [],
   queries: [],
   slotAllocations: [],
 
@@ -117,21 +115,7 @@ export function healData() {
         return;
       }
 
-      const cleanName = lowerName.replace(/[^a-z0-9]/g, '');
-      if (cleanName === 'srithikas' || cleanName === 'srithikans') {
-        if (student.name !== 'srithikan s') {
-          student.name = 'srithikan s';
-          studentChanged = true;
-        }
-        if (student.id !== '58ad3eee-0f28-4b73-bc81-2b234df9aeab') {
-          student.id = '58ad3eee-0f28-4b73-bc81-2b234df9aeab';
-          studentChanged = true;
-        }
-        if (student.company !== 'TCS') {
-          student.company = 'TCS';
-          studentChanged = true;
-        }
-      }
+
 
       const idStr = String(student.id || '');
       const normalizedName = (student.name || '').toLowerCase().trim();
@@ -140,6 +124,8 @@ export function healData() {
       if (!seenIds.has(idStr) && !seenNames.has(normalizedName)) {
         seenIds.add(idStr);
         seenNames.add(normalizedName);
+        if (!student.dept) student.dept = 'CSE';
+        if (!student.status) student.status = 'Applied';
         uniqueStudents.push(student);
       } else {
         studentChanged = true;
@@ -152,15 +138,24 @@ export function healData() {
     }
   }
 
-  // 2. Also dynamically self-heal the active session name for srithika s / srithikan s
+  // 2. Also dynamically self-heal active session details & auto-calculate semester
   if (Store.session && Store.session.user) {
-    const sessionName = (Store.session.user.full_name || Store.session.user.name || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+    const u = Store.session.user;
+    const sessionName = (u.full_name || u.name || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
     if (sessionName === 'srithikas' || sessionName === 'srithikans') {
-      if (Store.session.user.full_name !== 'srithikan s') {
-        Store.session.user.full_name = 'srithikan s';
-      }
-      if (Store.session.user.name !== 'srithikan s') {
-        Store.session.user.name = 'srithikan s';
+      if (u.full_name !== 'srithikan s') u.full_name = 'srithikan s';
+      if (u.name !== 'srithikan s') u.name = 'srithikan s';
+    }
+    if (!u.current_semester && u.batch_year) {
+      const match = String(u.batch_year).match(/\b(20\d{2})\b/);
+      if (match) {
+        const startY = parseInt(match[1], 10);
+        const now = new Date();
+        const yDiff = now.getFullYear() - startY;
+        let sem = yDiff * 2 + (now.getMonth() >= 6 ? 1 : 0);
+        if (sem >= 1 && sem <= 8) {
+          u.current_semester = sem;
+        }
       }
     }
   }
@@ -191,28 +186,7 @@ export function healData() {
             return;
           }
 
-          // Self-heal srithika s
-          const cleanName = lowerName.replace(/[^a-z0-9]/g, '');
-          if (cleanName === 'srithikas' || cleanName === 'srithikans') {
-            if (card.name !== 'srithikan s') {
-              card.name = 'srithikan s';
-              kanbanChanged = true;
-            }
-            if (card.id !== '58ad3eee-0f28-4b73-bc81-2b234df9aeab') {
-              card.id = '58ad3eee-0f28-4b73-bc81-2b234df9aeab';
-              kanbanChanged = true;
-            }
-            if (Store.drives) {
-              const tcsDrive = Store.drives.find(d => d.company.toLowerCase().includes('tcs'));
-              if (tcsDrive) {
-                if (String(card.driveId) !== String(tcsDrive.id)) {
-                  card.driveId = tcsDrive.id;
-                  card.drive = tcsDrive.company;
-                  kanbanChanged = true;
-                }
-              }
-            }
-          }
+
 
           const studentKey = (card.name || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
           const driveKey = String(card.driveId || card.drive || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
@@ -238,16 +212,35 @@ export function healData() {
     }
   }
 
-  // 4. De-duplicate and prune duplicate slot allocations in local storage & inner allocations
+  // 4. De-duplicate and prune duplicate/orphaned slot allocations in local storage & inner allocations
   if (Store.slotAllocations && Array.isArray(Store.slotAllocations)) {
     const seen = new Set();
     const uniqueAllocations = [];
     let slotsChanged = false;
 
+    const activeDriveIds = Store.drives ? new Set(Store.drives.map(d => String(d.id))) : new Set();
+    const activeCompanies = Store.drives ? new Set(Store.drives.map(d => (d.company || '').toLowerCase().trim())) : new Set();
+
     // Traverse from newest to oldest to keep the most recent configuration
     for (let i = Store.slotAllocations.length - 1; i >= 0; i--) {
       const alloc = Store.slotAllocations[i];
       if (!alloc) continue;
+
+      // Prune slots belonging to deleted/non-existent drives
+      if (Store.drives) {
+        if (alloc.driveId) {
+          if (!activeDriveIds.has(String(alloc.driveId))) {
+            slotsChanged = true;
+            continue;
+          }
+        } else {
+          const compKey = (alloc.company || '').toLowerCase().trim();
+          if (!activeCompanies.has(compKey)) {
+            slotsChanged = true;
+            continue;
+          }
+        }
+      }
       
       let companyKey = (alloc.company || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
       if (companyKey.startsWith('tcs')) {
@@ -346,33 +339,48 @@ export async function syncWithSupabase(supabase) {
   if (!supabase) return;
   
   try {
+    const withTimeout = (promise, ms) => Promise.race([
+      promise,
+      new Promise(resolve => setTimeout(() => resolve({ data: null, error: 'Timeout' }), ms))
+    ]);
 
     // 1. Sync Recruitment Pipeline
-    const { data: drives, error: dErr } = await supabase.from('drives').select('*').order('created_at', { ascending: false });
+    const { data: drives, error: dErr } = await withTimeout(supabase.from('drives').select('*').order('created_at', { ascending: false }), 2000);
     if (!dErr && drives) {
-      const mappedDrives = drives.map(rd => ({
-        id: rd.id,
-        company: rd.company,
-        role: rd.role,
-        package: rd.package_lpa ? rd.package_lpa + ' LPA' : 'N/A',
-        deadline: rd.deadline || 'N/A',
-        min_cgpa: rd.min_cgpa || 0,
-        location: Array.isArray(rd.eligible_depts) ? (rd.eligible_depts[0] || 'General') : (rd.eligible_depts || 'General'),
-        description: rd.description || '',
-        rounds: Array.isArray(rd.required_skills) ? rd.required_skills : ['Aptitude', 'Technical', 'HR'],
-        status: rd.status || 'Open',
-        applicants: rd.applicants || 0,
-        logo: rd.company ? rd.company.substring(0, 1).toUpperCase() : '🏢'
-      }));
-      // Merge: Keep local ones not yet in DB, but prioritize DB
-      const localOnly = Store.drives.filter(ld => !mappedDrives.find(rd => rd.company === ld.company && rd.role === ld.role));
+      const mappedDrives = drives
+        .filter(rd => {
+          if (!rd.company || !rd.role) return false;
+          if (rd.is_test === true) return false;
+          if ((rd.company || '').toLowerCase().includes('test')) return false;
+          return true;
+        })
+        .map(rd => ({
+          id: rd.id,
+          company: rd.company,
+          role: rd.role,
+          package: rd.package_lpa ? rd.package_lpa + ' LPA' : 'N/A',
+          deadline: rd.deadline || 'N/A',
+          min_cgpa: rd.min_cgpa || 0,
+          location: Array.isArray(rd.eligible_depts) ? (rd.eligible_depts[0] || 'General') : (rd.eligible_depts || 'General'),
+          eligible_depts: Array.isArray(rd.eligible_depts) ? rd.eligible_depts.slice(1) : [],
+          description: rd.description || '',
+          rounds: Array.isArray(rd.required_skills) ? rd.required_skills : ['Aptitude', 'Technical', 'HR'],
+          status: rd.status || 'Open',
+          applicants: rd.applicants || 0,
+          logo: rd.company ? rd.company.substring(0, 1).toUpperCase() : '🏢'
+        }));
       const deletedDrives = JSON.parse(localStorage.getItem('placenix_deleted_drives') || '[]');
-      Store.drives = [...mappedDrives, ...localOnly].filter(d => !deletedDrives.includes(String(d.id)));
+      
+      // Preserve local-only drives that haven't been synced to Supabase (their ID starts with 'd')
+      const localOnlyDrives = (Store.drives || []).filter(d => typeof d.id === 'string' && d.id.startsWith('d'));
+      
+      Store.drives = [...localOnlyDrives, ...mappedDrives].filter(d => !deletedDrives.includes(String(d.id)));
+      localStorage.setItem('placenix_drives', JSON.stringify(Store.drives));
       console.log('📡 Sync: Recruitment data synchronized.');
     }
 
     // 2. Sync Student Registry
-    const { data: profiles, error: sErr } = await supabase.from('profiles').select('*').eq('role', 'student');
+    const { data: profiles, error: sErr } = await withTimeout(supabase.from('profiles').select('*').eq('role', 'student'), 2000);
     if (!sErr && profiles && profiles.length > 0) {
       Store.students = profiles.map(p => {
         const nameVal = p.full_name || 'Unnamed Student';
@@ -389,10 +397,29 @@ export async function syncWithSupabase(supabase) {
           employability_data: p.employability_data || existingStudent.employability_data || null,
           resume_analysis: p.resume_analysis || existingStudent.resume_analysis || null,
           status: existingStudent.status || 'Applied',
-          company: existingStudent.company || null
+          company: existingStudent.company || null,
+          placedDate: p.placed_date || p.updated_at || null
         };
       });
       console.log('📡 Sync: Student registry synchronized.');
+    }
+
+    // 3. Sync Shared Resources
+    const SYSTEM_UUID = '00000000-0000-0000-0000-000000000000';
+    try {
+      const { data: sysProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', SYSTEM_UUID)
+        .maybeSingle();
+
+      if (sysProfile) {
+        Store.sharedResources = sysProfile.employability_data?.shared_resources || [];
+        localStorage.setItem('placenix_shared_resources', JSON.stringify(Store.sharedResources));
+        console.log('📡 Sync: Shared resources synchronized.');
+      }
+    } catch (err) {
+      console.warn('⚠️ Sync failure on Shared Resources container:', err.message);
     }
 
     healData();
@@ -403,6 +430,10 @@ export async function syncWithSupabase(supabase) {
 }
 
 export function saveStore() {
+  if (Store.session && Store.session.user) {
+    localStorage.setItem('placenix-mock-session', JSON.stringify(Store.session.user));
+    localStorage.setItem('placenix_user_session', JSON.stringify(Store.session.user));
+  }
   localStorage.setItem('placenix_drives', JSON.stringify(Store.drives));
   localStorage.setItem('placenix_student_apps', JSON.stringify(Store.studentProfile.applications));
   localStorage.setItem('placenix_kanban', JSON.stringify(Store.kanban));
@@ -412,12 +443,24 @@ export function saveStore() {
   localStorage.setItem('placenix_slots', JSON.stringify(Store.slotAllocations || []));
   localStorage.setItem('placenix_notifications', JSON.stringify(Store.notifications || []));
   localStorage.setItem('placenix_queries', JSON.stringify(Store.queries || []));
+  localStorage.setItem('placenix_shared_resources', JSON.stringify(Store.sharedResources || []));
   window.dispatchEvent(new Event('storage'));
   window.dispatchEvent(new CustomEvent('store-updated'));
 }
 
 // ── Initialize Persistence & Real-time Sync ────────────────
 export function loadStoreFromLocalStorage() {
+    const sessStr = localStorage.getItem('placenix-mock-session') || localStorage.getItem('placenix_user_session');
+    if (sessStr) {
+      try {
+        const u = JSON.parse(sessStr);
+        if (u) {
+          Store.session.user = { ...(Store.session.user || {}), ...u };
+          if (u.role) Store.session.role = u.role;
+        }
+      } catch(e){}
+    }
+
     const d = localStorage.getItem('placenix_drives');
     const s = localStorage.getItem('placenix_student_apps');
     const k = localStorage.getItem('placenix_kanban');
@@ -451,6 +494,8 @@ export function loadStoreFromLocalStorage() {
     if (sl) try { Store.slotAllocations = JSON.parse(sl); } catch(e){}
     if (n) try { Store.notifications = JSON.parse(n); } catch(e){}
     if (q) try { Store.queries = JSON.parse(q); } catch(e){}
+    const sr = localStorage.getItem('placenix_shared_resources');
+    if (sr) try { Store.sharedResources = JSON.parse(sr); } catch(e){}
     
     // Fallback to minimal examples if registry is completely empty (First Boot)
     if (!Store.drives || Store.drives.length === 0) {
@@ -471,6 +516,129 @@ export function loadStoreFromLocalStorage() {
       if (drivesChanged) {
         setTimeout(() => {
           localStorage.setItem('placenix_drives', JSON.stringify(Store.drives));
+          window.dispatchEvent(new Event('storage'));
+          window.dispatchEvent(new CustomEvent('store-updated'));
+        }, 0);
+      }
+    }
+
+    // Auto-generate notifications for upcoming deadlines
+    if (Store.drives && Array.isArray(Store.drives) && Store.session?.role === 'student') {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      
+      const studentDept = Store.session?.user?.department || Store.session?.user?.dept || 'CSE';
+      let notificationsChanged = false;
+      if (!Store.notifications) Store.notifications = [];
+
+      Store.drives.forEach(drive => {
+        if (drive.status === 'Open' && drive.deadline && drive.deadline !== 'N/A') {
+          const hasDeptRestriction = Array.isArray(drive.eligible_depts) && drive.eligible_depts.length > 0;
+          const isDeptEligible = !hasDeptRestriction || drive.eligible_depts.includes(studentDept.toUpperCase());
+          if (!isDeptEligible) return;
+
+          // Check if already applied
+          const applied = Store.studentProfile?.applications?.some(a => String(a.driveId) === String(drive.id));
+          if (applied) return;
+
+          const deadlineDate = new Date(drive.deadline);
+          deadlineDate.setHours(0,0,0,0);
+          const timeDiff = deadlineDate.getTime() - today.getTime();
+          const daysRemaining = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+          if (daysRemaining >= 0 && daysRemaining <= 3) {
+            const notifId = `deadline_${drive.id}_${daysRemaining}`;
+            // Check if already created
+            const exists = Store.notifications.some(notif => notif.id === notifId);
+            if (!exists) {
+              let text = '';
+              let urgency = 'warning';
+              if (daysRemaining === 0) {
+                text = `⏰ LAST CHANCE: Application window for ${drive.company} (${drive.role}) closes TODAY!`;
+                urgency = 'error';
+              } else if (daysRemaining === 1) {
+                text = `⚠️ URGENT: Application window for ${drive.company} (${drive.role}) closes tomorrow.`;
+              } else {
+                text = `📅 ATTENTION: Application window for ${drive.company} (${drive.role}) closes in ${daysRemaining} days.`;
+              }
+              
+              Store.notifications.unshift({
+                id: notifId,
+                title: 'Upcoming Deadline Alert',
+                message: text,
+                timestamp: new Date().toISOString(),
+                type: urgency,
+                read: false
+              });
+              notificationsChanged = true;
+            }
+          }
+        }
+      });
+
+      if (notificationsChanged) {
+        setTimeout(() => {
+          localStorage.setItem('placenix_notifications', JSON.stringify(Store.notifications));
+          window.dispatchEvent(new Event('storage'));
+          window.dispatchEvent(new CustomEvent('store-updated'));
+        }, 0);
+      }
+    }
+
+    // Auto-generate notifications for newly shared prep materials
+    if (Store.sharedResources && Array.isArray(Store.sharedResources) && Store.session?.role === 'student') {
+      const studentDept = (Store.session?.user?.department || Store.session?.user?.dept || 'CSE').toUpperCase();
+      const studentSection = (Store.session?.user?.section_name || 'A').toUpperCase();
+      
+      const empData = Store.session.user.employability_data || {};
+      const softSkills = empData.communication || 80;
+      const coding = empData.coding || empData.technical || 80;
+      const readiness = empData.overall_score || 80;
+      
+      let notificationsChanged = false;
+      if (!Store.notifications) Store.notifications = [];
+
+      Store.sharedResources.forEach(res => {
+        // 1. Dept filter
+        const matchDept = res.target_dept === 'All' || res.target_dept.toUpperCase() === studentDept;
+        if (!matchDept) return;
+
+        // 2. Section filter
+        const matchSection = res.target_section === 'All' || res.target_section.toUpperCase() === studentSection;
+        if (!matchSection) return;
+
+        // 3. Cohort filter
+        let matchCohort = false;
+        if (res.target_cohort === 'All' || res.target_cohort === 'Entire Section' || res.target_cohort === 'All Cohorts') {
+          matchCohort = true;
+        } else if (res.target_cohort === 'Coding Gaps' && coding < 75) {
+          matchCohort = true;
+        } else if (res.target_cohort === 'Weak Communication' && softSkills < 75) {
+          matchCohort = true;
+        } else if (res.target_cohort === 'Low Confidence' && readiness < 70) {
+          matchCohort = true;
+        }
+
+        if (matchCohort) {
+          const notifId = `shared_res_${res.id}`;
+          const exists = Store.notifications.some(notif => notif.id === notifId);
+          if (!exists) {
+            Store.notifications.unshift({
+              id: notifId,
+              title: `📚 Prep Material Shared: ${res.title}`,
+              desc: `Your Faculty Advisor (${res.shared_by}) shared a resource: "${res.notes || 'Practice recommended problems.'}" ${res.link ? `Link: ${res.link}` : ''}`,
+              time: 'Just now',
+              type: 'ai',
+              read: false
+            });
+            notificationsChanged = true;
+          }
+        }
+      });
+
+      if (notificationsChanged) {
+        setTimeout(() => {
+          localStorage.setItem('placenix_notifications', JSON.stringify(Store.notifications));
           window.dispatchEvent(new Event('storage'));
           window.dispatchEvent(new CustomEvent('store-updated'));
         }, 0);
@@ -700,9 +868,6 @@ export function getValidationStatus(studentId, dbComments) {
   }
 
   // 3. Default
-  if (studentId === '58ad3eee-0f28-4b73-bc81-2b234df9aeab') {
-    return { status: 'Pending', comments: '' };
-  }
   return { status: 'Approved', comments: '' };
 }
 

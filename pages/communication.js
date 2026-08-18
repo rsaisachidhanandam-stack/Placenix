@@ -125,7 +125,7 @@ export async function loadCommPage(root, Store, supabase) {
         </div>
       </div>
 
-      <div class="grid grid-cols-3" style="grid-template-columns: 1fr 2fr; gap:0; background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:16px; overflow:hidden; height:calc(100vh - 240px);">
+      <div class="grid grid-cols-3" style="grid-template-columns: 1fr 2fr; gap:0; background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:16px; overflow:hidden; min-height:calc(100vh - 220px); height:auto;">
         <!-- Sidebar: Live Notifications -->
         <div style="border-right:1px solid var(--border-subtle); background:rgba(255,255,255,0.01); display:flex; flex-direction:column;">
           <div style="padding:20px; border-bottom:1px solid var(--border-subtle); font-size:12px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; display:flex; justify-content:space-between; align-items:center;">

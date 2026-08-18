@@ -69,6 +69,12 @@ export async function loadSaaSPage(root, Store) {
 
   setTimeout(()=>{
     if(typeof Chart==='undefined')return;
+
+    // Destroy existing charts to prevent canvas reuse error in SPA routing
+    const existingChart1 = Chart.getChart('mrr-chart');
+    if (existingChart1) existingChart1.destroy();
+    const existingChart2 = Chart.getChart('plan-chart');
+    if (existingChart2) existingChart2.destroy();
     new Chart(document.getElementById('mrr-chart'),{type:'line',data:{labels:['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May'],datasets:[{label:'MRR (₹)',data:[120000,156000,189000,224000,268000,312000,348000,394000,426000,342000,370000],borderColor:'#7C3AED',backgroundColor:'rgba(124,58,237,.1)',fill:true,tension:0.4,pointBackgroundColor:'#22D3EE',pointRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748B',callback:v=>'₹'+Math.round(v/1000)+'k'}},x:{grid:{display:false},ticks:{color:'#64748B'}}}}});
     new Chart(document.getElementById('plan-chart'),{type:'doughnut',data:{labels:['Enterprise','Pro','Starter'],datasets:[{data:[2,2,2],backgroundColor:['#7C3AED','#22D3EE','#10B981'],borderWidth:0,hoverOffset:4}]},options:{responsive:true,cutout:'70%',plugins:{legend:{display:false}}}});
   },100);

@@ -5,12 +5,86 @@ export async function loadAnalyticsPage(root, Store, supabase) {
 .an-top{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:24px;}
 .an-mid{display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:24px;}
 .an-bottom{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
-.dept-row{display:grid;grid-template-columns:80px 1fr 60px 60px 70px;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-subtle);font-size:.875rem;}
+.dept-row{display:grid;grid-template-columns:80px 1fr 60px 60px 70px;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--glass-border-subtle);font-size:.875rem;}
 .dept-row:last-child{border-bottom:none;}
 .dept-name{font-weight:600;color:var(--text-primary);}
-.dept-bar-track{height:8px;background:rgba(255,255,255,.05);border-radius:99px;overflow:hidden;}
-.dept-bar-fill{height:100%;border-radius:99px;background:var(--gradient-brand);}
-.dept-pct,.dept-pkg,.dept-high{color:var(--text-secondary);text-align:right;}
+.dept-bar-track{height:8px;background:rgba(0,0,0,0.25);border-radius:99px;overflow:hidden;}
+.dept-bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg, var(--brand-primary), #8B5CF6);}
+.dept-pct,.dept-pkg,.dept-high{color:var(--text-description);text-align:right;}
+
+/* Stat Card Premium Styling */
+.stat-card {
+  background: var(--glass-2);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
+  border: 1px solid var(--glass-border-main);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 148px;
+  box-shadow: var(--glass-shadow-sm);
+}
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 10%; right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glass-specular), transparent);
+  pointer-events: none;
+}
+.stat-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(129, 140, 248, 0.35);
+  box-shadow: var(--shadow-card-hover);
+}
+.stat-card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  margin-bottom: 16px;
+  align-self: flex-start;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.stat-card-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.1;
+  margin-bottom: 4px;
+  letter-spacing: -0.03em;
+  font-family: var(--font-display);
+  text-shadow: 0 2px 12px rgba(129,140,248,0.15);
+}
+.stat-card-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-description);
+  margin-bottom: 8px;
+}
+.stat-card-change {
+  font-size: 10.5px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: auto;
+}
+.stat-card-change.success {
+  color: var(--success);
+}
+.stat-card-change.info {
+  color: var(--info);
+}
 </style>
 <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;">
   <div><h1 class="page-title">Analytics & Reporting</h1><p class="page-subtitle">Real-time placement intelligence across your institution</p></div>
@@ -111,6 +185,12 @@ export async function loadAnalyticsPage(root, Store, supabase) {
   setTimeout(() => {
     if (typeof Chart === 'undefined') return;
 
+    // Destroy existing charts to prevent canvas reuse error in SPA routing
+    const existingChart1 = Chart.getChart('placement-trend');
+    if (existingChart1) existingChart1.destroy();
+    const existingChart2 = Chart.getChart('pkg-dist');
+    if (existingChart2) existingChart2.destroy();
+
     // Placement trend
     const months = ['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'];
     new Chart(document.getElementById('placement-trend'), {
@@ -120,11 +200,11 @@ export async function loadAnalyticsPage(root, Store, supabase) {
         datasets: [{
           label: 'Offers',
           data: a.monthlyPlacements,
-          borderColor: '#7C3AED',
-          backgroundColor: 'rgba(124,58,237,0.1)',
+          borderColor: '#818CF8',
+          backgroundColor: 'rgba(129, 140, 248, 0.15)',
           fill: true,
           tension: 0.4,
-          pointBackgroundColor: '#22D3EE',
+          pointBackgroundColor: '#34D399',
           pointRadius: 4,
         }]
       },
@@ -132,14 +212,14 @@ export async function loadAnalyticsPage(root, Store, supabase) {
         responsive: true,
         plugins: { legend: { display: false } },
         scales: {
-          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748B' } },
-          x: { grid: { display: false }, ticks: { color: '#64748B' } }
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8B949E' } },
+          x: { grid: { display: false }, ticks: { color: '#8B949E' } }
         }
       }
     });
 
     // Package distribution donut
-    const pkgColors = ['#EF4444','#F59E0B','#7C3AED','#3B82F6','#10B981'];
+    const pkgColors = ['#f87171','#FBBF24','#C084FC','#818CF8','#34D399'];
     new Chart(document.getElementById('pkg-dist'), {
       type: 'doughnut',
       data: {

@@ -28,6 +28,8 @@ import { loadKanbanPage } from './pages/kanban.js';
 import { loadSlotAllocationPage } from './pages/slot-allocation.js';
 import { loadMySlotsPage } from './pages/my-slots.js';
 import { loadAttendanceTrackerPage } from './pages/attendance-tracker.js';
+import { loadSaaSPage } from './pages/saas-admin.js';
+import { renderSkeleton } from './components/skeleton.js';
 
 import { renderSidebar, renderTopbar } from './components/sidebar.js';
 import { supabase   } from './supabase.js';
@@ -82,7 +84,7 @@ const routes = {
   'kanban':            loadKanbanPage,
   'attendance-tracker': loadAttendanceTrackerPage,
   'slot-allocation':   loadSlotAllocationPage,
-  'saas-admin':        loadLandingPage,
+  'saas-admin':        loadSaaSPage,
   'dept-students':      loadDeptStudents,
   'dept-resume':        loadDeptResume,
   'dept-skills':        loadDeptSkills,
@@ -91,16 +93,16 @@ const routes = {
   'dept-announcements': loadDeptAnnouncements,
   'dept-queries':       loadDeptQueries,
   'faculty-dashboard':  loadFacultyAdvisorPage,
-  'fa-students':        loadDeptStudents,
-  'fa-resume':          loadDeptResume,
-  'fa-skills':          loadDeptSkills,
+  'fa-students':        loadFacultyAdvisorPage,
+  'fa-resume':          loadFacultyAdvisorPage,
+  'fa-skills':          loadFacultyAdvisorPage,
   'fa-new-jobs':        loadDeptNewJobs,
   'fa-prev-jobs':       loadDeptPrevJobs
 };
 
 function getRoute() {
   const hash = window.location.hash || '#';
-  let raw = hash.replace('#', '') || '';
+  let raw = hash.replace(/^#+/, '') || '';
   if (raw.startsWith('/')) raw = raw.substring(1);
   const routePart = raw.split('?')[0];
   return routePart.replace(/_/g, '-').toLowerCase(); 
@@ -111,6 +113,38 @@ async function handleRoute() {
   if (overlay) overlay.style.display = 'none';
 
   const route = getRoute();
+
+  // Navigation Guard: Prevent leaving active virtual interview
+  if (window.previousRoute === 'virtual-interview' && route !== 'virtual-interview') {
+    if (window.virtualInterviewInProgress) {
+      const confirmed = confirm("Are you sure you want to exit the mock interview? Your current round's progress will be lost.");
+      if (!confirmed) {
+        // Revert the hash
+        window.removeEventListener('hashchange', handleRoute);
+        window.location.hash = '#virtual-interview';
+        setTimeout(() => {
+          window.addEventListener('hashchange', handleRoute);
+        }, 50);
+        
+        // Revert active sidebar state
+        const sidebarEl = document.getElementById('sidebar');
+        if (sidebarEl) {
+          const role = Store.session?.role || 'guest';
+          const user = Store.session?.user;
+          sidebarEl.innerHTML = renderSidebar(role, 'virtual-interview', user);
+          initSidebar();
+        }
+        return;
+      } else {
+        // Confirmed leaving
+        window.virtualInterviewInProgress = false;
+        if (typeof window.cleanupVirtualInterview === 'function') {
+          window.cleanupVirtualInterview();
+        }
+      }
+    }
+  }
+
   console.log('🧭 Router: Transitioning to node ->', route);
   console.table(Object.keys(routes));
   const app   = document.getElementById('app');
@@ -121,34 +155,177 @@ async function handleRoute() {
     const user   = Store.session?.user;
     const role   = Store.session?.role || 'guest';
 
+    // 1. Guard: Opening root URL ('') redirects directly to '#login'
+    if (route === '') {
+      window.location.hash = 'login';
+      return;
+    }
+
+    // 2. Guard: If not logged in, block accessing dashboard pages (redirect to login)
+    if (!user && isDash) {
+      console.log(`🛡️ Router Guard: Guest blocked from dashboard page [${route}]. Redirecting to login.`);
+      window.location.hash = 'login';
+      return;
+    }
+
+    // Role-Based Access Control (RBAC) Whitelist-based Guards
+    if (user && isDash) {
+      const allowedRoutes = {
+        'student': [
+          'student-dashboard', 'student-details', 'profile', 'resume-analysis', 'resume', 
+          'employability', 'skill-analysis', 'ai-modules', 'ai-predictor',
+          'new-applications', 'my-applications', 'my-slots', 'alumni-connect', 'alumni',
+          'communication', 'queries', 'virtual-interview', 'interview-repo'
+        ],
+        'tpo': [
+          'tpo-dashboard', 'drives', 'kanban', 'attendance-tracker', 'slot-allocation',
+          'alumni-connect', 'alumni', 'profile', 'student-details', 'analytics', 'completed-batches',
+          'new-applications', 'interview-repo', 'virtual-interview'
+        ],
+        'coordinator': [
+          'coordinator-dashboard', 'department-dashboard', 'dept-students', 'dept-resume',
+          'dept-skills', 'dept-new-jobs', 'dept-prev-jobs', 'attendance-tracker', 'slot-allocation', 'my-slots',
+          'dept-announcements', 'dept-queries', 'alumni-connect', 'alumni', 'profile', 'student-details', 'analytics', 'virtual-interview'
+        ],
+        'department': [
+          'coordinator-dashboard', 'department-dashboard', 'dept-students', 'dept-resume',
+          'dept-skills', 'dept-new-jobs', 'dept-prev-jobs', 'attendance-tracker', 'slot-allocation', 'my-slots',
+          'dept-announcements', 'dept-queries', 'alumni-connect', 'alumni', 'profile', 'student-details', 'analytics', 'virtual-interview'
+        ],
+        'faculty': [
+          'faculty-dashboard', 'fa-students', 'fa-resume', 'fa-skills', 'fa-new-jobs',
+          'fa-prev-jobs', 'attendance-tracker', 'slot-allocation', 'my-slots', 'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview'
+        ],
+        'admin': [
+          'admin-dashboard', 'admin-setup', 'admin-staff', 'admin-roles', 'admin-mapping',
+          'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview'
+        ],
+        'saas-admin': [
+          'saas-admin', 'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview'
+        ]
+      };
+
+      const userAllowed = allowedRoutes[role] || [];
+      if (!userAllowed.includes(route)) {
+        console.warn(`🛡️ RBAC: Blocked ${role} from accessing route [${route}]`);
+        // Resolve home dashboard redirect based on role
+        let homeRoute = 'student-dashboard';
+        if (role === 'tpo') homeRoute = 'tpo-dashboard';
+        else if (role === 'coordinator' || role === 'department') homeRoute = 'coordinator-dashboard';
+        else if (role === 'faculty') homeRoute = 'faculty-dashboard';
+        else if (role === 'admin') homeRoute = 'admin-dashboard';
+        else if (role === 'saas-admin') homeRoute = 'saas-admin';
+
+        window.location.hash = homeRoute;
+        return;
+      }
+    }
+
+    // 1. Render App Shell structure or update it dynamically
     if (isDash) {
-      app.innerHTML = `
-        <div class="app-shell">
-          <nav class="sidebar" id="sidebar">${renderSidebar(role, route, user)}</nav>
-          <main class="main-content" id="main-content">
-            ${renderTopbar(user, route)}
-            <div class="page-content" id="page-root">
-              <div style="padding:100px; text-align:center; color:var(--text-muted);">
-                <div class="animate-spin" style="width:32px; height:32px; border:3px solid var(--border-subtle); border-top-color:var(--brand-primary); border-radius:50%; margin:0 auto 20px;"></div>
-                Calibrating Interface Nodes...
-              </div>
-            </div>
-          </main>
-        </div>`;
-      // Initialize sidebar controls immediately so that logout is responsive during asynchronous page loads
-      initSidebar();
+      const existingShell = document.querySelector('.app-shell');
+      if (!existingShell) {
+        app.innerHTML = `
+          <div class="app-shell">
+            <nav class="sidebar" id="sidebar">${renderSidebar(role, route, user)}</nav>
+            <main class="main-content" id="main-content">
+              <div id="topbar-container">${renderTopbar(user, route)}</div>
+              <div class="page-content page-transition-container" id="page-root"></div>
+            </main>
+          </div>`;
+        initSidebar();
+        // Badge initial render after shell mounts
+        setTimeout(() => window.NotificationService?.refreshBadge(), 150);
+      } else {
+        // Dynamic sidebar and topbar updates without full page rebuild
+        const sidebarEl = document.getElementById('sidebar');
+        if (sidebarEl) {
+          sidebarEl.innerHTML = renderSidebar(role, route, user);
+          initSidebar();
+        }
+        const topbarContainer = document.getElementById('topbar-container');
+        if (topbarContainer) {
+          topbarContainer.innerHTML = renderTopbar(user, route);
+          // Refresh badge after topbar re-render (badge span replaced by innerHTML)
+          setTimeout(() => window.NotificationService?.refreshBadge(), 80);
+        }
+      }
     } else {
-      app.innerHTML = `<div id="page-root"></div>`;
+      const existingShell = document.querySelector('.app-shell');
+      if (existingShell || !document.getElementById('page-root')) {
+        app.innerHTML = `<div id="page-root" class="page-transition-container" style="min-height:100vh;"></div>`;
+      }
     }
 
     const pageRoot = document.getElementById('page-root');
-    const loader   = routes[route] || routes[''];
-    
+    if (!pageRoot) return;
+
+    // Reset inline layout styles applied by special routes (e.g. virtual-interview)
+    pageRoot.style.padding = '';
+    pageRoot.style.maxWidth = '';
+    pageRoot.style.height = '';
+    pageRoot.style.overflow = '';
+    pageRoot.style.minHeight = '';
+
+    // Helper to reset all window and element scroll positions to top
+    const resetScrollToTop = () => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      const mainContent = document.querySelector('.main-content');
+      if (mainContent) mainContent.scrollTop = 0;
+    };
+
+    // Clean previous views to prevent vertical DOM stacking
+    pageRoot.innerHTML = '';
+
+    // Create incoming view wrapper with skeleton placeholder so height never collapses to 0px
+    const incomingView = document.createElement('div');
+    incomingView.className = 'page-view page-view-active';
+    const skType = ['drives', 'dept-students', 'fa-students', 'alumni-connect', 'queries'].includes(route) ? 'list' : 'dashboard';
+    incomingView.innerHTML = renderSkeleton(skType);
+    pageRoot.appendChild(incomingView);
+
+    // Reset scroll position before loading content
+    resetScrollToTop();
+
+    // Resolve loader safely with timeout guard
+    const loader = routes[route] || routes[''];
     console.log(`🚀 Router: Executing loader for [${route}] ->`, loader.name || 'Anonymous');
-    await loader(pageRoot, Store, supabase);
+    
+    try {
+      await Promise.race([
+        loader(incomingView, Store, supabase),
+        new Promise(resolve => setTimeout(resolve, 3000))
+      ]);
+    } catch (loaderErr) {
+      console.warn(`⚠️ Router loader warning for [${route}]:`, loaderErr);
+    }
+
+    // Reset scroll position AGAIN after page content is populated
+    resetScrollToTop();
+    requestAnimationFrame(resetScrollToTop);
+    setTimeout(resetScrollToTop, 100);
+
+    // Dismiss boot loader if it exists
+    const bootLoader = document.getElementById('placenix-loader');
+    if (bootLoader && !bootLoader.classList.contains('fade-out')) {
+      bootLoader.classList.add('fade-out');
+      setTimeout(() => bootLoader.remove(), 500);
+    }
+
+    window.dispatchEvent(new CustomEvent('page-transition-complete'));
+
+    // Save previous route on successful navigation
+    window.previousRoute = route;
 
   } catch (err) {
     console.error('❌ Router Error:', err);
+    const bootLoader = document.getElementById('placenix-loader');
+    if (bootLoader) {
+      bootLoader.classList.add('fade-out');
+      setTimeout(() => bootLoader.remove(), 500);
+    }
     app.innerHTML = `
       <div style="padding:40px; text-align:center; background:#09090b; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff;">
         <div style="font-size:48px; margin-bottom:24px;">⚠️</div>
@@ -171,6 +348,7 @@ function initSidebar() {
     Store.interviews = [];
     Store.session.user = null;
     Store.session.role = 'guest';
+    localStorage.removeItem('placenix-mock-session');
     
     // Redirect to login screen instantly
     window.location.hash = 'login';

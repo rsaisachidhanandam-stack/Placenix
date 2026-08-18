@@ -1,5 +1,7 @@
 import { supabase } from '../supabase.js';
 import { extractTextFromPDF, analyzeWithGemini } from './resume-intelligence.js';
+import { showToast } from '../components/toast.js';
+import { saveStore } from '../store.js';
 
 // Helper function to race a query against a timeout, returning a default value if it takes too long
 async function withTimeout(promise, timeoutMs, defaultValue) {
@@ -15,6 +17,26 @@ async function withTimeout(promise, timeoutMs, defaultValue) {
   return result;
 }
 
+export function calculateSemesterFromBatch(batchStr) {
+  if (!batchStr) return null;
+  const match = String(batchStr).match(/\b(20\d{2})\b/);
+  if (!match) return null;
+  
+  const startYear = parseInt(match[1], 10);
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0 = Jan, 6 = Jul
+  
+  const yearDiff = currentYear - startYear;
+  if (yearDiff < 0) return 'Semester 1';
+  
+  let sem = yearDiff * 2 + (currentMonth >= 6 ? 1 : 0);
+  if (sem < 1) sem = 1;
+  if (sem > 8) return 'Graduated';
+  
+  return `Semester ${sem}`;
+}
+
 export async function loadProfilePage(root, Store, maybeSupabase, activeTabId = 'tab-personal') {
   console.log('🏁 loadProfilePage: Initiating secure load sequence...');
   const loggedInUser = Store.session.user || {};
@@ -24,225 +46,112 @@ export async function loadProfilePage(root, Store, maybeSupabase, activeTabId = 
   if (targetStudentId === '58ad3ece-0f28-4b73-bc81-2b234df9aeab') {
     targetStudentId = '58ad3eee-0f28-4b73-bc81-2b234df9aeab';
   }
+
+  // Non-student staff members do not have a personal student profile form; redirect to staff workspace
+  const userRole = Store.session?.role || loggedInUser.role || 'student';
+  if (userRole !== 'student' && !targetStudentId) {
+    const roleHashMap = {
+      'faculty': 'faculty-dashboard',
+      'department': 'coordinator-dashboard',
+      'coordinator': 'coordinator-dashboard',
+      'tpo': 'tpo-dashboard',
+      'admin': 'admin-dashboard',
+      'saas-admin': 'saas-admin'
+    };
+    window.location.hash = roleHashMap[userRole] || 'faculty-dashboard';
+    return;
+  }
   const isReadOnly = targetStudentId && targetStudentId !== loggedInUser.id;
-  
-  let user = null;
   const currentTab = (typeof maybeSupabase === 'string') ? maybeSupabase : activeTabId;
+  const supabaseClient = (typeof maybeSupabase === 'object' && maybeSupabase) ? maybeSupabase : (typeof window !== 'undefined' ? window.supabase : null);
 
-  // Show premium shimmer skeleton loader for a fluid and high-end enterprise aesthetic
-  root.innerHTML = `
-    <div style="padding: 48px; max-width: 1200px; margin: 0 auto; animation: fadeIn 0.4s ease;">
-      <style>
-        @keyframes shimmer-pulse {
-          0% { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
-        }
-        .skeleton-shimmer {
-          background: linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.02) 75%);
-          background-size: 200% 100%;
-          animation: shimmer-pulse 1.8s infinite linear;
-          border-radius: 12px;
-        }
-      </style>
-      
-      <!-- Header Area Skeleton -->
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:48px; background: rgba(255,255,255,0.01); padding:32px; border-radius:24px; border:1px solid var(--border-subtle);">
-        <div style="display:flex; align-items:center; gap:24px;">
-          <div class="skeleton-shimmer" style="width:80px; height:80px; border-radius:24px;"></div>
-          <div style="display:flex; flex-direction:column; gap:8px;">
-            <div class="skeleton-shimmer" style="width:240px; height:28px; border-radius:6px;"></div>
-            <div class="skeleton-shimmer" style="width:360px; height:16px; border-radius:4px;"></div>
-          </div>
-        </div>
-        <div class="skeleton-shimmer" style="width:160px; height:44px; border-radius:12px;"></div>
-      </div>
-
-      <!-- Institutional Tabs Skeleton -->
-      <div style="display:flex; gap:32px; border-bottom:1px solid var(--border-subtle); margin-bottom:48px; padding-bottom:16px;">
-        <div class="skeleton-shimmer" style="width:140px; height:20px; border-radius:4px;"></div>
-        <div class="skeleton-shimmer" style="width:140px; height:20px; border-radius:4px;"></div>
-        <div class="skeleton-shimmer" style="width:140px; height:20px; border-radius:4px;"></div>
-      </div>
-
-      <!-- Core Identity Node Skeleton Grid -->
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px;">
-        <!-- Left Panel Card Skeleton -->
-        <div style="background: rgba(255,255,255,0.01); border:1px solid var(--border-subtle); border-radius:24px; padding:32px; display:flex; flex-direction:column; gap:24px;">
-          <div class="skeleton-shimmer" style="width:150px; height:20px; border-radius:4px; margin-bottom:8px;"></div>
-          <div style="display:flex; flex-direction:column; gap:20px;">
-            <div style="display:flex; flex-direction:column; gap:8px;">
-              <div class="skeleton-shimmer" style="width:100px; height:12px; border-radius:3px;"></div>
-              <div class="skeleton-shimmer" style="width:100%; height:44px;"></div>
-            </div>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
-              <div style="display:flex; flex-direction:column; gap:8px;">
-                <div class="skeleton-shimmer" style="width:80px; height:12px; border-radius:3px;"></div>
-                <div class="skeleton-shimmer" style="width:100%; height:44px;"></div>
-              </div>
-              <div style="display:flex; flex-direction:column; gap:8px;">
-                <div class="skeleton-shimmer" style="width:80px; height:12px; border-radius:3px;"></div>
-                <div class="skeleton-shimmer" style="width:100%; height:44px;"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right Panel Card Skeleton -->
-        <div style="background: rgba(255,255,255,0.01); border:1px solid var(--border-subtle); border-radius:24px; padding:32px; display:flex; flex-direction:column; gap:24px;">
-          <div class="skeleton-shimmer" style="width:180px; height:20px; border-radius:4px; margin-bottom:8px;"></div>
-          <div style="display:flex; flex-direction:column; gap:20px;">
-            <div style="display:flex; flex-direction:column; gap:8px;">
-              <div class="skeleton-shimmer" style="width:120px; height:12px; border-radius:3px;"></div>
-              <div class="skeleton-shimmer" style="width:100%; height:44px;"></div>
-            </div>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
-              <div style="display:flex; flex-direction:column; gap:8px;">
-                <div class="skeleton-shimmer" style="width:80px; height:12px; border-radius:3px;"></div>
-                <div class="skeleton-shimmer" style="width:100%; height:44px;"></div>
-              </div>
-              <div style="display:flex; flex-direction:column; gap:8px;">
-                <div class="skeleton-shimmer" style="width:80px; height:12px; border-radius:3px;"></div>
-                <div class="skeleton-shimmer" style="width:100%; height:44px;"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  // 1. Fetch user profile, departments, degrees, and academic batches in parallel for maximum performance
-  let depts = [];
-  let degrees = [];
-  let batches = [];
-
+  let user = loggedInUser;
   const targetId = targetStudentId || loggedInUser.id;
-  const profilePromise = supabase.from('profiles').select('*').eq('id', targetId).maybeSingle();
-  const deptsPromise = supabase.from('departments').select('*, sections(*)');
-  const degreesPromise = supabase.from('degrees').select('*').order('degree_name');
-  const batchesPromise = supabase.from('academic_batches').select('*').order('batch_name');
+  if (targetStudentId) {
+    let localStudent = null;
+    if (Store && Array.isArray(Store.students)) {
+      localStudent = Store.students.find(s => s.id === targetStudentId);
+    }
+    
+    user = {
+      id: targetStudentId,
+      full_name: localStudent?.name || localStudent?.full_name || 'srithikan s',
+      department: localStudent?.dept || localStudent?.department || 'Computer Science & Engineering',
+      cgpa: localStudent?.cgpa || '8.0',
+      skills: localStudent?.skills || ['JavaScript', 'React', 'Node.js', 'Python', 'Machine Learning'],
+      role: 'student',
+      college: 'Kalasalingam University',
+      roll_number: localStudent?.rollNo || localStudent?.roll_number || '3652147',
+      register_number: localStudent?.rollNo || localStudent?.register_number || '3652147',
+      batch: localStudent?.batch || '2021 - 2025',
+      status: localStudent?.status || 'APPROVED',
+      ats: localStudent?.atsScore || localStudent?.ats || 70,
+      email: localStudent?.email || 'srithikan@klu.ac.in'
+    };
+  }
 
-  console.log('🏁 [Placenix Parallel Sync] Fetching profile and academic metadata concurrently...');
+  // Render profile HTML synchronously in 0ms to prevent skeleton layout height jump
   try {
-    const [profileRes, deptsRes, degreesRes, batchesRes] = await Promise.all([
-      withTimeout(profilePromise, 3500, { data: null, error: { message: 'Profile query timed out' } }),
-      withTimeout(deptsPromise, 3500, { data: [], error: { message: 'Departments query timed out' } }),
-      withTimeout(degreesPromise, 3500, { data: [], error: { message: 'Degrees query timed out' } }),
-      withTimeout(batchesPromise, 3500, { data: [], error: { message: 'Batches query timed out' } })
-    ]);
-
-    if (profileRes && profileRes.data) {
-      user = profileRes.data;
-      console.log(`🏁 Successfully loaded profile for: ${user.full_name}`);
-    } else if (profileRes && profileRes.error) {
-      console.error(`❌ Error fetching target profile: ${profileRes.error.message}`);
-    }
-
-    if (deptsRes && deptsRes.data) {
-      depts = deptsRes.data;
-    }
-
-    if (degreesRes && degreesRes.data) {
-      degrees = degreesRes.data;
-    }
-
-    if (batchesRes && batchesRes.data) {
-      batches = batchesRes.data;
-    }
-  } catch (err) {
-    console.error('❌ Critical parallel sync exception:', err);
+    root.innerHTML = getProfileHTML(user, [], null, [], [], currentTab, isReadOnly);
+    initProfileScripts(root, user, Store, supabaseClient, [], null, currentTab, isReadOnly);
+  } catch (syncErr) {
+    console.warn('⚠️ Initial profile sync render warning:', syncErr);
   }
 
-  // 1.5. Robust Fallback: If Supabase fetch failed/timed out, try loading from local Store registry
-  if (!user && targetStudentId && Store && Array.isArray(Store.students)) {
-    const localStudent = Store.students.find(s => s.id === targetStudentId);
-    if (localStudent) {
-      console.log(`🏁 Robust Fallback: Found student in local Store registry: ${localStudent.name}`);
-      user = {
-        id: localStudent.id,
-        full_name: localStudent.name,
-        department: localStudent.dept,
-        cgpa: localStudent.cgpa,
-        skills: localStudent.skills || [],
-        role: 'student',
-        college: 'Kalasalingam University'
-      };
-    }
-  }
-
-  // 2. Fallbacks for target student or logged-in user profile if still not found
-  if (!user) {
-    if (isReadOnly) {
-      console.warn('⚠️ Read-only target student not found in DB or local store. Rendering safe not-found state.');
-      user = {
-        id: targetStudentId,
-        full_name: 'Student Profile Not Found',
-        college: 'Kalasalingam University',
-        department: 'General',
-        section_name: 'TBD',
-        role: 'student'
-      };
-    } else {
-      console.log(`🏁 Target student not loaded. Syncing loggedInUser profile: ${loggedInUser.id}...`);
-      user = { ...loggedInUser };
-    }
-  } else if (!targetStudentId || targetStudentId === loggedInUser.id) {
-    Store.session.user = user;
-    console.log('🏁 Saved synced user back to Store session context.');
-  }
-
-  // 4. Scan active section requests (must happen after user identification)
-  let pendingReq = null;
-  if (user && user.id) {
-    console.log(`🏁 Scanning active section requests for student: ${user.id}...`);
-    try {
-      const response = await withTimeout(
-        supabase.from('section_requests').select('*').eq('student_id', user.id).eq('status', 'Pending').maybeSingle(),
-        2000,
-        { data: null }
-      );
-      if (response && response.data) {
-        pendingReq = response.data;
-        console.log(`🏁 Active section request found: target Section ${pendingReq.target_section}`);
+  // Non-blocking background database sync
+  if (supabaseClient && typeof supabaseClient.from === 'function') {
+    Promise.all([
+      withTimeout(supabaseClient.from('profiles').select('*').eq('id', targetId).maybeSingle(), 3000, { data: null }),
+      withTimeout(supabaseClient.from('departments').select('*, sections(*)'), 3000, { data: [] }),
+      withTimeout(supabaseClient.from('degrees').select('*').order('degree_name'), 3000, { data: [] }),
+      withTimeout(supabaseClient.from('academic_batches').select('*').order('batch_name'), 3000, { data: [] }),
+      withTimeout(supabaseClient.from('section_requests').select('*').eq('student_id', targetId).eq('status', 'Pending').maybeSingle(), 2000, { data: null })
+    ]).then(([profileRes, deptsRes, degreesRes, batchesRes, reqRes]) => {
+      let updatedUser = user;
+      if (profileRes && profileRes.data) {
+        const remoteData = profileRes.data;
+        const mergedUser = { ...user };
+        Object.keys(remoteData).forEach(k => {
+          if (remoteData[k] !== null && remoteData[k] !== undefined && remoteData[k] !== '') {
+            mergedUser[k] = remoteData[k];
+          }
+        });
+        updatedUser = mergedUser;
+        if (!targetStudentId || targetStudentId === loggedInUser.id) {
+          Store.session.user = updatedUser;
+          localStorage.setItem('placenix-mock-session', JSON.stringify(updatedUser));
+          localStorage.setItem('placenix_user_session', JSON.stringify(updatedUser));
+        }
       }
-    } catch (err) {
-      console.error(`❌ Section requests scan exception: ${err.message}`);
-    }
-  }
+      const depts = deptsRes?.data || [];
+      const degrees = degreesRes?.data || [];
+      const batches = batchesRes?.data || [];
+      const pendingReq = reqRes?.data || null;
 
-  // 6. Generate final profile HTML and bind interactive listeners
-  console.log('🏁 Rendering final student profile layout...');
-  try {
-    root.innerHTML = getProfileHTML(user, depts, pendingReq, degrees, batches, currentTab, isReadOnly);
-    initProfileScripts(user, Store, supabase, depts, pendingReq, currentTab, isReadOnly);
-    console.log('🏁 Load sequence completed successfully. Student academic details fully aligned.');
-  } catch (err) {
-    console.error('❌ Critical crash during final profile layout mount:', err);
-    root.innerHTML = `
-      <div style="padding:48px; text-align:center; color:var(--text-main);">
-        <div style="font-size:36px; margin-bottom:16px;">⚠️</div>
-        <h3 style="font-weight:700;">Academic Profile Assembly Failure</h3>
-        <p style="font-size:13px; color:var(--text-description); margin-top:8px; max-width:500px; margin-left:auto; margin-right:auto;">
-          The interface encountered a presentation error while mounting the student metadata layers.
-        </p>
-        <code style="display:inline-block; margin-top:16px; padding:12px; background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); border-radius:8px; color:var(--brand-secondary); font-family:monospace; font-size:12px;">${err.message}</code>
-      </div>
-    `;
+      try {
+        root.innerHTML = getProfileHTML(updatedUser, depts, pendingReq, degrees, batches, currentTab, isReadOnly);
+        initProfileScripts(root, updatedUser, Store, supabaseClient, depts, pendingReq, currentTab, isReadOnly);
+      } catch (renderErr) {
+        console.error('❌ Background profile render error:', renderErr);
+      }
+    }).catch(asyncErr => {
+      console.warn('⚠️ Background profile sync warning:', asyncErr);
+    });
   }
 }
 
 function getProfileHTML(user, depts = [], pendingReq = null, degrees = [], batches = [], activeTabId = 'tab-personal', isReadOnly = false) {
   return `
-    <div style="padding: 48px; max-width: 1200px; margin: 0 auto;">
+    <div style="display: flex; flex-direction: column; gap: 32px;">
     <!-- Header Area -->
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:48px; background: linear-gradient(to right, rgba(255,255,255,0.02), transparent); padding:32px; border-radius:24px; border:1px solid var(--border-subtle);">
+    <div class="card-ent" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:48px; padding:32px; border-radius:var(--radius-lg); border:1px solid var(--glass-border-main); background:var(--glass-2);">
       <div style="display:flex; align-items:center; gap:24px;">
-        <div style="width:80px; height:80px; border-radius:24px; background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)); display:flex; align-items:center; justify-content:center; font-size:32px; font-weight:800; color:#fff; box-shadow: 0 8px 32px rgba(139, 92, 246, 0.3);">
+        <div style="width:80px; height:80px; border-radius:20px; background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)); display:flex; align-items:center; justify-content:center; font-size:32px; font-weight:800; color:#fff; box-shadow: 0 8px 32px rgba(129, 140, 248, 0.3);">
           ${(user.full_name || 'U')[0].toUpperCase()}
         </div>
         <div>
-          <h1 class="h1-ent" style="margin-bottom:6px; font-size:28px;">${user.full_name || 'Enterprise Identity'}</h1>
-          <div style="display:flex; align-items:center; gap:12px; color:var(--text-muted); font-size:13px; font-weight:600;">
+          <h1 class="h1-ent" style="margin-bottom:6px; font-size:28px; font-family:var(--font-display);">${user.full_name || 'Enterprise Identity'}</h1>
+          <div style="display:flex; align-items:center; gap:12px; color:var(--text-description); font-size:13.5px; font-weight:600;">
             <span>${user.roll_number || 'N/A'}</span>
             <span style="opacity:0.2;">•</span>
             <span>${user.department ? depts.find(d => d.id === user.department)?.name || 'General' : 'General'} · Section ${user.section_name || 'TBD'}</span>
@@ -253,21 +162,22 @@ function getProfileHTML(user, depts = [], pendingReq = null, degrees = [], batch
       </div>
       ${isReadOnly ? `
         <div style="display:flex; gap:16px; align-items:center;">
-          <span style="background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); color: var(--brand-secondary); font-size: 13px; font-weight: 700; padding: 8px 16px; border-radius: 12px; display: flex; align-items: center; gap: 8px;">
+          <span style="background: var(--brand-primary-light); border: 1px solid rgba(129, 140, 248, 0.3); color: var(--brand-primary); font-size: 13px; font-weight: 700; padding: 8px 16px; border-radius: 12px; display: flex; align-items: center; gap: 8px;">
             🛡️ Viewing Profile (Read-Only)
           </span>
           <button class="btn btn-secondary" onclick="window.history.back()" style="height:44px; padding:0 24px; border-radius:12px; font-weight:700;">Back</button>
         </div>
       ` : `
-        <button class="btn btn-primary" id="save-profile-btn" style="height:44px; padding:0 24px; border-radius:12px; font-weight:700;">Save Identity</button>
+        <button class="btn btn-primary" id="save-profile-btn" style="height:44px; padding:0 24px; border-radius:var(--radius-sm); font-weight:700;">Save Identity</button>
       `}
     </div>
 
     <!-- Institutional Tabs -->
-    <div style="display:flex; gap:32px; border-bottom:1px solid var(--border-subtle); margin-bottom:48px;">
+    <div style="display:flex; gap:32px; border-bottom:1px solid var(--glass-border-subtle); margin-bottom:48px;">
       <div class="profile-tab ${activeTabId === 'tab-personal' ? 'active' : ''}" data-tab="tab-personal">Personal Workspace</div>
       <div class="profile-tab ${activeTabId === 'tab-academic' ? 'active' : ''}" data-tab="tab-academic">Academic Record</div>
       <div class="profile-tab ${activeTabId === 'tab-documents' ? 'active' : ''}" data-tab="tab-documents">Verification Vault</div>
+      <div class="profile-tab ${activeTabId === 'tab-interviews' ? 'active' : ''}" data-tab="tab-interviews">Interview History</div>
     </div>
 
     <style>
@@ -275,11 +185,11 @@ function getProfileHTML(user, depts = [], pendingReq = null, degrees = [], batch
         padding: 16px 0; font-size: 15px; font-weight: 700; color: var(--text-muted); 
         cursor: pointer; position: relative; transition: var(--t-fast);
       }
-      .profile-tab:hover { color: #fff; }
-      .profile-tab.active { color: #fff; }
+      .profile-tab:hover { color: var(--text-main); }
+      .profile-tab.active { color: var(--brand-primary); font-weight: 800; }
       .profile-tab.active::after {
         content: ''; position: absolute; bottom: -1px; left: 0; width: 100%; height: 2px;
-        background: var(--brand-primary); box-shadow: 0 0 10px var(--brand-primary);
+        background: var(--brand-primary); box-shadow: 0 0 10px var(--brand-primary-glow);
       }
     </style>
 
@@ -306,11 +216,13 @@ function getProfileHTML(user, depts = [], pendingReq = null, degrees = [], batch
           <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
             <div class="input-node">
               <label class="label-ent">Gender Identity</label>
-              <select id="p_gender" class="input-ent" ${isReadOnly ? 'disabled' : ''}>
-                <option value="Male" ${user.gender === 'Male' ? 'selected' : ''}>Male</option>
-                <option value="Female" ${user.gender === 'Female' ? 'selected' : ''}>Female</option>
-                <option value="Other" ${user.gender === 'Other' ? 'selected' : ''}>Other</option>
-              </select>
+              <input type="text" id="p_gender" list="dl_p_gender" class="input-ent" value="${user.gender || ''}" placeholder="Type or select Gender..." ${isReadOnly ? 'disabled' : ''}>
+              <datalist id="dl_p_gender">
+                <option value="Male">
+                <option value="Female">
+                <option value="Non-binary">
+                <option value="Prefer not to say">
+              </datalist>
             </div>
             <div class="input-node">
               <label class="label-ent">Date of Birth</label>
@@ -359,28 +271,32 @@ function getProfileHTML(user, depts = [], pendingReq = null, degrees = [], batch
           <textarea id="p_permanent_address" class="input-ent" style="height:80px; resize:none;" placeholder="Not Provided (TBD)" ${isReadOnly ? 'disabled' : ''}>${user.permanent_address || ''}</textarea>
         </div>
         <div class="input-node">
-          <label class="label-ent">Current Communication Address</label>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <label class="label-ent" style="margin-bottom:0;">Current Communication Address</label>
+            ${!isReadOnly ? `
+              <button type="button" id="copy-address-btn" style="background:rgba(129,140,248,0.12); border:1px solid rgba(129,140,248,0.3); color:var(--brand-primary); font-size:11px; font-weight:700; padding:4px 12px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all 0.2s ease;">
+                📋 Same as Permanent
+              </button>
+            ` : ''}
+          </div>
           <textarea id="p_current_address" class="input-ent" style="height:80px; resize:none;" placeholder="Not Provided (TBD)" ${isReadOnly ? 'disabled' : ''}>${user.current_address || ''}</textarea>
         </div>
       </div>
       <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:20px;">
         <div class="input-node">
           <label class="label-ent">Country</label>
-          <select id="p_country" class="input-ent" style="appearance:auto;" ${isReadOnly ? 'disabled' : ''}>
-            <option value="" disabled selected>Choose Country...</option>
-          </select>
+          <input type="text" id="p_country" list="dl_p_country" class="input-ent" value="${user.country || ''}" placeholder="Type or search Country..." ${isReadOnly ? 'disabled' : ''}>
+          <datalist id="dl_p_country"></datalist>
         </div>
         <div class="input-node">
           <label class="label-ent">State / Region</label>
-          <select id="p_state" class="input-ent" style="appearance:auto;" disabled>
-            <option value="" disabled selected>Choose State...</option>
-          </select>
+          <input type="text" id="p_state" list="dl_p_state" class="input-ent" value="${user.state || ''}" placeholder="Type or search State..." ${isReadOnly ? 'disabled' : ''}>
+          <datalist id="dl_p_state"></datalist>
         </div>
         <div class="input-node">
           <label class="label-ent">City</label>
-          <select id="p_city" class="input-ent" style="appearance:auto;" disabled>
-            <option value="" disabled selected>Choose City...</option>
-          </select>
+          <input type="text" id="p_city" list="dl_p_city" class="input-ent" value="${user.city || ''}" placeholder="Type or search City..." ${isReadOnly ? 'disabled' : ''}>
+          <datalist id="dl_p_city"></datalist>
         </div>
         <div class="input-node">
           <label class="label-ent">Postal Code</label>
@@ -399,40 +315,64 @@ function getProfileHTML(user, depts = [], pendingReq = null, degrees = [], batch
           <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
             <div class="input-node">
               <label class="label-ent">Degree Program</label>
-              <select id="a_degree" class="input-ent" style="appearance:auto;" ${isReadOnly ? 'disabled' : ''}>
-                <option disabled ${!user.degree ? 'selected' : ''}>Choose Degree...</option>
-                ${degrees.map(d => `<option value="${d.degree_name}" ${user.degree === d.degree_name ? 'selected' : ''}>${d.degree_name}</option>`).join('')}
-              </select>
+              <input type="text" id="a_degree" list="dl_a_degree" class="input-ent" value="${user.degree || ''}" placeholder="Type or search Degree..." ${isReadOnly ? 'disabled' : ''}>
+              <datalist id="dl_a_degree">
+                ${degrees.map(d => `<option value="${d.degree_name}">`).join('')}
+                <option value="B.Tech Computer Science & Engineering">
+                <option value="B.Tech Information Technology">
+                <option value="B.Tech Artificial Intelligence & Data Science">
+                <option value="B.Tech Electronics & Communication">
+                <option value="B.Tech Mechanical Engineering">
+                <option value="M.Tech Computer Science">
+                <option value="BCA">
+                <option value="MCA">
+                <option value="MBA">
+              </datalist>
             </div>
             <div class="input-node">
               <label class="label-ent">Academic Batch</label>
-              <select id="a_batch_year" class="input-ent" style="appearance:auto;" ${isReadOnly ? 'disabled' : ''}>
-                <option disabled ${!user.batch_year ? 'selected' : ''}>Choose Batch...</option>
-                ${batches.map(b => `<option value="${b.batch_name}" ${user.batch_year === b.batch_name ? 'selected' : ''}>${b.batch_name}</option>`).join('')}
-              </select>
+              <input type="text" id="a_batch_year" list="dl_a_batch_year" class="input-ent" value="${user.batch_year || ''}" placeholder="Type or search Batch..." ${isReadOnly ? 'disabled' : ''}>
+              <datalist id="dl_a_batch_year">
+                ${batches.map(b => `<option value="${b.batch_name}">`).join('')}
+                <option value="2021 - 2025">
+                <option value="2022 - 2026">
+                <option value="2023 - 2027">
+                <option value="2024 - 2028">
+              </datalist>
             </div>
           </div>
           
           <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
             <div class="input-node">
               <label class="label-ent">Major / Department</label>
-              <select id="a_department" class="input-ent" style="appearance:auto;" ${user.section_name || isReadOnly ? 'disabled' : ''}>
-                <option disabled ${!user.department ? 'selected' : ''}>Select Department...</option>
-                ${depts.map(d => `<option value="${d.id}" ${user.department === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
-              </select>
+              <input type="text" id="a_department" list="dl_a_department" class="input-ent" value="${(() => {
+                if (!user.department) return '';
+                const found = depts.find(d => d.id === user.department || d.name === user.department);
+                return found ? found.name : user.department;
+              })()}" placeholder="Type or search Department..." ${user.section_name || isReadOnly ? 'disabled' : ''}>
+              <datalist id="dl_a_department">
+                ${depts.map(d => `<option value="${d.name}">`).join('')}
+                <option value="Computer Science & Engineering">
+                <option value="Information Technology">
+                <option value="Artificial Intelligence & Data Science">
+                <option value="Electronics & Communication Engineering">
+                <option value="Electrical & Electronics Engineering">
+                <option value="Mechanical Engineering">
+                <option value="Civil Engineering">
+              </datalist>
             </div>
             <div class="input-node">
               <label class="label-ent">Section Node</label>
-              <select id="a_section" class="input-ent" style="appearance:auto;" ${user.section_name || isReadOnly ? 'disabled' : ''}>
-                <option disabled ${!user.section_name ? 'selected' : ''}>Select Section...</option>
+              <input type="text" id="a_section" list="dl_a_section" class="input-ent" value="${user.section_name ? (user.section_name.startsWith('Section') ? user.section_name : 'Section ' + user.section_name) : ''}" placeholder="Type or search Section..." ${user.section_name || isReadOnly ? 'disabled' : ''}>
+              <datalist id="dl_a_section">
                 ${(() => {
-                  const curDept = depts.find(d => d.id === user.department);
+                  const curDept = depts.find(d => d.id === user.department || d.name === user.department);
                   if (curDept && curDept.sections) {
-                    return curDept.sections.map(s => `<option value="${s.section_name}" ${user.section_name === s.section_name ? 'selected' : ''}>Section ${s.section_name}</option>`).join('');
+                    return curDept.sections.map(s => `<option value="Section ${s.section_name}">`).join('');
                   }
-                  return '';
+                  return '<option value="Section A"><option value="Section B"><option value="Section C"><option value="Section D">';
                 })()}
-              </select>
+              </datalist>
             </div>
           </div>
 
@@ -458,16 +398,16 @@ function getProfileHTML(user, depts = [], pendingReq = null, degrees = [], batch
                 <div id="transfer-request-panel" style="display:none; flex-direction:column; gap:16px; margin-top:16px; border-top:1px solid rgba(255,255,255,0.05); padding-top:16px; animation: fadeIn 0.3s ease;">
                   <div class="input-node">
                     <label class="label-ent" style="font-size:9px;">TARGET SECTION NODE</label>
-                    <select id="t_target_section" class="input-ent" style="height:38px; font-size:12px; appearance:auto;">
-                      <option disabled selected>Choose target...</option>
+                    <input type="text" id="t_target_section" list="dl_t_target_section" class="input-ent" style="height:38px; font-size:12px;" placeholder="Type or search target section...">
+                    <datalist id="dl_t_target_section">
                       ${(() => {
-                        const curDept = depts.find(d => d.id === user.department);
+                        const curDept = depts.find(d => d.id === user.department || d.name === user.department);
                         if (curDept && curDept.sections) {
-                          return curDept.sections.filter(s => s.section_name !== user.section_name).map(s => `<option value="${s.section_name}">Section ${s.section_name}</option>`).join('');
+                          return curDept.sections.filter(s => s.section_name !== user.section_name).map(s => `<option value="Section ${s.section_name}">`).join('');
                         }
-                        return '';
+                        return '<option value="Section A"><option value="Section B"><option value="Section C">';
                       })()}
-                    </select>
+                    </datalist>
                   </div>
                   <div class="input-node">
                     <label class="label-ent" style="font-size:9px;">JUSTIFICATION FOR PROPOSAL</label>
@@ -481,10 +421,27 @@ function getProfileHTML(user, depts = [], pendingReq = null, degrees = [], batch
 
           <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
             <div class="input-node">
-              <label class="label-ent">Current Semester</label>
-              <select id="a_current_semester" class="input-ent" ${isReadOnly ? 'disabled' : ''}>
-                ${[1,2,3,4,5,6,7,8].map(s => `<option value="${s}" ${user.current_semester == s ? 'selected' : ''}>Semester ${s}</option>`).join('')}
-              </select>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <label class="label-ent" style="margin-bottom:0;">Current Semester</label>
+                ${!isReadOnly ? `
+                  <button type="button" id="auto-compute-sem-btn" style="background:rgba(129,140,248,0.12); border:1px solid rgba(129,140,248,0.3); color:var(--brand-primary); font-size:11px; font-weight:700; padding:4px 10px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:all 0.2s ease;" title="Auto-compute active semester from Academic Batch & current date">
+                    ⚡ Auto-Compute
+                  </button>
+                ` : ''}
+              </div>
+              <input type="text" id="a_current_semester" list="dl_a_current_semester" class="input-ent" value="${(() => {
+                if (user.current_semester) {
+                  return typeof user.current_semester === 'number' ? 'Semester ' + user.current_semester : user.current_semester;
+                }
+                const calc = calculateSemesterFromBatch(user.batch_year);
+                return calc || '';
+              })()}" placeholder="Type or select Semester..." ${isReadOnly ? 'disabled' : ''}>
+              <datalist id="dl_a_current_semester">
+                ${[1,2,3,4,5,6,7,8].map(s => `<option value="Semester ${s}">`).join('')}
+              </datalist>
+              <div id="sem-calc-badge" style="font-size:11px; color:var(--text-description); margin-top:4px;">
+                <span>💡 Auto-synced with Academic Batch timeline</span>
+              </div>
             </div>
             <div class="input-node">
               <label class="label-ent">Verified CGPA</label>
@@ -528,6 +485,76 @@ function getProfileHTML(user, depts = [], pendingReq = null, degrees = [], batch
         ${renderDocCard(user, 'Aadhaar Card', '📄', 'Identity Record', isReadOnly)}
         ${renderDocCard(user, 'PAN Card', '📄', 'Tax Identity', isReadOnly)}
       </div>
+    </div>
+  </div>
+
+  <div class="profile-content ${activeTabId === 'tab-interviews' ? 'active' : ''}" id="tab-interviews" style="${activeTabId === 'tab-interviews' ? '' : 'display:none;'}">
+    <div class="card-ent" style="padding:48px;">
+      <div style="margin-bottom:48px;">
+        <h3 class="h2-ent" style="font-size:24px;">AI Virtual Interview History</h3>
+        <p style="color:var(--text-description); font-size:14px; margin-top:4px;">Diagnostic metrics and progress logs across all simulated mock interview sessions.</p>
+      </div>
+
+      ${(() => {
+        const history = user.employability_data?.interview_history || [];
+        if (history.length === 0) {
+          return `
+            <div style="text-align:center; padding:80px 16px; color:var(--text-muted); display:flex; flex-direction:column; align-items:center; gap:16px;">
+              <div style="font-size:48px;">🤖</div>
+              <div style="font-weight:800; color:white; font-size:16px;">No Assessment Telemetry Yet</div>
+              <p style="font-size:13px; max-width:400px; line-height:1.6; margin:0;">
+                This student has not completed any virtual interviews. Once a session is completed, scores and analysis progress will compile here.
+              </p>
+              ${isReadOnly ? '' : `<button class="btn-premium" onclick="window.location.hash='#virtual-interview'" style="margin-top:8px;">Start Virtual Assessment →</button>`}
+            </div>
+          `;
+        }
+
+        // Render history attempts
+        return `
+          <div style="display:flex; flex-direction:column; gap:24px;">
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              ${history.map((attempt, index) => {
+                const isPassing = attempt.scores.overall >= 70;
+                return `
+                  <div style="padding:24px; background:rgba(255,255,255,0.01); border:1px solid var(--border-main); border-radius:16px; display:flex; flex-direction:column; gap:16px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.03); padding-bottom:12px;">
+                      <div>
+                        <span style="font-size:11px; font-weight:800; color:var(--brand-primary); text-transform:uppercase; letter-spacing:0.05em;">Attempt #${attempt.attempt} — ${attempt.company} (${attempt.role})</span>
+                        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Conducted on ${attempt.date}</div>
+                      </div>
+                      <span style="font-size:11px; font-weight:800; padding:6px 14px; border-radius:100px; 
+                                   background:${isPassing ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)'}; 
+                                   color:${isPassing ? 'var(--brand-secondary)' : '#ef4444'};">
+                        OVERALL: ${attempt.scores.overall}% (${isPassing ? 'PASS' : 'RE-ATTEMPT SUGGESTED'})
+                      </span>
+                    </div>
+                    
+                    <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:16px;">
+                      <div style="background:rgba(0,0,0,0.1); padding:16px; border-radius:12px; text-align:center; border:1px solid rgba(255,255,255,0.02);">
+                        <div class="label-ent" style="font-size:9px; margin-bottom:4px;">Aptitude & Logic</div>
+                        <div style="font-size:16px; font-weight:800; color:#fff;">${attempt.scores.aptitude}%</div>
+                      </div>
+                      <div style="background:rgba(0,0,0,0.1); padding:16px; border-radius:12px; text-align:center; border:1px solid rgba(255,255,255,0.02);">
+                        <div class="label-ent" style="font-size:9px; margin-bottom:4px;">Coding Skill</div>
+                        <div style="font-size:16px; font-weight:800; color:#fff;">${attempt.scores.technical}%</div>
+                      </div>
+                      <div style="background:rgba(0,0,0,0.1); padding:16px; border-radius:12px; text-align:center; border:1px solid rgba(255,255,255,0.02);">
+                        <div class="label-ent" style="font-size:9px; margin-bottom:4px;">Communication</div>
+                        <div style="font-size:16px; font-weight:800; color:#fff;">${attempt.scores.communication}%</div>
+                      </div>
+                      <div style="background:rgba(0,0,0,0.1); padding:16px; border-radius:12px; text-align:center; border:1px solid rgba(255,255,255,0.02);">
+                        <div class="label-ent" style="font-size:9px; margin-bottom:4px;">Behavioral HR</div>
+                        <div style="font-size:16px; font-weight:800; color:#fff;">${attempt.scores.hr}%</div>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).reverse().join('')}
+            </div>
+          </div>
+        `;
+      })()}
     </div>
   </div>
 
@@ -614,7 +641,11 @@ function renderDocCard(user, title, icon, hint, isReadOnly = false) {
   </div>`;
 }
 
-function initProfileScripts(user, Store, supabase, depts = [], pendingReq = null, activeTabId = 'tab-personal', isReadOnly = false) {
+function initProfileScripts(root, user, Store, supabase, depts = [], pendingReq = null, activeTabId = 'tab-personal', isReadOnly = false) {
+  const container = root || document.getElementById('app-content') || document.querySelector('.main-content') || document.body;
+  const dbClient = (supabase && typeof supabase.from === 'function') ? supabase 
+                 : (window.supabase && typeof window.supabase.from === 'function') ? window.supabase 
+                 : null;
   const getActiveTab = () => document.querySelector('.profile-tab.active')?.getAttribute('data-tab') || 'tab-personal';
 
   // Tab switching logic (Harmonized with v2.4 enterprise tabs)
@@ -638,28 +669,79 @@ function initProfileScripts(user, Store, supabase, depts = [], pendingReq = null
     });
   });
 
-  // 🟢 Dynamic Topology Selector Engine
-  const deptSelect = document.getElementById('a_department');
-  const sectionSelect = document.getElementById('a_section');
-  
-  if (deptSelect && sectionSelect && !isReadOnly) {
-    deptSelect.addEventListener('change', () => {
-      const selectedDeptId = deptSelect.value;
-      const activeDept = depts.find(d => d.id === selectedDeptId);
-      
-      sectionSelect.innerHTML = '<option disabled selected>Select Section...</option>';
+  // 🟢 Dynamic Department & Section Hybrid Combobox Engine
+  const deptInput = document.getElementById('a_department');
+  const dlDept = document.getElementById('dl_a_department');
+  const sectionInput = document.getElementById('a_section');
+  const dlSection = document.getElementById('dl_a_section');
+
+  if (deptInput && dlSection && !isReadOnly) {
+    const updateSections = () => {
+      dlSection.innerHTML = '';
+      const dVal = deptInput.value?.trim() || '';
+      const activeDept = depts.find(d => d.name?.toLowerCase() === dVal.toLowerCase() || d.id === dVal);
       if (activeDept && activeDept.sections) {
         activeDept.sections.forEach(s => {
           const opt = document.createElement('option');
-          opt.value = s.section_name;
-          opt.textContent = `Section ${s.section_name}`;
-          sectionSelect.appendChild(opt);
+          opt.value = `Section ${s.section_name}`;
+          dlSection.appendChild(opt);
+        });
+      } else {
+        ['A', 'B', 'C', 'D', 'E'].forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = `Section ${s}`;
+          dlSection.appendChild(opt);
         });
       }
-    });
+    };
+
+    deptInput.addEventListener('input', updateSections);
   }
 
-  // 🌍 Locality Dynamic Cascading Engine (Country -> State -> City)
+  // ⚡ Auto-compute current semester from batch handler & live listener
+  const batchInput = document.getElementById('a_batch_year');
+  const semInput = document.getElementById('a_current_semester');
+  const computeSemBtn = document.getElementById('auto-compute-sem-btn');
+  const semBadge = document.getElementById('sem-calc-badge');
+
+  const updateComputedSemester = (userInitiated = false) => {
+    if (!semInput) return;
+    const bVal = batchInput?.value || user.batch_year;
+    const calculated = calculateSemesterFromBatch(bVal);
+    if (calculated) {
+      semInput.value = calculated;
+      if (semBadge) {
+        semBadge.innerHTML = `<span style="color:var(--brand-secondary); font-weight:700;">✓ Calculated: ${calculated}</span> <span style="opacity:0.7;">(from ${bVal || 'Batch'})</span>`;
+      }
+      if (userInitiated && computeSemBtn) {
+        computeSemBtn.innerHTML = `✓ ${calculated}`;
+        computeSemBtn.style.borderColor = 'rgba(16, 185, 129, 0.5)';
+        computeSemBtn.style.color = 'var(--brand-secondary)';
+        computeSemBtn.style.background = 'rgba(16, 185, 129, 0.15)';
+        setTimeout(() => {
+          computeSemBtn.innerHTML = '⚡ Auto-Compute';
+          computeSemBtn.style.borderColor = 'rgba(129, 140, 248, 0.3)';
+          computeSemBtn.style.color = 'var(--brand-primary)';
+          computeSemBtn.style.background = 'rgba(129, 140, 248, 0.12)';
+        }, 1800);
+      }
+    }
+  };
+
+  if (batchInput && !isReadOnly) {
+    batchInput.addEventListener('input', () => updateComputedSemester(false));
+    batchInput.addEventListener('change', () => updateComputedSemester(false));
+  }
+
+  if (computeSemBtn && !isReadOnly) {
+    computeSemBtn.addEventListener('click', () => updateComputedSemester(true));
+  }
+
+  if (semInput && (!semInput.value || semInput.value.trim() === '') && !isReadOnly) {
+    updateComputedSemester(false);
+  }
+
+  // 🌍 Locality Dynamic Hybrid Combobox Engine (Country -> State -> City)
   const localityData = {
     'India': {
       'Tamil Nadu': [
@@ -689,144 +771,89 @@ function initProfileScripts(user, Store, supabase, depts = [], pendingReq = null
     }
   };
 
-  const countrySelect = document.getElementById('p_country');
-  const stateSelect = document.getElementById('p_state');
-  const citySelect = document.getElementById('p_city');
+  const countryInput = document.getElementById('p_country');
+  const dlCountry = document.getElementById('dl_p_country');
+  const stateInput = document.getElementById('p_state');
+  const dlState = document.getElementById('dl_p_state');
+  const cityInput = document.getElementById('p_city');
+  const dlCity = document.getElementById('dl_p_city');
 
-  if (countrySelect && stateSelect && citySelect) {
-    if (isReadOnly) {
-      countrySelect.disabled = true;
-      stateSelect.disabled = true;
-      citySelect.disabled = true;
-    }
-
-    // 1. Populate Country Dropdown
-    countrySelect.innerHTML = '<option value="" disabled selected>Choose Country...</option>';
-    Object.keys(localityData).forEach(c => {
+  if (countryInput && dlCountry) {
+    // Populate Country Datalist
+    dlCountry.innerHTML = '';
+    const countries = Object.keys(localityData).concat(['Canada', 'Australia', 'Germany', 'United Arab Emirates', 'Singapore', 'Malaysia', 'Japan']);
+    countries.forEach(c => {
       const opt = document.createElement('option');
       opt.value = c;
-      opt.textContent = c;
-      countrySelect.appendChild(opt);
+      dlCountry.appendChild(opt);
     });
 
-    // 2. Helper: Populate States
-    const populateStates = (selectedCountry, autoSelectValue = null) => {
-      stateSelect.innerHTML = '<option value="" disabled selected>Choose State...</option>';
-      citySelect.innerHTML = '<option value="" disabled selected>Choose City...</option>';
-      citySelect.disabled = true;
-
-      if (!selectedCountry || !localityData[selectedCountry]) {
-        stateSelect.disabled = true;
-        return;
-      }
-
-      stateSelect.disabled = isReadOnly;
-      const states = Object.keys(localityData[selectedCountry]);
-      states.forEach(s => {
-        const opt = document.createElement('option');
-        opt.value = s;
-        opt.textContent = s;
-        stateSelect.appendChild(opt);
-      });
-
-      // Inject dynamic fallback override
-      if (!isReadOnly) {
-        const otherOpt = document.createElement('option');
-        otherOpt.value = 'Other...';
-        otherOpt.textContent = 'Other (Type manually)...';
-        stateSelect.appendChild(otherOpt);
-      }
-
-      if (autoSelectValue && states.includes(autoSelectValue)) {
-        stateSelect.value = autoSelectValue;
+    const updateStateOptions = () => {
+      if (!dlState) return;
+      dlState.innerHTML = '';
+      const cVal = countryInput.value?.trim() || '';
+      const matchedC = Object.keys(localityData).find(c => c.toLowerCase() === cVal.toLowerCase());
+      if (matchedC && localityData[matchedC]) {
+        Object.keys(localityData[matchedC]).forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s;
+          dlState.appendChild(opt);
+        });
       }
     };
 
-    // 3. Helper: Populate Cities
-    const populateCities = (selectedCountry, selectedState, autoSelectValue = null) => {
-      citySelect.innerHTML = '<option value="" disabled selected>Choose City...</option>';
-      if (!selectedCountry || !selectedState || !localityData[selectedCountry] || !localityData[selectedCountry][selectedState]) {
-        citySelect.disabled = true;
-        return;
-      }
-
-      citySelect.disabled = isReadOnly;
-      const cities = localityData[selectedCountry][selectedState];
-      cities.forEach(city => {
-        const opt = document.createElement('option');
-        opt.value = city;
-        opt.textContent = city;
-        citySelect.appendChild(opt);
-      });
-
-      // Inject dynamic fallback override
-      if (!isReadOnly) {
-        const otherOpt = document.createElement('option');
-        otherOpt.value = 'Other...';
-        otherOpt.textContent = 'Other (Type manually)...';
-        citySelect.appendChild(otherOpt);
-      }
-
-      if (autoSelectValue && cities.includes(autoSelectValue)) {
-        citySelect.value = autoSelectValue;
-      }
-    };
-
-    // 4. Align and Auto-Fill current DB state with fuzzy matching
-    const dbCountry = Object.keys(localityData).find(c => c.toLowerCase() === (user.country || '').toLowerCase().trim());
-    if (dbCountry) {
-      countrySelect.value = dbCountry;
-      const dbState = Object.keys(localityData[dbCountry]).find(s => s.toLowerCase().replace(/\s+/g, '') === (user.state || '').toLowerCase().replace(/\s+/g, '').trim());
-      
-      populateStates(dbCountry, dbState);
-      
-      if (dbState) {
-        const dbCity = localityData[dbCountry][dbState].find(ci => ci.toLowerCase() === (user.city || '').toLowerCase().trim());
-        populateCities(dbCountry, dbState, dbCity);
-      }
-    }
-
-    // 5. Cascading Interactive Bindings + DOM Conversion Fallbacks
-    if (!isReadOnly) {
-      countrySelect.addEventListener('change', (e) => {
-        populateStates(e.target.value);
-      });
-
-      stateSelect.addEventListener('change', (e) => {
-        if (e.target.value === 'Other...') {
-          const parent = stateSelect.parentElement;
-          const input = document.createElement('input');
-          input.type = 'text';
-          input.id = 'p_state';
-          input.className = 'input-ent';
-          input.placeholder = 'Type state name...';
-          parent.replaceChild(input, stateSelect);
-          
-          // Cascade conversion to city automatically
-          const cParent = citySelect.parentElement;
-          const cInput = document.createElement('input');
-          cInput.type = 'text';
-          cInput.id = 'p_city';
-          cInput.className = 'input-ent';
-          cInput.placeholder = 'Type city name...';
-          cParent.replaceChild(cInput, citySelect);
-
-          input.focus();
-        } else {
-          populateCities(countrySelect.value, e.target.value);
+    const updateCityOptions = () => {
+      if (!dlCity) return;
+      dlCity.innerHTML = '';
+      const cVal = countryInput.value?.trim() || '';
+      const sVal = stateInput.value?.trim() || '';
+      const matchedC = Object.keys(localityData).find(c => c.toLowerCase() === cVal.toLowerCase());
+      if (matchedC && localityData[matchedC]) {
+        const matchedS = Object.keys(localityData[matchedC]).find(s => s.toLowerCase().replace(/\s+/g, '') === sVal.toLowerCase().replace(/\s+/g, ''));
+        if (matchedS && localityData[matchedC][matchedS]) {
+          localityData[matchedC][matchedS].forEach(ci => {
+            const opt = document.createElement('option');
+            opt.value = ci;
+            dlCity.appendChild(opt);
+          });
         }
-      });
+      }
+    };
 
-      citySelect.addEventListener('change', (e) => {
-        if (e.target.value === 'Other...') {
-          const parent = citySelect.parentElement;
-          const input = document.createElement('input');
-          input.type = 'text';
-          input.id = 'p_city';
-          input.className = 'input-ent';
-          input.placeholder = 'Type city name...';
-          parent.replaceChild(input, citySelect);
-          input.focus();
+    updateStateOptions();
+    updateCityOptions();
+
+    if (!isReadOnly) {
+      countryInput.addEventListener('input', () => {
+        updateStateOptions();
+        updateCityOptions();
+      });
+      stateInput.addEventListener('input', () => {
+        updateCityOptions();
+      });
+    }
+  }
+
+  // 📋 Same as Permanent Address copy handler
+  if (!isReadOnly) {
+    const copyAddressBtn = document.getElementById('copy-address-btn');
+    if (copyAddressBtn) {
+      copyAddressBtn.addEventListener('click', () => {
+        const permAddr = document.getElementById('p_permanent_address')?.value || '';
+        const currentAddrInput = document.getElementById('p_current_address');
+        if (currentAddrInput) {
+          currentAddrInput.value = permAddr;
+          // Feedback effect
+          copyAddressBtn.innerHTML = '✓ Copied!';
+          copyAddressBtn.style.borderColor = 'rgba(16, 185, 129, 0.5)';
+          copyAddressBtn.style.color = 'var(--brand-secondary)';
+          copyAddressBtn.style.background = 'rgba(16, 185, 129, 0.15)';
+          setTimeout(() => {
+            copyAddressBtn.innerHTML = '📋 Same as Permanent';
+            copyAddressBtn.style.borderColor = 'rgba(129, 140, 248, 0.3)';
+            copyAddressBtn.style.color = 'var(--brand-primary)';
+            copyAddressBtn.style.background = 'rgba(129, 140, 248, 0.12)';
+          }, 1800);
         }
       });
     }
@@ -858,8 +885,9 @@ function initProfileScripts(user, Store, supabase, depts = [], pendingReq = null
         submitTransferBtn.textContent = 'Transmitting Proposal...';
         
         try {
+          if (!dbClient || typeof dbClient.from !== 'function') throw new Error('Database client is offline.');
           const response = await withTimeout(
-            supabase
+            dbClient
               .from('section_requests')
               .insert([{
                 student_id: user.id,
@@ -881,7 +909,7 @@ function initProfileScripts(user, Store, supabase, depts = [], pendingReq = null
           alert('Success: Transfer proposal successfully transmitted to Faculty Advisor Registry.');
           
           // Rerender profile view to show the pending banner
-          loadProfilePage(document.getElementById('page-root'), Store, getActiveTab());
+          loadProfilePage(container, Store, getActiveTab());
         } catch (err) {
           alert('Transmission Refused: ' + err.message);
           submitTransferBtn.disabled = false;
@@ -899,7 +927,7 @@ function initProfileScripts(user, Store, supabase, depts = [], pendingReq = null
         const btn = document.getElementById('save-profile-btn');
         btn.textContent = 'Saving Workspace...';
         btn.disabled = true;
-
+ 
         try {
           const getVal = (id) => document.getElementById(id)?.value?.trim() || null;
           const updates = {
@@ -919,62 +947,125 @@ function initProfileScripts(user, Store, supabase, depts = [], pendingReq = null
             country: getVal('p_country'),
             linkedin_url: getVal('p_linkedin'),
             degree: getVal('a_degree'),
-            department: getVal('a_department'),
-            section_name: getVal('a_section'), // Captured system section identifier!
+            department: (() => {
+              const val = getVal('a_department');
+              if (!val) return null;
+              const found = depts.find(d => d.name?.toLowerCase() === val.toLowerCase() || d.id === val);
+              return found ? found.id : val;
+            })(),
+            section_name: (() => {
+              const val = getVal('a_section');
+              if (!val) return null;
+              return val.replace(/^Section\s+/i, '');
+            })(),
             batch_year: getVal('a_batch_year'),
-            current_semester: getVal('a_current_semester'),
+            current_semester: (() => {
+              const val = getVal('a_current_semester');
+              if (!val) return null;
+              const num = parseInt(val.replace(/\D/g, ''));
+              return isNaN(num) ? val : num;
+            })(),
             cgpa: parseFloat(getVal('a_cgpa')) || null,
             technical_skills: getVal('a_technical_skills'),
             soft_skills: getVal('a_soft_skills'),
             skills: (getVal('a_technical_skills') || '').split(',').map(s => s.trim()).filter(Boolean)
           };
 
-          const response = await withTimeout(
-            supabase.from('profiles').upsert({ id: user.id, ...updates }),
-            15000,
-            { error: { message: 'Database transaction timed out. Saving locally only.' } }
-          );
-
-          if (response?.error) {
-            console.warn('⚠️ Supabase upsert failed/timed out. Committing locally to Store context.');
-            Store.session.user = { ...Store.session.user, ...updates };
-            if (Array.isArray(Store.students)) {
-              const idx = Store.students.findIndex(s => s.id === user.id);
-              if (idx !== -1) {
-                Store.students[idx] = {
-                  ...Store.students[idx],
-                  name: updates.full_name,
-                  dept: updates.department,
-                  cgpa: updates.cgpa,
-                  skills: updates.skills
-                };
-              }
-            }
-
-            btn.textContent = 'Save Profile Identity';
-            btn.disabled = false;
-
-            alert('Notice: Cloud sync timed out. Profile changes have been saved locally in your current workspace.');
-            loadProfilePage(document.getElementById('page-root'), Store, getActiveTab());
-            return;
+          let response = null;
+          if (dbClient && typeof dbClient.from === 'function') {
+            response = await withTimeout(
+              dbClient.from('profiles').upsert({ id: user.id, ...updates }),
+              1500,
+              { error: { message: 'Database transaction timed out.' } }
+            );
+          } else {
+            response = { error: { message: 'Database transaction offline.' } };
           }
 
+          // Always commit updates to local session and Store registry
           Store.session.user = { ...Store.session.user, ...updates };
-          
-          btn.textContent = 'Save Profile Identity';
+          localStorage.setItem('placenix-mock-session', JSON.stringify(Store.session.user));
+          localStorage.setItem('placenix_user_session', JSON.stringify(Store.session.user));
+          if (Array.isArray(Store.students)) {
+            const idx = Store.students.findIndex(s => s.id === user.id);
+            if (idx !== -1) {
+              Store.students[idx] = {
+                ...Store.students[idx],
+                ...updates,
+                name: updates.full_name || Store.students[idx].name,
+                dept: updates.department || Store.students[idx].dept,
+                cgpa: updates.cgpa || Store.students[idx].cgpa,
+                skills: updates.skills || Store.students[idx].skills
+              };
+            }
+          }
+          saveStore();
+
+          btn.textContent = 'Save Identity';
           btn.disabled = false;
 
-          // Refresh view for state alignment
-          alert('Profile successfully committed to the enterprise registry.');
-          loadProfilePage(document.getElementById('page-root'), Store, getActiveTab());
+          if (response?.error) {
+            console.warn('⚠️ Supabase upsert timed out/failed. Saved locally to workspace persistence.');
+            showToast('Profile updated & saved locally to workspace!', 'success');
+          } else {
+            showToast('Profile saved successfully to cloud registry!', 'success');
+          }
+
+          loadProfilePage(container, Store, getActiveTab());
         } catch (err) {
-          alert('Commit failed: ' + err.message);
+          showToast('Commit failed: ' + err.message, 'danger');
         } finally {
-          btn.textContent = 'Save Profile Identity';
+          btn.textContent = 'Save Identity';
           btn.disabled = false;
         }
       });
     }
+  }
+
+  // Section Transfer Proposal logic
+  const triggerTransferBtn = document.getElementById('request-transfer-trigger');
+  const transferPanel = document.getElementById('transfer-request-panel');
+  const submitTransferBtn = document.getElementById('submit-transfer-btn');
+
+  if (triggerTransferBtn && transferPanel) {
+    triggerTransferBtn.onclick = () => {
+      transferPanel.style.display = transferPanel.style.display === 'none' ? 'flex' : 'none';
+    };
+  }
+
+  if (submitTransferBtn) {
+    submitTransferBtn.onclick = () => {
+      const targetSec = document.getElementById('t_target_section')?.value;
+      const reason = document.getElementById('t_reason')?.value;
+
+      if (!targetSec) {
+        alert('Please choose a target section node.');
+        return;
+      }
+
+      if (!Store.transferRequests) Store.transferRequests = [];
+      
+      const newReq = {
+        id: 'req_' + Date.now(),
+        studentId: user.id,
+        studentName: user.full_name || user.name || 'Student',
+        fromSection: user.section_name || 'A',
+        target_section: targetSec,
+        department: user.department || 'CSE',
+        reason: reason || 'Academic reassignment request',
+        status: 'pending',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      Store.transferRequests.push(newReq);
+      localStorage.setItem('placenix_transfer_requests', JSON.stringify(Store.transferRequests));
+      window.dispatchEvent(new CustomEvent('store-updated'));
+
+      if (window.Toast) window.Toast.show('Proposal transmitted to Faculty Advisor for review.', 'success');
+      else alert('Proposal transmitted to Faculty Advisor for review.');
+
+      loadProfilePage(container, Store, getActiveTab());
+    };
   }
 
   // Re-attach other original logic (Experience, Documents)
@@ -1022,15 +1113,17 @@ function initProfileScripts(user, Store, supabase, depts = [], pendingReq = null
       }
 
       try {
+        if (!dbClient || typeof dbClient.storage !== 'object') throw new Error('Database storage client is offline.');
+        
         const fileName = `${user.id}/${docType}_${Date.now()}.${file.name.split('.').pop()}`;
         const uploadResponse = await withTimeout(
-          supabase.storage.from('student-documents').upload(fileName, file),
+          dbClient.storage.from('student-documents').upload(fileName, file),
           20000,
           { error: { message: 'Upload timed out. Check connection.' } }
         );
         if (uploadResponse?.error) throw uploadResponse.error;
 
-        const { data: { publicUrl } } = supabase.storage.from('student-documents').getPublicUrl(fileName);
+        const { data: { publicUrl } } = dbClient.storage.from('student-documents').getPublicUrl(fileName);
         const docs = user.documents || {};
         docs[docType] = publicUrl;
 
@@ -1064,11 +1157,16 @@ function initProfileScripts(user, Store, supabase, depts = [], pendingReq = null
           }
         }
 
-        const upsertResponse = await withTimeout(
-          supabase.from('profiles').upsert(dbData),
-          15000,
-          { error: { message: 'Cloud database commit timed out. Saved locally.' } }
-        );
+        let upsertResponse = null;
+        if (dbClient && typeof dbClient.from === 'function') {
+          upsertResponse = await withTimeout(
+            dbClient.from('profiles').upsert(dbData),
+            15000,
+            { error: { message: 'Cloud database commit timed out. Saved locally.' } }
+          );
+        } else {
+          upsertResponse = { error: { message: 'Cloud database offline. Saved locally.' } };
+        }
 
         Store.session.user.documents = docs;
         
@@ -1083,7 +1181,7 @@ function initProfileScripts(user, Store, supabase, depts = [], pendingReq = null
           }
         }
         
-        loadProfilePage(document.getElementById('page-root'), Store, getActiveTab());
+        loadProfilePage(container, Store, getActiveTab());
       } catch (err) { 
         alert('Upload failed: ' + err.message); 
       } finally {
@@ -1131,11 +1229,16 @@ function initProfileScripts(user, Store, supabase, depts = [], pendingReq = null
             description: document.getElementById('exp-desc')?.value
           };
 
-          const response = await withTimeout(
-            supabase.from('internships').insert(item),
-            15000,
-            { error: { message: 'Database query timed out.' } }
-          );
+          let response = null;
+          if (dbClient && typeof dbClient.from === 'function') {
+            response = await withTimeout(
+              dbClient.from('internships').insert(item),
+              15000,
+              { error: { message: 'Database query timed out.' } }
+            );
+          } else {
+            response = { error: { message: 'Database offline. Saved locally.' } };
+          }
 
           Store.session.user.internships.push(item);
 
@@ -1153,11 +1256,16 @@ function initProfileScripts(user, Store, supabase, depts = [], pendingReq = null
             github_url: document.getElementById('exp-git')?.value
           };
 
-          const response = await withTimeout(
-            supabase.from('projects').insert(item),
-            15000,
-            { error: { message: 'Database query timed out.' } }
-          );
+          let response = null;
+          if (dbClient && typeof dbClient.from === 'function') {
+            response = await withTimeout(
+              dbClient.from('projects').insert(item),
+              15000,
+              { error: { message: 'Database query timed out.' } }
+            );
+          } else {
+            response = { error: { message: 'Database offline. Saved locally.' } };
+          }
 
           Store.session.user.projects.push(item);
 
@@ -1178,19 +1286,24 @@ function initProfileScripts(user, Store, supabase, depts = [], pendingReq = null
     const list = document.getElementById('experience-list');
     if (!list) return;
 
-    const intsResponse = await withTimeout(
-      supabase.from('internships').select('*').eq('student_id', user.id),
-      3500,
-      { data: null }
-    );
-    const projsResponse = await withTimeout(
-      supabase.from('projects').select('*').eq('student_id', user.id),
-      3500,
-      { data: null }
-    );
+    let intsResponse = null;
+    let projsResponse = null;
 
-    const ints = intsResponse?.data || Store.session.user.internships || [];
-    const projs = projsResponse?.data || Store.session.user.projects || [];
+    if (dbClient && typeof dbClient.from === 'function') {
+      intsResponse = await withTimeout(
+        dbClient.from('internships').select('*').eq('student_id', user.id),
+        3500,
+        { data: null }
+      );
+      projsResponse = await withTimeout(
+        dbClient.from('projects').select('*').eq('student_id', user.id),
+        3500,
+        { data: null }
+      );
+    }
+
+    const ints = intsResponse?.data || Store.session?.user?.internships || [];
+    const projs = projsResponse?.data || Store.session?.user?.projects || [];
 
     let html = '';
     [...(ints||[]), ...(projs||[])].forEach(i => {

@@ -34,12 +34,19 @@ export async function loadFacultyAdvisorPage(root, Store) {
       softSkills: softSkills,
       coding: coding,
       aptitude: aptitude,
-      technical: technical
+      technical: technical,
+      interview_history: s.employability_data?.interview_history || []
     };
   });
 
+  const currentHash = (typeof window !== 'undefined' && window.location?.hash ? window.location.hash : '#').replace('#', '').split('?')[0].replace(/_/g, '-').toLowerCase();
+  let initialTab = 'dashboard';
+  if (currentHash === 'fa-students') initialTab = 'students';
+  else if (currentHash === 'fa-resume') initialTab = 'validation';
+  else if (currentHash === 'fa-skills') initialTab = 'mentoring';
+
   let state = {
-    activeTab: 'dashboard',
+    activeTab: initialTab,
     searchQuery: '',
     filterDept: 'All',
     filterStatus: 'All',
@@ -50,13 +57,21 @@ export async function loadFacultyAdvisorPage(root, Store) {
     modalData: null,
     transfers: [],
     students: [],
-    mapping: 'None'
+    mapping: 'None',
+    mentoringCohort: null,
+    mentoringSearchQuery: '',
+    mentoringSortKey: 'severity',
+    mentoringFilterDept: 'All',
+    aiSlideIndex: 0,
+    mentoringQueueSearch: '',
+    aiTab: 'critical'
   };
 
   let depts = [];
 
   // 🟢 Synchronize Student Registry
   async function syncStudents() {
+    if (!supabase) return;
     try {
       const { data: dbDepts } = await supabase.from('departments').select('*');
       if (dbDepts) depts = dbDepts;
@@ -127,7 +142,8 @@ export async function loadFacultyAdvisorPage(root, Store) {
             softSkills: softSkills,
             coding: coding,
             aptitude: aptitude,
-            technical: technical
+            technical: technical,
+            interview_history: p.employability_data?.interview_history || []
           };
         });
       } else {
@@ -146,17 +162,20 @@ export async function loadFacultyAdvisorPage(root, Store) {
   // 🟢 Synchronize Proposal Registry
   async function syncTransfers() {
     try {
-      const { data, error } = await supabase
-        .from('section_requests')
-        .select('*, profiles!student_id(full_name, roll_number)')
-        .eq('status', 'Pending')
-        .order('created_at', { ascending: false });
-      
-      if (!error && data) {
-        state.transfers = data;
+      let remoteData = [];
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('section_requests')
+          .select('*, profiles!student_id(full_name, roll_number)')
+          .eq('status', 'Pending')
+          .order('created_at', { ascending: false });
+        if (!error && data) remoteData = data;
       }
+      const localTransfers = (Store.transferRequests || []).filter(r => r.status === 'pending');
+      state.transfers = [...remoteData, ...localTransfers];
     } catch (err) {
       console.error('Proposal Registry Offline:', err);
+      state.transfers = (Store.transferRequests || []).filter(r => r.status === 'pending');
     }
   }
 
@@ -178,9 +197,23 @@ export async function loadFacultyAdvisorPage(root, Store) {
     return Math.round(total / state.students.length);
   };
 
-  // 🔥 Execute First Synchronization
-  await syncStudents();
-  await syncTransfers();
+  // 🔥 Initial instant render with local/fallback data for 0ms response
+  state.students = fallbackStudents;
+  state.transfers = (Store.transferRequests || []).filter(r => r.status === 'pending');
+  render();
+
+  // 🟢 Non-blocking Background Sync
+  (async () => {
+    try {
+      await Promise.race([
+        Promise.all([syncStudents(), syncTransfers()]),
+        new Promise(resolve => setTimeout(resolve, 2000))
+      ]);
+      render();
+    } catch (e) {
+      console.warn("⚠️ Background FA sync non-fatal warning:", e);
+    }
+  })();
 
   // 🟢 Global Actions Handlers
   window.handleExportAnalytics = () => {
@@ -307,17 +340,199 @@ export async function loadFacultyAdvisorPage(root, Store) {
   };
 
   // Cohort handlers
-  window.handleViewCohort = (type) => {
-    state.modalType = type; 
-    if (type === 'view-weak-comm') {
-      state.modalData = state.students.filter(s => s.softSkills < 75);
-    } else if (type === 'view-coding-gaps') {
-      state.modalData = state.students.filter(s => s.coding < 75);
-    } else if (type === 'view-low-conf') {
-      state.modalData = state.students.filter(s => s.readiness < 70);
-    }
+  window.handleViewCohort = (cohortType) => {
+    state.mentoringCohort = cohortType;
+    state.mentoringSearchQuery = '';
+    state.mentoringSortKey = 'severity';
+    state.mentoringFilterDept = 'All';
     render();
   };
+
+  window.handleExitCohortView = () => {
+    state.mentoringCohort = null;
+    render();
+  };
+
+  window.handleViewCohortAnalysis = (studentName, cohortType) => {
+    const s = state.students.find(x => x.name === studentName);
+    if (!s) return;
+    state.modalType = 'risk-analysis';
+    state.modalData = s;
+    render();
+  };
+
+  function filterMentoringCohortTable() {
+    const tableBody = document.getElementById('ment-cohort-table-body');
+    if (!tableBody) return;
+
+    let cohortList = [];
+    if (state.mentoringCohort === 'weak-comm') {
+      cohortList = state.students.filter(s => s.softSkills < 75);
+    } else if (state.mentoringCohort === 'coding-gaps') {
+      cohortList = state.students.filter(s => s.coding < 75);
+    } else if (state.mentoringCohort === 'low-conf') {
+      cohortList = state.students.filter(s => s.readiness < 70);
+    }
+
+    const filtered = cohortList.filter(s => {
+      const matchSearch = s.name.toLowerCase().includes(state.mentoringSearchQuery.toLowerCase()) || 
+                          s.regNo.toLowerCase().includes(state.mentoringSearchQuery.toLowerCase());
+      const matchDept = state.mentoringFilterDept === 'All' || s.dept.toLowerCase() === state.mentoringFilterDept.toLowerCase();
+      return matchSearch && matchDept;
+    });
+
+    // Sorting
+    filtered.sort((a, b) => {
+      let scoreA = 0;
+      let scoreB = 0;
+      
+      if (state.mentoringCohort === 'weak-comm') {
+        scoreA = a.softSkills;
+        scoreB = b.softSkills;
+      } else if (state.mentoringCohort === 'coding-gaps') {
+        scoreA = a.coding;
+        scoreB = b.coding;
+      } else if (state.mentoringCohort === 'low-conf') {
+        scoreA = a.readiness;
+        scoreB = b.readiness;
+      }
+
+      if (state.mentoringSortKey === 'severity') {
+        return scoreA - scoreB; // Worst first (ascending)
+      } else if (state.mentoringSortKey === 'score-desc') {
+        return scoreB - scoreA; // Best first (descending)
+      } else {
+        return a.name.localeCompare(b.name); // Alphabetical
+      }
+    });
+
+    if (filtered.length === 0) {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align:center; padding:32px; color:var(--text-muted);">
+            No students found matching current search and filter criteria.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tableBody.innerHTML = filtered.map(s => {
+      let score = 0;
+      let severityLabel = 'Mild';
+      let severityClass = 'badge-neutral';
+      
+      if (state.mentoringCohort === 'weak-comm') {
+        score = s.softSkills;
+        if (score < 50) { severityLabel = 'Critical'; severityClass = 'badge-danger'; }
+        else if (score < 65) { severityLabel = 'Moderate'; severityClass = 'badge-warning'; }
+        else { severityLabel = 'Mild'; severityClass = 'badge-success'; }
+      } else if (state.mentoringCohort === 'coding-gaps') {
+        score = s.coding;
+        if (score < 50) { severityLabel = 'Critical'; severityClass = 'badge-danger'; }
+        else if (score < 65) { severityLabel = 'Moderate'; severityClass = 'badge-warning'; }
+        else { severityLabel = 'Mild'; severityClass = 'badge-success'; }
+      } else if (state.mentoringCohort === 'low-conf') {
+        score = s.readiness;
+        if (score < 45) { severityLabel = 'Critical'; severityClass = 'badge-danger'; }
+        else if (score < 60) { severityLabel = 'Moderate'; severityClass = 'badge-warning'; }
+        else { severityLabel = 'Mild'; severityClass = 'badge-success'; }
+      }
+
+      // Calculate progress trend from history
+      let trendHTML = '<span style="color:var(--text-muted); font-size:11px;">—</span>';
+      const history = s.interview_history || [];
+      if (history.length >= 2) {
+        const latest = history[history.length - 1];
+        const previous = history[history.length - 2];
+        
+        let scoreKey = 'overall';
+        if (state.mentoringCohort === 'weak-comm') scoreKey = 'communication';
+        else if (state.mentoringCohort === 'coding-gaps') scoreKey = 'technical';
+        else if (state.mentoringCohort === 'low-conf') scoreKey = 'overall';
+
+        const latScore = latest.scores[scoreKey];
+        const prevScore = previous.scores[scoreKey];
+        const diff = latScore - prevScore;
+
+        if (diff > 0) {
+          trendHTML = `<span style="color:#22c55e; font-weight:800; font-size:11px;">↑ (+${diff}%)</span>`;
+        } else if (diff < 0) {
+          trendHTML = `<span style="color:#ef4444; font-weight:800; font-size:11px;">↓ (${diff}%)</span>`;
+        } else {
+          trendHTML = `<span style="color:var(--text-muted); font-size:11px;">→ (0%)</span>`;
+        }
+      }
+
+      return `
+        <tr>
+          <td>
+            <div style="font-weight:700;">${s.name}</div>
+            <div style="font-size:0.7rem; color:var(--text-muted);">${s.regNo} · ${s.dept}</div>
+          </td>
+          <td>${s.cgpa}</td>
+          <td>
+            <span style="font-weight:800; color:white;">${score}%</span>
+          </td>
+          <td>${trendHTML}</td>
+          <td><span class="badge ${severityClass}">${severityLabel}</span></td>
+          <td style="text-align:right;">
+            <div style="display:flex; gap:8px; justify-content:flex-end;">
+              <button class="btn btn-sm btn-secondary" style="padding:6px 12px; font-size:0.75rem;" onclick="window.handleOpenScheduleMentoring('${s.name}')">Schedule</button>
+              <button class="btn btn-sm btn-ghost" style="padding:6px 12px; font-size:0.75rem;" onclick="window.handleViewCohortAnalysis('${s.name}', '${state.mentoringCohort}')">Insights</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  window.handleSelectAITab = (tab) => {
+    state.aiTab = tab;
+    state.aiSlideIndex = 0;
+    render();
+  };
+
+  window.handleNextAISlide = () => {
+    state.aiSlideIndex++;
+    render();
+  };
+
+  window.handlePrevAISlide = () => {
+    state.aiSlideIndex--;
+    render();
+  };
+
+  function renderMentoringQueueList() {
+    const container = document.querySelector('.fa-section-card div[style*="max-height:220px"]');
+    if (!container) return;
+
+    const userEmail = Store.session?.user?.email || 'advisor@univ.edu';
+    const rawQueue = (Store.slotAllocations || []).filter(slot => slot.staffEmail === userEmail);
+    const queueQuery = (state.mentoringQueueSearch || '').toLowerCase().trim();
+    const filteredQueue = rawQueue.filter(slot => {
+      return slot.studentName.toLowerCase().includes(queueQuery) || slot.topic.toLowerCase().includes(queueQuery);
+    });
+
+    container.innerHTML = filteredQueue.length === 0 ? `
+      <div style="text-align:center; padding:32px 16px; color:var(--text-muted); font-size:11px;">
+        ${rawQueue.length === 0 ? 'No mentoring sessions scheduled yet.' : 'No matches found in queue.'}
+      </div>
+    ` : filteredQueue.map(slot => `
+      <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:rgba(255,255,255,0.02); border:1px solid var(--border-subtle); border-radius:10px;">
+        <div style="width:28px; height:28px; border-radius:50%; background:var(--brand-electric-violet); display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:800; color:white;">
+          ${slot.studentName[0]}
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:0.75rem; font-weight:700; color:white;">${slot.studentName}</div>
+          <div style="font-size:0.65rem; color:var(--text-muted);">${slot.topic} · ${slot.time}</div>
+        </div>
+        <span class="badge" style="font-size:8px; text-transform:uppercase; background:rgba(245,158,11,0.1); border-color:rgba(245,158,11,0.2); color:#f59e0b;">
+          ${slot.mode}
+        </span>
+      </div>
+    `).join('');
+  }
 
   window.handleAutoScheduleInterviews = () => {
     const eligible = state.students.filter(s => s.readiness >= 75);
@@ -338,7 +553,44 @@ export async function loadFacultyAdvisorPage(root, Store) {
     render();
   };
 
-  window.handleSendDSAMaterial = (e) => {
+  async function sharePrepMaterialToSupabase(material) {
+    const SYSTEM_UUID = '00000000-0000-0000-0000-000000000000';
+    if (!supabase) return;
+    
+    try {
+      const { data: sysProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', SYSTEM_UUID)
+        .maybeSingle();
+
+      let currentData = sysProfile?.employability_data || {};
+      let sharedResources = currentData.shared_resources || [];
+
+      sharedResources.unshift(material);
+      currentData.shared_resources = sharedResources;
+
+      const { error: upsertErr } = await supabase
+        .from('profiles')
+        .upsert({
+          id: SYSTEM_UUID,
+          full_name: 'SYSTEM_PREP_MATERIALS',
+          employability_data: currentData,
+          role: 'system'
+        });
+
+      if (upsertErr) throw upsertErr;
+      console.log('✅ Shared prep material synced to Supabase.');
+      
+      // Update local store as well
+      Store.sharedResources = sharedResources;
+      localStorage.setItem('placenix_shared_resources', JSON.stringify(sharedResources));
+    } catch (err) {
+      console.error('❌ Failed to sync shared resource to Supabase:', err.message);
+    }
+  }
+
+  window.handleSendDSAMaterial = async (e) => {
     e.preventDefault();
     const title = document.getElementById('dsa-title')?.value?.trim();
     const type = document.getElementById('dsa-type')?.value;
@@ -350,6 +602,30 @@ export async function loadFacultyAdvisorPage(root, Store) {
       showToast('Validation Exception: Title is required.', 'warning');
       return;
     }
+
+    let dept = 'All';
+    let section = 'All';
+    if (state.mapping && state.mapping !== 'None' && state.mapping !== 'Global') {
+      const parts = state.mapping.split('-').map(s => s.trim());
+      if (parts[0]) dept = parts[0];
+      if (parts[1]) {
+        section = parts[1].replace(/section/i, '').trim();
+      }
+    }
+
+    const material = {
+      id: 'res_' + Date.now(),
+      title: title,
+      type: type,
+      notes: notes || 'Practice recommended problems.',
+      link: resource || '',
+      target_dept: dept,
+      target_section: section,
+      target_cohort: target,
+      shared_by: Store.session?.user?.full_name || Store.session?.user?.name || 'Faculty Advisor',
+      sender_role: 'faculty',
+      date: new Date().toISOString().split('T')[0]
+    };
 
     const newNotification = {
       id: 'n_' + Date.now(),
@@ -367,6 +643,9 @@ export async function loadFacultyAdvisorPage(root, Store) {
     state.modalType = null;
     state.modalData = null;
     render();
+
+    // Async sync to Supabase
+    await sharePrepMaterialToSupabase(material);
   };
 
   // 🟢 Global Profile Validation Handlers
@@ -528,13 +807,13 @@ export async function loadFacultyAdvisorPage(root, Store) {
     `).join('');
   }
 
-  const render = () => {
+  function render() {
     const pendingValCount = state.students.filter(s => s.status === 'Pending' || s.status === 'Under Review').length;
     const placementRiskCount = state.students.filter(s => s.prob === 'Low').length;
 
     root.innerHTML = `
     <style>
-      .fa-container { padding: 32px; color: var(--text-main); animation: fadeIn 0.5s ease; }
+      .fa-container { padding: 0; color: var(--text-main); animation: fadeIn 0.5s ease; }
       .fa-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 40px; }
       
       .fa-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-bottom: 40px; }
@@ -742,6 +1021,47 @@ export async function loadFacultyAdvisorPage(root, Store) {
     if (state.activeTab === 'students') {
       filterRosterTable();
     }
+
+    // ── Mentoring Cohort Search/Sort/Filter Events ──
+    const mentSearch = document.getElementById('ment-cohort-search');
+    if (mentSearch) {
+      mentSearch.value = state.mentoringSearchQuery;
+      mentSearch.oninput = (e) => {
+        state.mentoringSearchQuery = e.target.value;
+        filterMentoringCohortTable();
+      };
+    }
+
+    const mentDept = document.getElementById('ment-cohort-dept');
+    if (mentDept) {
+      mentDept.value = state.mentoringFilterDept;
+      mentDept.onchange = (e) => {
+        state.mentoringFilterDept = e.target.value;
+        filterMentoringCohortTable();
+      };
+    }
+
+    const mentSort = document.getElementById('ment-cohort-sort');
+    if (mentSort) {
+      mentSort.value = state.mentoringSortKey;
+      mentSort.onchange = (e) => {
+        state.mentoringSortKey = e.target.value;
+        filterMentoringCohortTable();
+      };
+    }
+
+    if (state.activeTab === 'mentoring' && state.mentoringCohort) {
+      filterMentoringCohortTable();
+    }
+
+    const queueSearch = document.getElementById('ment-queue-search');
+    if (queueSearch) {
+      queueSearch.value = state.mentoringQueueSearch;
+      queueSearch.oninput = (e) => {
+        state.mentoringQueueSearch = e.target.value;
+        renderMentoringQueueList();
+      };
+    }
   };
 
   function renderContent() {
@@ -769,16 +1089,100 @@ export async function loadFacultyAdvisorPage(root, Store) {
     const avgResume = getAverageResumeScore();
     const strokeDashoffset = Math.max(0, Math.min(402, 402 - (402 * avgResume) / 100));
 
+    // Generate dynamic AI Insights based on student roster
+    const criticalRisks = [];
+    const generalGaps = [];
+
+    state.students.forEach(s => {
+      // 1. Critical Risk: CGPA vs Technical mismatch
+      if (s.cgpa >= 7.5 && s.coding < 75) {
+        criticalRisks.push({
+          id: `risk_tech_${s.id}`,
+          studentName: s.name,
+          title: 'Critical Risk Alert',
+          icon: '⚠️',
+          desc: `${s.name}'s CGPA (${s.cgpa}) is high, but their technical coding score (${s.coding}%) is below placement benchmark. High mismatch risk detected.`,
+          actionLabel: 'View Analysis →',
+          actionStr: `window.handleViewAnalysis('${s.name}')`
+        });
+      }
+
+      // 2. Communication Gap
+      if (s.softSkills < 75) {
+        generalGaps.push({
+          id: `gap_comm_${s.id}`,
+          studentName: s.name,
+          title: 'Communication Gap',
+          icon: '🗣️',
+          desc: `${s.name} scored ${s.softSkills}% in communication fluency. Suggesting mock presentation cycles or Prep Workshop #4.`,
+          actionLabel: 'Schedule Mentoring →',
+          actionStr: `window.handleOpenScheduleMentoring('${s.name}')`
+        });
+      }
+
+      // 3. Aptitude Gap
+      if (s.aptitude < 75) {
+        generalGaps.push({
+          id: `gap_apt_${s.id}`,
+          studentName: s.name,
+          title: 'Aptitude Shortfall',
+          icon: '📊',
+          desc: `${s.name} scored ${s.aptitude}% in logical reasoning rounds. Suggesting practice DP sheets and basic logic quizzes.`,
+          actionLabel: 'Share Prep Sheet →',
+          actionStr: `window.handleSharePrepMaterial()`
+        });
+      }
+    });
+
+    // Default fallbacks if empty
+    if (criticalRisks.length === 0) {
+      criticalRisks.push({
+        id: 'default_risk',
+        studentName: 'No Critical Risks',
+        title: 'Security Clearance',
+        icon: '🛡️',
+        desc: 'All mapped student metrics match standard university placement readiness models.',
+        actionLabel: 'Audit Roster →',
+        actionStr: `state.activeTab = 'students'; render();`
+      });
+    }
+    if (generalGaps.length === 0) {
+      generalGaps.push({
+        id: 'default_gap',
+        studentName: 'No Gaps Mapped',
+        title: 'Intelligence Sync',
+        icon: '💡',
+        desc: 'No developmental skill gaps detected in the active department roster.',
+        actionLabel: 'Audit Skill Matrix →',
+        actionStr: `state.activeTab = 'mentoring'; render();`
+      });
+    }
+
+    const activeList = state.aiTab === 'critical' ? criticalRisks : generalGaps;
+    // Bounds check active index
+    if (state.aiSlideIndex >= activeList.length) {
+      state.aiSlideIndex = 0;
+    }
+    const currentSlide = activeList[state.aiSlideIndex];
+
+    // Mentoring Queue Logic
+    const userEmail = Store.session?.user?.email || 'advisor@univ.edu';
+    const rawQueue = (Store.slotAllocations || []).filter(slot => slot.staffEmail === userEmail);
+    const queueQuery = (state.mentoringQueueSearch || '').toLowerCase().trim();
+    const filteredQueue = rawQueue.filter(slot => {
+      return slot.studentName.toLowerCase().includes(queueQuery) || slot.topic.toLowerCase().includes(queueQuery);
+    });
+
     return `
     <div class="fa-grid">
       <div style="display:flex; flex-direction:column; gap:32px;">
         <div class="fa-section-card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
             <h3 style="font-size:1.1rem; font-weight:800;">Employability Trend</h3>
-            <select id="trend-select" class="btn btn-secondary btn-sm" style="background:rgba(255,255,255,0.05); border:1px solid var(--border-subtle); padding:6px 12px; border-radius:8px; color:white;">
-              <option value="Last 6 Months" ${state.selectedTrend === 'Last 6 Months' ? 'selected' : ''}>Last 6 Months</option>
-              <option value="Last 3 Months" ${state.selectedTrend === 'Last 3 Months' ? 'selected' : ''}>Last 3 Months</option>
-              <option value="Last Year" ${state.selectedTrend === 'Last Year' ? 'selected' : ''}>Last Year</option>
+            <select id="trend-select" class="input-ent" style="height:36px; padding:0 36px 0 16px; font-size:12px; font-weight:800; border-radius:10px; background-color:rgba(5,8,16,0.85); color:#fff; border:1px solid rgba(0,200,255,0.3); appearance:auto;">
+              <option value="Last 6 Months" style="background:#050810; color:#fff;" ${state.selectedTrend === 'Last 6 Months' ? 'selected' : ''}>Last 6 Months</option>
+              <option value="Last 3 Months" style="background:#050810; color:#fff;" ${state.selectedTrend === 'Last 3 Months' ? 'selected' : ''}>Last 3 Months</option>
+              <option value="Last Year" style="background:#050810; color:#fff;" ${state.selectedTrend === 'Last Year' ? 'selected' : ''}>Last Year</option>
             </select>
           </div>
           <div style="height:280px; display:flex; align-items:flex-end; gap:20px; padding:20px 0;">
@@ -830,45 +1234,81 @@ export async function loadFacultyAdvisorPage(root, Store) {
 
       <div style="display:flex; flex-direction:column; gap:24px;">
         <div class="ai-insight-box">
-          <div style="display:flex; align-items:center; gap:10px; margin-bottom:24px;">
-            <div style="font-size:1.5rem;">🤖</div>
-            <h3 style="font-size:1.1rem; font-weight:900;">AI Advisor</h3>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="font-size:1.3rem;">🤖</div>
+              <h3 style="font-size:1rem; font-weight:900; margin:0;">AI Advisor</h3>
+            </div>
+            <!-- Dynamic Tab Buttons -->
+            <div style="display:flex; gap:6px;">
+              <button class="btn btn-sm ${state.aiTab === 'critical' ? 'btn-primary' : 'btn-secondary'}" onclick="window.handleSelectAITab('critical')" style="font-size:10px; padding:4px 8px; border-radius:6px;">
+                Risks (${criticalRisks.length})
+              </button>
+              <button class="btn btn-sm ${state.aiTab === 'general' ? 'btn-primary' : 'btn-secondary'}" onclick="window.handleSelectAITab('general')" style="font-size:10px; padding:4px 8px; border-radius:6px;">
+                Gaps (${generalGaps.length})
+              </button>
+            </div>
           </div>
           
-          <div class="insight-item">
-            <div class="insight-icon">⚠️</div>
-            <div>
-              <div style="font-size:0.85rem; font-weight:800;">Critical Risk Alert</div>
-              <p style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">${state.students[0]?.name || 'Student'}'s CGPA and technical scores are mismatched. High placement risk detected.</p>
-              <button class="btn btn-ghost btn-sm" style="margin-top:8px; padding:0; color:var(--brand-electric-violet);" onclick="window.handleViewAnalysis('${state.students[0]?.name || 'Student'}')">View Analysis →</button>
+          <!-- Slide Panel -->
+          <div style="min-height:140px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div class="insight-item" style="margin-bottom:12px;">
+              <div class="insight-icon" style="font-size:1.5rem; margin-right:12px;">${currentSlide.icon}</div>
+              <div>
+                <div style="font-size:0.85rem; font-weight:800; color:white;">${currentSlide.title}</div>
+                <p style="font-size:0.75rem; color:var(--text-muted); margin-top:4px; line-height:1.4;">${currentSlide.desc}</p>
+              </div>
+            </div>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05); padding-top:12px;">
+              <button class="btn btn-ghost btn-sm" style="padding:0; color:var(--brand-electric-violet); font-size:11px;" onclick="${currentSlide.actionStr}">
+                ${currentSlide.actionLabel}
+              </button>
+              
+              <!-- Pagination controls -->
+              <div style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-muted);">
+                <button class="btn btn-icon btn-sm" style="padding:4px; font-size:10px;" onclick="window.handlePrevAISlide()" ${state.aiSlideIndex === 0 ? 'disabled style="opacity:0.3; cursor:default;"' : ''}>◀</button>
+                <span>${state.aiSlideIndex + 1} of ${activeList.length}</span>
+                <button class="btn btn-icon btn-sm" style="padding:4px; font-size:10px;" onclick="window.handleNextAISlide()" ${state.aiSlideIndex === activeList.length - 1 ? 'disabled style="opacity:0.3; cursor:default;"' : ''}>▶</button>
+              </div>
             </div>
           </div>
-
-          <div class="insight-item">
-            <div class="insight-icon">💡</div>
-            <div>
-              <div style="font-size:0.85rem; font-weight:800;">Communication Gap</div>
-              <p style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">5 students in the 8-9 CGPA bracket show low Soft Skill readiness. Suggesting Workshop #4.</p>
-            </div>
-          </div>
-
-          <button class="btn btn-primary" style="width:100%; border-radius:12px;" onclick="window.handleReviewAllInsights()">Review All AI Insights</button>
         </div>
 
-        <div class="fa-section-card">
-          <h3 style="font-size:1rem; font-weight:800; margin-bottom:16px;">Mentoring Queue</h3>
-          <div style="display:flex; flex-direction:column; gap:12px;">
-            ${state.students.slice(0, 3).map((s, i) => `
-              <div style="display:flex; align-items:center; gap:12px; padding:12px; background:rgba(255,255,255,0.03); border-radius:12px;">
-                <div style="width:32px; height:32px; border-radius:50%; background:var(--brand-electric-violet); display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:800;">${s.name[0]}</div>
-                <div style="flex:1;">
-                  <div style="font-size:0.8rem; font-weight:700;">${s.name}</div>
-                  <div style="font-size:0.65rem; color:var(--text-muted);">${['Resume Revamp', 'Technical Prep', 'Mock Interview'][i % 3]}</div>
+        <div class="fa-section-card" style="display:flex; flex-direction:column; gap:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="font-size:1rem; font-weight:800; margin:0;">Mentoring Queue</h3>
+            <span class="badge badge-neutral" style="font-size:9px;">${rawQueue.length} Booked</span>
+          </div>
+          
+          <!-- Queue Search Box -->
+          <input type="text" id="ment-queue-search" placeholder="Search appointments..." style="padding:8px 12px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid var(--border-subtle); color:white; font-size:11px; width:100%;">
+          
+          <!-- Queue List Viewport -->
+          <div style="max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; scrollbar-width:none;">
+            ${filteredQueue.length === 0 ? `
+              <div style="text-align:center; padding:32px 16px; color:var(--text-muted); font-size:11px;">
+                ${rawQueue.length === 0 ? 'No mentoring sessions scheduled yet.' : 'No matches found in queue.'}
+              </div>
+            ` : filteredQueue.map(slot => `
+              <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:rgba(255,255,255,0.02); border:1px solid var(--border-subtle); border-radius:10px;">
+                <div style="width:28px; height:28px; border-radius:50%; background:var(--brand-electric-violet); display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:800; color:white;">
+                  ${slot.studentName[0]}
                 </div>
-                <button class="btn-icon" onclick="window.handleOpenScheduleMentoring('${s.name}')">📅</button>
+                <div style="flex:1;">
+                  <div style="font-size:0.75rem; font-weight:700; color:white;">${slot.studentName}</div>
+                  <div style="font-size:0.65rem; color:var(--text-muted);">${slot.topic} · ${slot.time}</div>
+                </div>
+                <span class="badge" style="font-size:8px; text-transform:uppercase; background:rgba(245,158,11,0.1); border-color:rgba(245,158,11,0.2); color:#f59e0b;">
+                  ${slot.mode}
+                </span>
               </div>
             `).join('')}
           </div>
+          
+          <button class="btn btn-secondary btn-sm" style="width:100%; border-radius:8px; font-size:11px;" onclick="window.handleExitCohortView(); state.activeTab = 'students'; render();">
+            + Schedule Session
+          </button>
         </div>
       </div>
     </div>
@@ -877,16 +1317,16 @@ export async function loadFacultyAdvisorPage(root, Store) {
 
   function renderStudents() {
     return `
-    <div class="card">
+    <div class="card" style="overflow: visible !important;">
       <div style="display:flex; flex-direction:column; gap:16px; margin-bottom:20px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div style="display:flex; gap:10px; flex:1;">
             <input type="text" id="roster-search" placeholder="Search by name or register number..." style="padding:10px 16px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid var(--border-subtle); width:300px; color:white;">
-            <select id="roster-dept" style="padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid var(--border-subtle); color:white;">
-              <option value="All" ${state.filterDept === 'All' ? 'selected' : ''}>All Departments</option>
-              <option value="CSE" ${state.filterDept === 'CSE' ? 'selected' : ''}>CSE</option>
-              <option value="ECE" ${state.filterDept === 'ECE' ? 'selected' : ''}>ECE</option>
-              <option value="IT" ${state.filterDept === 'IT' ? 'selected' : ''}>IT</option>
+            <select id="roster-dept" style="padding:10px; border-radius:8px; background:var(--bg-card); border:1px solid var(--border-subtle); color:white; color-scheme: dark;">
+              <option value="All" ${state.filterDept === 'All' ? 'selected' : ''} style="background:#18181b; color:white;">All Departments</option>
+              <option value="CSE" ${state.filterDept === 'CSE' ? 'selected' : ''} style="background:#18181b; color:white;">CSE</option>
+              <option value="ECE" ${state.filterDept === 'ECE' ? 'selected' : ''} style="background:#18181b; color:white;">ECE</option>
+              <option value="IT" ${state.filterDept === 'IT' ? 'selected' : ''} style="background:#18181b; color:white;">IT</option>
             </select>
           </div>
           <button id="btn-advanced-filters" class="btn btn-secondary btn-sm" style="display:flex; align-items:center; gap:8px;">
@@ -898,21 +1338,21 @@ export async function loadFacultyAdvisorPage(root, Store) {
           <div class="advanced-filters-panel">
             <div>
               <label style="display:block; font-size:0.75rem; font-weight:700; color:var(--text-muted); margin-bottom:6px;">Profile Status</label>
-              <select id="roster-status" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.3); border:1px solid var(--border-subtle); color:white;">
-                <option value="All" ${state.filterStatus === 'All' ? 'selected' : ''}>All Statuses</option>
-                <option value="Approved" ${state.filterStatus === 'Approved' ? 'selected' : ''}>Approved</option>
-                <option value="Pending" ${state.filterStatus === 'Pending' ? 'selected' : ''}>Pending</option>
-                <option value="Under Review" ${state.filterStatus === 'Under Review' ? 'selected' : ''}>Under Review</option>
-                <option value="Rejected" ${state.filterStatus === 'Rejected' ? 'selected' : ''}>Rejected</option>
+              <select id="roster-status" style="width:100%; padding:10px; border-radius:8px; background:var(--bg-card); border:1px solid var(--border-subtle); color:white; color-scheme: dark;">
+                <option value="All" ${state.filterStatus === 'All' ? 'selected' : ''} style="background:#18181b; color:white;">All Statuses</option>
+                <option value="Approved" ${state.filterStatus === 'Approved' ? 'selected' : ''} style="background:#18181b; color:white;">Approved</option>
+                <option value="Pending" ${state.filterStatus === 'Pending' ? 'selected' : ''} style="background:#18181b; color:white;">Pending</option>
+                <option value="Under Review" ${state.filterStatus === 'Under Review' ? 'selected' : ''} style="background:#18181b; color:white;">Under Review</option>
+                <option value="Rejected" ${state.filterStatus === 'Rejected' ? 'selected' : ''} style="background:#18181b; color:white;">Rejected</option>
               </select>
             </div>
             <div>
               <label style="display:block; font-size:0.75rem; font-weight:700; color:var(--text-muted); margin-bottom:6px;">Placement Risk Probability</label>
-              <select id="roster-prob" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.3); border:1px solid var(--border-subtle); color:white;">
-                <option value="All" ${state.filterProb === 'All' ? 'selected' : ''}>All Probabilities</option>
-                <option value="High" ${state.filterProb === 'High' ? 'selected' : ''}>High</option>
-                <option value="Medium" ${state.filterProb === 'Medium' ? 'selected' : ''}>Medium</option>
-                <option value="Low" ${state.filterProb === 'Low' ? 'selected' : ''}>Low</option>
+              <select id="roster-prob" style="width:100%; padding:10px; border-radius:8px; background:var(--bg-card); border:1px solid var(--border-subtle); color:white; color-scheme: dark;">
+                <option value="All" ${state.filterProb === 'All' ? 'selected' : ''} style="background:#18181b; color:white;">All Probabilities</option>
+                <option value="High" ${state.filterProb === 'High' ? 'selected' : ''} style="background:#18181b; color:white;">High</option>
+                <option value="Medium" ${state.filterProb === 'Medium' ? 'selected' : ''} style="background:#18181b; color:white;">Medium</option>
+                <option value="Low" ${state.filterProb === 'Low' ? 'selected' : ''} style="background:#18181b; color:white;">Low</option>
               </select>
             </div>
           </div>
@@ -994,42 +1434,96 @@ export async function loadFacultyAdvisorPage(root, Store) {
   }
 
   function renderMentoring() {
+    if (!state.mentoringCohort) {
+      return `
+      <div class="card">
+        <div class="card-header"><h3 class="card-title">AI Mentoring Overview</h3></div>
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:20px; padding-top:16px;">
+          <div class="fa-card" style="background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:16px; padding:16px;">
+            <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;">Weak Communication</div>
+            <div style="font-size:1.5rem; font-weight:800; color:#f59e0b;">${state.students.filter(s => s.softSkills < 75).length} Students</div>
+            <button class="btn btn-ghost btn-sm" style="margin-top:10px; width:100%;" onclick="window.handleViewCohort('weak-comm')">View List</button>
+          </div>
+          <div class="fa-card" style="background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:16px; padding:16px;">
+            <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;">Coding Gaps</div>
+            <div style="font-size:1.5rem; font-weight:800; color:#ef4444;">${state.students.filter(s => s.coding < 75).length} Students</div>
+            <button class="btn btn-ghost btn-sm" style="margin-top:10px; width:100%;" onclick="window.handleViewCohort('coding-gaps')">View List</button>
+          </div>
+          <div class="fa-card" style="background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:16px; padding:16px;">
+            <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;">Low Confidence</div>
+            <div style="font-size:1.5rem; font-weight:800; color:#3b82f6;">${state.students.filter(s => s.readiness < 70).length} Students</div>
+            <button class="btn btn-ghost btn-sm" style="margin-top:10px; width:100%;" onclick="window.handleViewCohort('low-conf')">View List</button>
+          </div>
+        </div>
+        
+        <div style="margin-top:24px;">
+          <h4 style="margin-bottom:12px; font-weight:800;">Recommended Actions</h4>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div style="padding:16px; border:1px solid var(--border-subtle); border-radius:12px; background:rgba(124,58,237,0.05);">
+              <div style="font-weight:700; margin-bottom:4px; color:white;">Schedule Mock Interview Batch</div>
+              <p style="font-size:0.8rem; color:var(--text-muted);">Students with readiness over 75% are pre-allocated for technical rounds.</p>
+              <button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="window.handleAutoScheduleInterviews()">Auto-Schedule →</button>
+            </div>
+            <div style="padding:16px; border:1px solid var(--border-subtle); border-radius:12px; background:rgba(59,130,246,0.05);">
+              <div style="font-weight:700; margin-bottom:4px; color:white;">Share DSA Prep Material</div>
+              <p style="font-size:0.8rem; color:var(--text-muted);">Improve coding readiness metrics across classes.</p>
+              <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="window.handleSharePrepMaterial()">Share to Group →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      `;
+    }
+
+    let titleLabel = 'Cohort Roster';
+    if (state.mentoringCohort === 'weak-comm') titleLabel = 'Weak Communication Cohort (< 75%)';
+    if (state.mentoringCohort === 'coding-gaps') titleLabel = 'Coding Gaps Cohort (< 75%)';
+    if (state.mentoringCohort === 'low-conf') titleLabel = 'Low Confidence Cohort (< 70% Readiness)';
+
     return `
-    <div class="card">
-      <div class="card-header"><h3 class="card-title">AI Mentoring Overview</h3></div>
-      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:20px; padding-top:16px;">
-        <div class="fa-card" style="background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:16px; padding:16px;">
-          <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;">Weak Communication</div>
-          <div style="font-size:1.5rem; font-weight:800; color:#f59e0b;">${state.students.filter(s => s.softSkills < 75).length} Students</div>
-          <button class="btn btn-ghost btn-sm" style="margin-top:10px; width:100%;" onclick="window.handleViewCohort('view-weak-comm')">View List</button>
-        </div>
-        <div class="fa-card" style="background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:16px; padding:16px;">
-          <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;">Coding Gaps</div>
-          <div style="font-size:1.5rem; font-weight:800; color:#ef4444;">${state.students.filter(s => s.coding < 75).length} Students</div>
-          <button class="btn btn-ghost btn-sm" style="margin-top:10px; width:100%;" onclick="window.handleViewCohort('view-coding-gaps')">View List</button>
-        </div>
-        <div class="fa-card" style="background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:16px; padding:16px;">
-          <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;">Low Confidence</div>
-          <div style="font-size:1.5rem; font-weight:800; color:#3b82f6;">${state.students.filter(s => s.readiness < 70).length} Students</div>
-          <button class="btn btn-ghost btn-sm" style="margin-top:10px; width:100%;" onclick="window.handleViewCohort('view-low-conf')">View List</button>
+    <div class="card" style="overflow: visible !important;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--border-subtle); padding-bottom:16px;">
+        <div style="display:flex; align-items:center; gap:16px;">
+          <button class="btn btn-secondary btn-sm" onclick="window.handleExitCohortView()" style="display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:8px;">
+            ← Back
+          </button>
+          <h3 class="card-title" style="margin:0;">${titleLabel}</h3>
         </div>
       </div>
-      
-      <div style="margin-top:24px;">
-        <h4 style="margin-bottom:12px; font-weight:800;">Recommended Actions</h4>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-          <div style="padding:16px; border:1px solid var(--border-subtle); border-radius:12px; background:rgba(124,58,237,0.05);">
-            <div style="font-weight:700; margin-bottom:4px; color:white;">Schedule Mock Interview Batch</div>
-            <p style="font-size:0.8rem; color:var(--text-muted);">Students with readiness over 75% are pre-allocated for technical rounds.</p>
-            <button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="window.handleAutoScheduleInterviews()">Auto-Schedule →</button>
-          </div>
-          <div style="padding:16px; border:1px solid var(--border-subtle); border-radius:12px; background:rgba(59,130,246,0.05);">
-            <div style="font-weight:700; margin-bottom:4px; color:white;">Share DSA Prep Material</div>
-            <p style="font-size:0.8rem; color:var(--text-muted);">Improve coding readiness metrics across classes.</p>
-            <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="window.handleSharePrepMaterial()">Share to Group →</button>
-          </div>
+
+      <!-- Cohort filters and search -->
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:20px;">
+        <div style="display:flex; gap:10px; flex:1;">
+          <input type="text" id="ment-cohort-search" placeholder="Search by name or register number..." style="padding:10px 16px; border-radius:8px; background:rgba(0,0,0,0.2); border:1px solid var(--border-subtle); width:300px; color:white;">
+          <select id="ment-cohort-dept" style="padding:10px; border-radius:8px; background:var(--bg-card); border:1px solid var(--border-subtle); color:white; color-scheme: dark;">
+            <option value="All" style="background:#18181b; color:white;">All Departments</option>
+            <option value="CSE" style="background:#18181b; color:white;">CSE</option>
+            <option value="ECE" style="background:#18181b; color:white;">ECE</option>
+            <option value="IT" style="background:#18181b; color:white;">IT</option>
+          </select>
+          <select id="ment-cohort-sort" style="padding:10px; border-radius:8px; background:var(--bg-card); border:1px solid var(--border-subtle); color:white; color-scheme: dark;">
+            <option value="severity" style="background:#18181b; color:white;">Sort: Worst First</option>
+            <option value="score-desc" style="background:#18181b; color:white;">Sort: Best First</option>
+            <option value="name" style="background:#18181b; color:white;">Sort: Alphabetical</option>
+          </select>
         </div>
       </div>
+
+      <table class="fa-table" style="width:100%;">
+        <thead>
+          <tr>
+            <th>STUDENT NAME</th>
+            <th>CGPA</th>
+            <th>COHORT SCORE</th>
+            <th>PROGRESS TREND</th>
+            <th>SEVERITY</th>
+            <th style="text-align:right;">ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody id="ment-cohort-table-body">
+          <!-- Filled by filterMentoringCohortTable -->
+        </tbody>
+      </table>
     </div>
     `;
   }

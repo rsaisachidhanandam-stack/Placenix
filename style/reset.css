@@ -1,5 +1,5 @@
 /* ============================================================
-   PLACENIX — MODERN CSS RESET + BASE STYLES
+   PLACENIX — RESET & BASE NORMALIZATION (v3.0)
    ============================================================ */
 
 *, *::before, *::after {
@@ -9,89 +9,109 @@
 }
 
 html {
-  font-size: 16px;
-  scroll-behavior: smooth;
+  scroll-behavior: auto !important;
+  text-rendering: optimizeLegibility;
   -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
 }
 
 body {
+  background: var(--bg-app);
+  color: var(--text-main);
   font-family: var(--font-sans);
-  font-size: var(--text-base);
-  font-weight: var(--weight-normal);
-  line-height: var(--leading-normal);
-  color: var(--text-primary);
-  background-color: var(--bg-primary);
+  font-size: 16px;         /* WCAG AA recommended baseline */
+  line-height: 1.7;        /* Generous line height for all ages */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
   overflow-x: hidden;
-  transition: background-color var(--transition-slow), color var(--transition-slow);
 }
 
-img, picture, video, canvas, svg {
-  display: block;
-  max-width: 100%;
-}
-
-input, button, textarea, select {
-  font: inherit;
-  color: inherit;
-}
-
-p, h1, h2, h3, h4, h5, h6 {
-  overflow-wrap: break-word;
-}
-
+/* Headings — DM Sans for warmth and readability */
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
-  font-weight: var(--weight-bold);
-  line-height: var(--leading-tight);
-  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+}
+
+h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 26px; font-weight: 700; }
+h3 { font-size: 22px; font-weight: 700; }
+h4 { font-size: 18px; font-weight: 600; }
+h5 { font-size: 16px; font-weight: 600; }
+h6 { font-size: 14px; font-weight: 600; }
+
+p {
+  color: var(--text-description);
+  line-height: 1.7;
 }
 
 a {
-  color: var(--text-link);
+  color: var(--brand-primary);
   text-decoration: none;
-  transition: color var(--transition-fast);
-}
-a:hover {
-  color: var(--text-link-hover);
+  transition: color var(--t-fast);
 }
 
+a:hover {
+  color: var(--brand-primary-hover);
+}
+
+/* Focus ring — accessibility critical */
+:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+button, [role="button"] {
+  cursor: pointer;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+input, textarea, select, button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* Remove list styles */
 ul, ol {
   list-style: none;
 }
 
-button {
-  cursor: pointer;
-  border: none;
-  background: none;
-  outline: none;
-}
-
-:focus-visible {
-  outline: 2px solid var(--brand-electric-violet);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
-}
-
-::selection {
-  background: rgba(124, 58, 237, 0.3);
-  color: var(--text-primary);
-}
-
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
+  background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: rgba(124, 58, 237, 0.4);
-  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(124, 58, 237, 0.7);
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* Selection */
+::selection {
+  background: rgba(99, 102, 241, 0.3);
+  color: var(--text-main);
 }

@@ -3,41 +3,41 @@ export async function loadAlumniPage(root, Store) {
 
   const renderCard = (a) => {
     return `
-      <div class="card-ent alumni-card" style="padding:24px; display:flex; flex-direction:column; gap:20px; transition:all 0.3s ease;">
+      <div class="card-ent alumni-card" style="padding:24px; display:flex; flex-direction:column; gap:20px; transition:all 0.3s ease; border: 1px solid var(--border-main); background: var(--bg-card);">
         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-          <div style="width:48px; height:48px; background:var(--brand-primary); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; color:white; box-shadow: 0 4px 12px rgba(139,92,246,0.2);">${a.avatar}</div>
+          <div style="width:48px; height:48px; background:linear-gradient(135deg, var(--brand-primary), var(--brand-primary-hover)); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; color:#ffffff !important; box-shadow: 0 4px 12px var(--brand-primary-glow);">${a.avatar}</div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
             ${a.mentoring ? 
-              `<span style="background:rgba(16,185,129,0.1); color:var(--brand-secondary); padding:3px 10px; border-radius:100px; font-size:9px; font-weight:800;">ACTIVE MENTOR</span>` : 
-              `<span style="background:rgba(255,255,255,0.05); color:var(--text-muted); padding:3px 10px; border-radius:100px; font-size:9px; font-weight:800;">OFFLINE</span>`
+              `<span style="background:var(--brand-primary-light); border:1px solid var(--brand-primary-glow); color:var(--brand-primary); padding:4px 10px; border-radius:100px; font-size:9.5px; font-weight:800;">ACTIVE MENTOR</span>` : 
+              `<span style="background:var(--data-bg); border:1px solid var(--border-subtle); color:var(--text-muted); padding:4px 10px; border-radius:100px; font-size:9.5px; font-weight:800;">OFFLINE</span>`
             }
             ${a.pushed ? 
-              `<span style="background:rgba(139,92,246,0.15); color:var(--brand-primary); padding:3px 10px; border-radius:100px; font-size:9px; font-weight:800; display:flex; align-items:center; gap:4px;">📢 RECOMMENDED</span>` : ''
+              `<span style="background:var(--brand-primary-light); border:1px solid var(--brand-primary-glow); color:var(--brand-primary); padding:4px 10px; border-radius:100px; font-size:9.5px; font-weight:800; display:flex; align-items:center; gap:4px;">📢 RECOMMENDED</span>` : ''
             }
-            <div style="font-size:10px; color:var(--text-description); font-weight:700;">Batch of ${a.batch}</div>
+            <div style="font-size:11px; color:var(--text-description); font-weight:700; margin-top:2px;">Batch of ${a.batch}</div>
           </div>
         </div>
 
         <div>
-          <h4 style="font-size:16px; font-weight:800; color:#fff; letter-spacing:-0.01em;">${a.name}</h4>
-          <div style="font-size:12px; font-weight:600; color:var(--brand-primary); margin-top:2px;">${a.role} @ ${a.company}</div>
-          <div style="font-size:11px; color:var(--text-muted); margin-top:4px; display:flex; align-items:center; gap:6px;">
+          <h4 style="font-size:17px; font-weight:800; color:var(--text-main); letter-spacing:-0.01em; font-family:var(--font-display);">${a.name}</h4>
+          <div style="font-size:13px; font-weight:600; color:var(--brand-primary); margin-top:2px;">${a.role} @ ${a.company}</div>
+          <div style="font-size:12px; color:var(--text-muted); margin-top:4px; display:flex; align-items:center; gap:6px;">
             <span>📍 ${a.location}</span>
           </div>
         </div>
 
         <div style="display:flex; flex-wrap:wrap; gap:6px;">
-          ${a.expertise.map(e => `<span style="font-size:10px; padding:3px 10px; background:rgba(255,255,255,0.02); border:1px solid var(--border-main); border-radius:6px; color:var(--text-description); font-weight:600;">${e}</span>`).join('')}
+          ${a.expertise.map(e => `<span style="font-size:10px; padding:3px 10px; background:var(--data-bg); border:1px solid var(--border-subtle); border-radius:6px; color:var(--text-description); font-weight:600;">${e}</span>`).join('')}
         </div>
 
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; padding:16px; background:rgba(255,255,255,0.01); border:1px solid var(--border-main); border-radius:12px;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; padding:16px; background:var(--data-bg-alt); border:1px solid var(--border-subtle); border-radius:12px;">
           <div>
-            <div style="font-size:13px; font-weight:800; color:#fff;">${a.sessions}</div>
-            <div style="font-size:9px; color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-top:2px;">Consultations</div>
+            <div style="font-size:14px; font-weight:800; color:var(--text-main); font-family:var(--font-display);">${a.sessions}</div>
+            <div style="font-size:9.5px; color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-top:2px;">Consultations</div>
           </div>
-          <div style="border-left:1px solid var(--border-main); padding-left:12px;">
-            <div style="font-size:13px; font-weight:800; color:var(--brand-secondary);">${a.rating} ★</div>
-            <div style="font-size:9px; color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-top:2px;">Global Rating</div>
+          <div style="border-left:1px solid var(--border-subtle); padding-left:12px;">
+            <div style="font-size:14px; font-weight:800; color:var(--brand-primary); font-family:var(--font-display);">${a.rating} ★</div>
+            <div style="font-size:9.5px; color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-top:2px;">Global Rating</div>
           </div>
         </div>
 
@@ -78,10 +78,10 @@ export async function loadAlumniPage(root, Store) {
           <h1 class="h1-ent" style="font-size:24px;">Institutional Alumni Network</h1>
         </div>
         <div style="display:flex; gap:12px;">
-          <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border-main); padding:6px 14px; border-radius:10px; display:flex; align-items:center; gap:10px; width:280px;">
+          <div style="background:var(--bg-input); border:1px solid var(--border-main); padding:6px 14px; border-radius:10px; display:flex; align-items:center; gap:10px; width:280px;">
             <span style="opacity:0.4;">🔍</span>
             <input type="text" placeholder="Search elite network..." id="alumni-search" 
-                   style="background:none; border:none; color:#fff; font-size:12px; outline:none; width:100%; font-weight:500;">
+                   style="background:none; border:none; color:var(--text-main); font-size:12px; outline:none; width:100%; font-weight:500;">
           </div>
           <select id="alumni-filter" class="input-ent" style="width:160px; height:34px; font-size:11px; padding:0 10px;">
             <option value="">All Organizations</option>
@@ -91,13 +91,13 @@ export async function loadAlumniPage(root, Store) {
       </div>
 
       <!-- Verified Mentorship Banner -->
-      <div class="card-ent" style="padding:20px 24px; background: linear-gradient(90deg, rgba(139,92,246,0.05) 0%, rgba(16,185,129,0.02) 100%); display:flex; justify-content:space-between; align-items:center;">
+      <div class="card-ent" style="padding:20px 24px; background: var(--brand-primary-light); border:1px solid var(--brand-primary-glow); display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <h3 style="font-size:15px; font-weight:800; color:#fff;">Verified Mentorship Gateway</h3>
+          <h3 style="font-size:15px; font-weight:800; color:var(--text-main);">Verified Mentorship Gateway</h3>
           <p style="font-size:12px; color:var(--text-description); margin-top:2px;">${Store.alumni.filter(a => a.mentoring).length} industry professionals currently active in the mentorship registry.</p>
         </div>
         <div style="display:flex; -webkit-mask-image: linear-gradient(to right, transparent, black 20%, black 80%, transparent); mask-image: linear-gradient(to right, transparent, black 20%, black 80%, transparent); gap: -10px;">
-           ${Store.alumni.slice(0, 5).map(a => `<div style="width:32px; height:32px; border-radius:50%; background:var(--brand-primary); border:2px solid #09090b; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; margin-left:-8px;">${a.avatar}</div>`).join('')}
+           ${Store.alumni.slice(0, 5).map(a => `<div style="width:32px; height:32px; border-radius:50%; background:var(--brand-primary); border:2px solid var(--bg-card); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:#fff !important; margin-left:-8px;">${a.avatar}</div>`).join('')}
         </div>
       </div>
 
@@ -108,31 +108,31 @@ export async function loadAlumniPage(root, Store) {
     </div>
 
     <style>
-      .alumni-card:hover { transform: translateY(-4px); border-color: var(--brand-primary); box-shadow: 0 12px 32px rgba(0,0,0,0.4); }
-      .input-ent { background: rgba(255,255,255,0.03); border: 1px solid var(--border-main); color: #fff; border-radius: 8px; outline: none; transition: var(--t-fast); }
-      .input-ent:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1); }
+      .alumni-card:hover { transform: translateY(-4px); border-color: var(--brand-primary-glow); box-shadow: var(--shadow-card-hover); }
+      .input-ent { background: var(--bg-input); border: 1px solid var(--border-main); color: var(--text-main); border-radius: 8px; outline: none; transition: var(--t-fast); }
+      .input-ent:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 3px var(--brand-primary-glow); }
       .btn-premium {
-        background: var(--brand-primary); color: #fff; border: none; font-weight: 700; cursor: pointer; transition: all 0.2s;
-        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+        background: var(--btn-primary-gradient, var(--brand-primary)); color: #ffffff !important; border: none; font-weight: 700; cursor: pointer; transition: all 0.2s;
+        box-shadow: var(--btn-primary-shadow, 0 4px 12px var(--brand-primary-glow));
       }
-      .btn-premium:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+      .btn-premium:hover:not(:disabled) { background: var(--btn-primary-gradient-h, var(--brand-primary-hover)); transform: translateY(-1px); box-shadow: var(--btn-primary-shadow-h); }
       .btn-premium-ghost {
-        background: rgba(255,255,255,0.03); color: var(--text-description); border: 1px solid var(--border-main);
+        background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-main);
         font-weight: 700; cursor: pointer; transition: all 0.2s;
       }
-      .btn-premium-ghost:hover { background: rgba(255,255,255,0.05); color: #fff; border-color: var(--brand-primary); }
+      .btn-premium-ghost:hover { background: var(--bg-hover); color: var(--brand-primary); border-color: var(--brand-primary-glow); }
       .btn-premium-push {
-        background: linear-gradient(135deg, rgba(139,92,246,0.1) 0%, rgba(16,185,129,0.05) 100%);
-        color: #fff;
+        background: var(--brand-primary-light);
+        color: var(--brand-primary) !important;
         border: 1px dashed var(--brand-primary);
         font-weight: 700;
         cursor: pointer;
         transition: all 0.2s;
       }
       .btn-premium-push:hover:not(:disabled) {
-        background: linear-gradient(135deg, rgba(139,92,246,0.2) 0%, rgba(16,185,129,0.1) 100%);
+        background: var(--brand-primary-glow);
         border-style: solid;
-        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+        box-shadow: 0 4px 12px var(--brand-primary-glow);
       }
     </style>
     `;

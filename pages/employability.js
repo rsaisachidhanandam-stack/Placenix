@@ -121,35 +121,35 @@ export async function loadEmployabilityPage(root, Store, supabase) {
       <div class="employability-workspace-grid">
         
         <!-- Score Gauge Node -->
-        <div class="card-ent" style="padding:48px; text-align:center; display:flex; flex-direction:column; align-items:center;">
-          <div style="background:rgba(139,92,246,0.1); color:var(--brand-primary); padding:6px 16px; border-radius:100px; font-size:11px; font-weight:800; margin-bottom:32px; text-transform:uppercase;">
+        <div class="card-ent" style="padding:48px; text-align:center; display:flex; flex-direction:column; align-items:center; border: 1px solid var(--glass-border-main); background: var(--glass-2);">
+          <div style="background:var(--brand-primary-light); color:var(--brand-primary); padding:6px 16px; border:1px solid rgba(129,140,248,0.2); border-radius:100px; font-size:11px; font-weight:800; margin-bottom:32px; text-transform:uppercase;">
             ${scoreSource}
           </div>
           <div style="position:relative; width:220px; height:220px; margin:0 auto;">
             <svg width="220" height="220" viewBox="0 0 220 220">
-              <circle cx="110" cy="110" r="100" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="14"/>
-              <circle cx="110" cy="110" r="100" fill="none" stroke="var(--brand-secondary)" stroke-width="14" 
+              <circle cx="110" cy="110" r="100" fill="none" stroke="var(--border-main)" stroke-width="14"/>
+              <circle cx="110" cy="110" r="100" fill="none" stroke="var(--brand-primary)" stroke-width="14" 
                       stroke-dasharray="628" stroke-dashoffset="${628 - (628 * score / 100)}" 
-                      stroke-linecap="round" style="transition: all 1.5s cubic-bezier(0.4, 0, 0.2, 1); filter: drop-shadow(0 0 15px var(--brand-secondary));"/>
+                      stroke-linecap="round" style="transition: all 1.5s cubic-bezier(0.4, 0, 0.2, 1); filter: drop-shadow(0 0 15px var(--brand-primary-glow));"/>
             </svg>
             <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
-              <div class="metric-ent" style="font-size:64px;">${score}</div>
+              <div class="metric-ent" style="font-size:64px; font-family:var(--font-display); color:var(--brand-primary);">${score}</div>
               <div class="label-ent" style="font-size:12px; margin-top:-4px;">out of 100</div>
             </div>
           </div>
-          <div style="margin-top:40px; padding:8px 24px; background:rgba(16,185,129,0.1); color:var(--brand-secondary); border-radius:100px; font-size:14px; font-weight:800;">
+          <div style="margin-top:40px; padding:8px 24px; background:var(--success-bg); border:1px solid var(--success-border); color:var(--brand-secondary); border-radius:100px; font-size:14px; font-weight:800;">
             ${scoreStatus}
           </div>
-          <p style="margin-top:24px; font-size:13px; color:var(--text-description); line-height:1.6;">
+          <p style="margin-top:24px; font-size:13.5px; color:var(--text-description); line-height:1.7;">
             ${scoreSummary}
           </p>
         </div>
 
         <!-- Score Breakdown Node -->
-        <div class="card-ent" style="padding:48px;">
+        <div class="card-ent" style="padding:48px; border: 1px solid var(--glass-border-main); background: var(--glass-2);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:32px;">
-             <h3 class="h2-ent" style="font-size:20px;">Score Breakdown</h3>
-             <div style="background:var(--brand-primary-light); color:var(--brand-primary); padding:4px 12px; border-radius:100px; font-size:10px; font-weight:800;">AI ANALYZED</div>
+             <h3 class="h2-ent" style="font-size:20px; font-family:var(--font-display);">Score Breakdown</h3>
+             <div style="background:var(--brand-primary-light); border:1px solid rgba(129,140,248,0.2); color:var(--brand-primary); padding:4px 12px; border-radius:100px; font-size:10px; font-weight:800;">AI ANALYZED</div>
           </div>
           <div style="display:flex; flex-direction:column; gap:28px;">
             ${[
@@ -162,37 +162,37 @@ export async function loadEmployabilityPage(root, Store, supabase) {
               <div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
                   <span style="font-size:14px; font-weight:600; color:var(--text-description);">${item.label}</span>
-                  <span style="font-size:14px; font-weight:800; color:#fff;">${item.val !== null ? `${item.val}/100` : 'Missing'}</span>
+                  <span style="font-size:14px; font-weight:800; color:#fff; font-family:var(--font-display);">${item.val !== null ? `${item.val}/100` : 'Missing'}</span>
                 </div>
-                <div style="height:8px; background:rgba(255,255,255,0.02); border-radius:10px; overflow:hidden;">
+                <div style="height:8px; background:rgba(0,0,0,0.25); border-radius:10px; overflow:hidden;">
                   <div style="height:100%; width:${item.val !== null ? item.val : 0}%; background:${item.color}; border-radius:10px; box-shadow:0 0 10px ${item.color}44;"></div>
                 </div>
-                <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">${item.label === 'Technical Skills' ? 'Strong coding fundamentals & CS concepts' : 'Audit verified at institutional level'}</div>
+                <div style="font-size:11.5px; color:var(--text-muted); margin-top:6px;">${item.label === 'Technical Skills' ? 'Strong coding fundamentals & CS concepts' : 'Audit verified at institutional level'}</div>
               </div>
             `).join('')}
           </div>
         </div>
       </div>
 
-      <!-- Secondary Analytics Grid -->
+       <!-- Secondary Analytics Grid -->
       <div class="employability-secondary-grid">
         
         <!-- Career Fit Prediction -->
-        <div class="card-ent" style="padding:32px;">
-          <h3 class="h2-ent" style="font-size:18px; margin-bottom:24px;">Career Fit Prediction</h3>
+        <div class="card-ent" style="padding:32px; border: 1px solid var(--glass-border-main); background: var(--glass-2);">
+          <h3 class="h2-ent" style="font-size:18px; margin-bottom:24px; font-family:var(--font-display);">Career Fit Prediction</h3>
           <div style="display:flex; flex-direction:column; gap:20px;">
             ${careerFit.length ? careerFit.map(c => `
               <div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
                   <span style="font-size:13px; font-weight:600; color:var(--text-description);">${c.role}</span>
-                  <span style="font-size:13px; font-weight:800; color:#fff;">${c.match_pct}%</span>
+                  <span style="font-size:13px; font-weight:800; color:#fff; font-family:var(--font-display);">${c.match_pct}%</span>
                 </div>
-                <div style="height:6px; background:rgba(255,255,255,0.02); border-radius:10px; overflow:hidden;">
-                  <div style="height:100%; width:${c.match_pct}%; background:var(--brand-primary); border-radius:10px;"></div>
+                <div style="height:6px; background:rgba(0,0,0,0.25); border-radius:10px; overflow:hidden;">
+                  <div style="height:100%; width:${c.match_pct}%; background:linear-gradient(90deg, var(--brand-primary), #8B5CF6); border-radius:10px;"></div>
                 </div>
               </div>
             `).join('') : `
-              <div style="padding: 32px 16px; text-align:center; color:var(--text-description); font-size:12.5px; border:1px dashed rgba(255,255,255,0.08); border-radius:12px; background:rgba(255,255,255,0.005);">
+              <div style="padding: 32px 16px; text-align:center; color:var(--text-description); font-size:12.5px; border:1px dashed var(--glass-border-strong); border-radius:12px; background:rgba(0,0,0,0.25);">
                 <span style="opacity:0.5; display:block; font-size:20px; margin-bottom:8px;">🎯</span>
                 Career Fit: Missing
               </div>
@@ -201,51 +201,51 @@ export async function loadEmployabilityPage(root, Store, supabase) {
         </div>
 
         <!-- Concentric Ring Chart (Interview Readiness) -->
-        <div class="card-ent" style="padding:32px; text-align:center;">
-          <h3 class="h2-ent" style="font-size:18px; margin-bottom:24px; text-align:left;">Interview Readiness</h3>
+        <div class="card-ent" style="padding:32px; text-align:center; border: 1px solid var(--glass-border-main); background: var(--glass-2);">
+          <h3 class="h2-ent" style="font-size:18px; margin-bottom:24px; text-align:left; font-family:var(--font-display);">Interview Readiness</h3>
           <div style="position:relative; width:160px; height:160px; margin:0 auto;">
             <svg width="160" height="160" viewBox="0 0 160 160">
               <!-- Outer Ring (DSA) -->
-              <circle cx="80" cy="80" r="65" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="12"/>
+              <circle cx="80" cy="80" r="65" fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="12"/>
               <circle cx="80" cy="80" r="65" fill="none" stroke="var(--brand-secondary)" stroke-width="12" 
                       stroke-dasharray="408" stroke-dashoffset="${408 - (408 * (dsaScore || 0) / 100)}" 
                       stroke-linecap="round" transform="rotate(-90 80 80)" style="transition: all 1.5s cubic-bezier(0.4, 0, 0.2, 1);"/>
               
               <!-- Inner Ring (Core) -->
-              <circle cx="80" cy="80" r="48" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="12"/>
-              <circle cx="80" cy="80" r="48" fill="none" stroke="#3B82F6" stroke-width="12" 
+              <circle cx="80" cy="80" r="48" fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="12"/>
+              <circle cx="80" cy="80" r="48" fill="none" stroke="#818CF8" stroke-width="12" 
                       stroke-dasharray="301" stroke-dashoffset="${301 - (301 * (coreScore || 0) / 100)}" 
                       stroke-linecap="round" transform="rotate(-90 80 80)" style="transition: all 1.5s cubic-bezier(0.4, 0, 0.2, 1);"/>
             </svg>
             <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
-              <div style="font-size:24px; font-weight:800; color:#fff;">${dsaScore !== null && coreScore !== null ? `${Math.round((dsaScore + coreScore) / 2)}%` : 'Missing'}</div>
+              <div style="font-size:24px; font-weight:800; color:#fff; font-family:var(--font-display);">${dsaScore !== null && coreScore !== null ? `${Math.round((dsaScore + coreScore) / 2)}%` : 'Missing'}</div>
               <div style="font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-top:2px;">Readiness</div>
             </div>
           </div>
           <div style="margin-top:24px; display:flex; justify-content:center; gap:20px;">
-            <div style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-description);">
+            <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-description);">
               <div style="width:8px; height:8px; background:var(--brand-secondary); border-radius:2px;"></div> DSA: ${dsaScore !== null ? `${dsaScore}%` : 'Missing'}
             </div>
-            <div style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-description);">
-              <div style="width:8px; height:8px; background:#3B82F6; border-radius:2px;"></div> Core: ${coreScore !== null ? `${coreScore}%` : 'Missing'}
+            <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-description);">
+              <div style="width:8px; height:8px; background:#818CF8; border-radius:2px;"></div> Core: ${coreScore !== null ? `${coreScore}%` : 'Missing'}
             </div>
           </div>
         </div>
 
         <!-- Recommendations Node -->
-        <div class="card-ent" style="padding:32px;">
-          <h3 class="h2-ent" style="font-size:18px; margin-bottom:24px;">Strategic Pulse</h3>
+        <div class="card-ent" style="padding:32px; border: 1px solid var(--glass-border-main); background: var(--glass-2);">
+          <h3 class="h2-ent" style="font-size:18px; margin-bottom:24px; font-family:var(--font-display);">Strategic Pulse</h3>
           <div style="display:flex; flex-direction:column; gap:16px;">
             ${recommendations.length ? recommendations.map(r => `
-              <div style="display:flex; gap:12px; align-items:center; padding:12px; background:rgba(255,255,255,0.01); border:1px solid var(--border-main); border-radius:12px; text-align:left;">
+              <div style="display:flex; gap:12px; align-items:center; padding:12px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border-subtle); border-radius:12px; text-align:left;">
                 <div style="font-size:20px;">${r.icon || '✨'}</div>
                 <div>
-                  <div style="font-weight:700; color:#fff; font-size:13px;">${r.title}</div>
-                  <div style="font-size:10px; color:var(--text-description); margin-top:2px;">${r.desc}</div>
+                  <div style="font-weight:700; color:#fff; font-size:13px; font-family:var(--font-display);">${r.title}</div>
+                  <div style="font-size:11px; color:var(--text-description); margin-top:2px;">${r.desc}</div>
                 </div>
               </div>
             `).join('') : `
-              <div style="padding: 32px 16px; text-align:center; color:var(--text-description); font-size:12.5px; border:1px dashed rgba(255,255,255,0.08); border-radius:12px; background:rgba(255,255,255,0.005);">
+              <div style="padding: 32px 16px; text-align:center; color:var(--text-description); font-size:12.5px; border:1px dashed var(--glass-border-strong); border-radius:12px; background:rgba(0,0,0,0.25);">
                 <span style="opacity:0.5; display:block; font-size:20px; margin-bottom:8px;">💡</span>
                 Recommendations: Missing
               </div>
@@ -289,14 +289,19 @@ export async function loadEmployabilityPage(root, Store, supabase) {
     try {
         // Sync latest profile details from Supabase to ensure accurate diagnostic inputs
         if (supabase && user?.id) {
-          const { data: dbUser } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
-          if (dbUser) {
-            Object.assign(user, dbUser);
+          try {
+            const profilePromise = supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1500));
+            const { data: dbUser } = await Promise.race([profilePromise, timeoutPromise]);
+            if (dbUser) {
+              Object.assign(user, dbUser);
+            }
+          } catch (e) {
+            console.warn("Supabase profile sync timed out or failed. Proceeding with local state:", e);
           }
         }
 
-        const apiKey = window.GEMINI_API_KEY || Store.config?.GEMINI_API_KEY;
-        const isDummy = !apiKey || apiKey.startsWith('AQ.');
+        const isDummy = !(window.__ENV__ && window.__ENV__.HAS_REAL_GEMINI_KEY);
         
         if (isDummy) {
           console.warn("Employability: API Key missing or placeholder. Using Neural Mock Diagnostics.");
@@ -328,7 +333,7 @@ export async function loadEmployabilityPage(root, Store, supabase) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`, {
+        const response = await fetch(`/api/ai`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             signal: controller.signal,
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt + "\nData: " + aggregatedData }] }], generationConfig: { responseMimeType: "application/json" } })
@@ -344,7 +349,15 @@ export async function loadEmployabilityPage(root, Store, supabase) {
           txt = txt.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
         }
         const generatedData = JSON.parse(txt);
-        await supabase.from('profiles').update({ employability_data: generatedData }).eq('id', user.id);
+        if (supabase && user?.id) {
+          try {
+            const updatePromise = supabase.from('profiles').update({ employability_data: generatedData }).eq('id', user.id);
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1500));
+            await Promise.race([updatePromise, timeoutPromise]);
+          } catch (e) {
+            console.warn("Supabase database update timed out or failed. Saved locally in store:", e);
+          }
+        }
         user.employability_data = generatedData;
         renderUI(generatedData, false);
     } catch (error) {

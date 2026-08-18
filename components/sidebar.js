@@ -10,7 +10,7 @@ const ICONS = {
   'network': `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
   'support': `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
   'log-out': `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
-  'clock': `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+  'clock': `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 16 14"/></svg>`,
 };
 
 const SECTIONS = {
@@ -48,6 +48,7 @@ const SECTIONS = {
     { label: 'RECRUITMENT', items: [
       { label: 'New Job Applications', icon: 'recruitment', route: 'dept-new-jobs' },
       { label: 'Previous Applications', icon: 'recruitment', route: 'dept-prev-jobs' },
+      { label: 'Slot & Lifecycle Monitor', icon: 'clock', route: 'my-slots' },
       { label: 'Attendance Tracker', icon: 'clock', route: 'attendance-tracker' },
     ]},
     { label: 'COMMUNICATION', items: [
@@ -85,6 +86,8 @@ const SECTIONS = {
     { label: 'RECRUITMENT', items: [
       { label: 'New Job Application', icon: 'recruitment', route: 'fa-new-jobs' },
       { label: 'Previous Job Application', icon: 'recruitment', route: 'fa-prev-jobs' },
+      { label: 'Slot & Lifecycle Monitor', icon: 'clock', route: 'my-slots' },
+      { label: 'Attendance Tracker', icon: 'clock', route: 'attendance-tracker' },
     ]},
     { label: 'ECOSYSTEM', items: [
       { label: 'Alumni Network', icon: 'network', route: 'alumni-connect' },
@@ -99,6 +102,14 @@ const SECTIONS = {
       { label: 'Slot Allocation', icon: 'intelligence', route: 'slot-allocation' },
       { label: 'Alumni Network', icon: 'network', route: 'alumni-connect' },
     ]}
+  ],
+  'saas-admin': [
+    { label: 'PLATFORM MANAGEMENT', items: [
+      { label: 'SaaS Platform Control', icon: 'dashboard', route: 'saas-admin' },
+    ]},
+    { label: 'ECOSYSTEM', items: [
+      { label: 'Alumni Network', icon: 'network', route: 'alumni-connect' },
+    ]}
   ]
 };
 
@@ -109,7 +120,7 @@ export function renderSidebar(role, activeRoute, user) {
   const navHTML = sections.map(section => `
     <div class="label-ent" style="margin: 32px 24px 12px; font-size:10px; opacity:0.5;">${section.label}</div>
     ${section.items.map(item => {
-      const isActive = item.route === activeRoute;
+      const isActive = item.route === activeRoute || (activeRoute === 'admin-dashboard' && item.route === 'admin-setup');
       return `
         <a class="sidebar-item ${isActive ? 'active' : ''}" 
            data-route="${item.route}" 
@@ -128,7 +139,7 @@ export function renderSidebar(role, activeRoute, user) {
   return `
     <div class="sidebar-header" style="padding: 32px 24px 24px;">
       <div class="flex items-center" style="display: flex; align-items: center; gap: 12px;">
-        <div style="width:32px; height:32px; background:var(--brand-primary); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; box-shadow:0 8px 16px -4px rgba(139,92,246,0.3); flex-shrink:0;">🎓</div>
+        <div style="width:32px; height:32px; background:var(--brand-primary); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; box-shadow:0 8px 16px -4px rgba(0,200,255,0.4); flex-shrink:0;">🎓</div>
         <span class="h2-ent" style="font-size:20px; letter-spacing:-0.05em; font-weight:800; color:#fff;">Placenix</span>
       </div>
     </div>
@@ -181,15 +192,15 @@ export function renderTopbar(user, route) {
           <div style="font-size:11px; color:var(--text-muted); border:1px solid var(--border-subtle); padding:3px 8px; border-radius:8px; font-weight:800; background:rgba(255,255,255,0.03); letter-spacing:0.05em;">⌘K</div>
         </div>
 
-        <div style="display:flex; align-items:center; gap:24px; border-left:1px solid var(--border-subtle); padding-left:32px; height:32px;">
-          <div style="position:relative; cursor:pointer; color:var(--text-muted); display:flex; align-items:center; justify-content:center;">
+        <div id="notif-wrapper" style="position:relative;">
+          <div id="notif-bell-btn" role="button" aria-label="Notifications" style="position:relative; cursor:pointer; color:var(--text-muted); display:flex; align-items:center; justify-content:center; padding:8px; border-radius:10px; transition:all 0.2s;" onmouseover="this.style.color='#fff'; this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.color='var(--text-muted)'; this.style.background='transparent'">
              <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-             <div style="position:absolute; top:2px; right:2px; width:8px; height:8px; background:var(--brand-primary); border-radius:50%; border:2px solid var(--bg-matte); box-shadow: 0 0 10px var(--brand-primary);"></div>
-          </div>
-          <div style="width:40px; height:40px; background:var(--brand-violet-soft); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:900; color:var(--brand-primary); cursor:pointer; border:1px solid rgba(139,92,246,0.1);">
-            ${(user?.full_name || 'U')[0]}
+             <span id="notif-badge" style="position:absolute; top:-2px; right:-2px; background:#00C8FF; color:#050810; font-size:10px; font-weight:900; min-width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid #050810; box-shadow:0 0 10px #00C8FF; padding:0 3px;">0</span>
           </div>
         </div>
+          <div style="width:40px; height:40px; background:rgba(0,200,255,0.12); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:900; color:var(--brand-primary); cursor:pointer; border:1px solid rgba(0,200,255,0.25);">
+            ${(user?.full_name || 'U')[0]}
+          </div>
       </div>
     </div>
   `;
