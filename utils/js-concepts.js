@@ -192,3 +192,40 @@ export async function executeAsyncDataFlow(dataPayload) {
     return { success: false, error: error.message };
   }
 }
+
+/**
+ * Metadata & Description Export for UI Labs
+ */
+export function getConceptsSummary() {
+  return [
+    {
+      id: 'closures',
+      name: 'Closures & Lexical Scope',
+      badge: 'Encapsulation',
+      description: 'Functions retain access to their outer lexical environment even after parent execution completes.',
+      keyPattern: 'Private state vaults, memoization caches, currying'
+    },
+    {
+      id: 'event-loop',
+      name: 'Event Loop & Task Queues',
+      badge: 'Asynchronous Scheduling',
+      description: 'Coordinates Call Stack, Microtask Queue (Promises), Render Queue (rAF), and Macrotask Queue (Timers/IO).',
+      keyPattern: 'Synchronous -> Microtasks -> Render -> Macrotasks'
+    },
+    {
+      id: 'hoisting',
+      name: 'Hoisting & Temporal Dead Zone (TDZ)',
+      badge: 'Scope Lifecycle',
+      description: 'Function declarations are fully hoisted; let/const are hoisted into TDZ to prevent unsafe early access.',
+      keyPattern: 'Declarations vs expressions, let/const TDZ safety'
+    },
+    {
+      id: 'promises-callbacks',
+      name: 'Promises vs Callbacks & Async/Await',
+      badge: 'Control Flow',
+      description: 'Eliminates callback hell using standard Promises, Promisification wrappers, and sequential async/await syntax.',
+      keyPattern: 'promisify(errFirstCb), try/catch async blocks'
+    }
+  ];
+}
+
