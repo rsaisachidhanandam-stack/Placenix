@@ -33,6 +33,12 @@ Placenix/
 ├── theme.js                     # Dark/Light Theme & Dynamic Color Palette Manager
 ├── package.json                 # Project Metadata & Scripts
 │
+├── backend/                     # Backend Systems, Controllers & NoSQL Engine
+│   └── mongo.js                 # MongoDB Schema Modeling & Resilient CRUD Controller
+├── utils/                       # Core JavaScript Utilities & Concept Implementations
+│   └── js-concepts.js           # Closures, Event Loop, Hoisting, and Promisify Utilities
+├── schema.sql                   # Relational PostgreSQL DDL & Advanced SQL JOINs Suite
+│
 ├── components/                  # Global Reusable UI Components
 │   ├── sidebar.js               # Dynamic Role-Aware Sidebar & ⌘K Search Topbar
 │   ├── notifications.js         # Realtime Notification Engine & Read-State Tracker
@@ -60,6 +66,7 @@ Placenix/
 │   ├── resume-intelligence.js   # ATS Keyword Scanner & Role-Fit Diagnostic Suite
 │   ├── employability.js         # 5-Pillar Employability Telemetry & Radar Engine
 │   ├── ai-modules.js            # Predictive Placement Probability & AI Laboratory
+│   ├── react-studio.js          # React 18 Component Composition & Hooks AI Lab
 │   ├── virtual-interview.js     # Autonomous Multi-Round AI Interview Simulation Hub
 │   ├── interview-repo.js        # Peer-Shared Company Interview Experiences Archive
 │   ├── alumni.js                # Alumni Mentorship Network & Global Directory
@@ -641,3 +648,115 @@ The user interface follows a modern glassmorphic enterprise aesthetic using nati
   --shadow-card-hover:     0 12px 40px rgba(0, 200, 255, 0.12);
 }
 ```
+
+---
+
+## 10. Backend Architecture & RESTful API Specification (`server.js`)
+
+### 10.1 Modular Middleware Pipeline
+The Node.js proxy server features an extensible, asynchronous middleware runner supporting standard `(req, res, next)` signatures:
+
+```mermaid
+flowchart LR
+    IncomingReq["Incoming HTTP Request"] --> CORS["CORS & Preflight Options"]
+    CORS --> Logger["Structured Request Logger"]
+    Logger --> RateLimit["Token-Bucket Rate Limiter (300 req/min)"]
+    RateLimit --> BodyParser["Safe JSON Body Parser (10MB Cap)"]
+    BodyParser --> RouterHandler["RESTful API Route Dispatcher"]
+    RouterHandler --> CentralErrorHandler["Global Exception & Error Handler"]
+```
+
+### 10.2 RESTful Endpoints & HTTP Status Code Mapping
+| Endpoint | Method | Success Code | Error Codes | Description |
+| :--- | :---: | :---: | :---: | :--- |
+| `/api/v1/health` | `GET` | `200 OK` | `500 Internal Server Error` | Returns service health, uptime, and AI proxy status |
+| `/api/v1/drives` | `GET` | `200 OK` | `500 Internal Server Error` | Retrieves all recruitment drives with status filtering |
+| `/api/v1/drives` | `POST` | `201 Created` | `400 Bad Request`, `422 Unprocessable` | Creates a new recruitment drive with validation |
+| `/api/v1/drives/:id` | `GET` | `200 OK` | `404 Not Found` | Retrieves a single drive by ID |
+| `/api/v1/drives/:id` | `PUT` | `200 OK` | `400 Bad Request`, `404 Not Found` | Updates drive metadata |
+| `/api/v1/drives/:id` | `DELETE` | `200 OK` | `404 Not Found` | Deletes a drive from database |
+| `/api/v1/mongo/logs` | `GET` | `200 OK` | `500 Database Error` | Queries MongoDB audit logs with filters |
+| `/api/v1/mongo/logs` | `POST` | `201 Created` | `422 Validation Error` | Inserts validated MongoDB audit document |
+| `/api/v1/reports/joined-data` | `GET` | `200 OK` | `500 Server Error` | Returns relational SQL JOIN multi-table report |
+| `/api/v1/ai/generate` | `POST` | `200 OK` | `400 Invalid JSON`, `503 Unavailable` | Proxies prompts to Google Gemini AI Flash |
+
+---
+
+## 11. NoSQL & MongoDB Schema Modeling (`backend/mongo.js`)
+
+### 11.1 Document Schemas & Subdocument Modeling
+Placenix integrates a dedicated NoSQL subsystem for high-throughput unstructured audit and telemetry logs:
+
+```javascript
+// AuditLogSchema Modeling
+const AuditLogSchema = {
+  _id: 'ObjectId (String)',
+  eventType: 'Enum: [LOGIN, LOGOUT, RESUME_SCAN, INTERVIEW_COMPLETED, SLOT_BOOKED, DRIVE_CREATED]',
+  actor: {
+    userId: 'String (Required)',
+    email: 'String (Required)',
+    role: 'Enum: [student, tpo, coordinator, faculty, admin, saas-admin]'
+  }, // Embedded Subdocument
+  metadata: 'Object (Flexible Key-Value Telemetry)',
+  ipAddress: 'String',
+  severity: 'Enum: [INFO, WARN, ERROR, CRITICAL]',
+  timestamp: 'ISODate (Indexed)'
+};
+```
+
+### 11.2 CRUD Operation Implementations
+- **Create**: Validates required fields and subdocument structures before `inMemoryMongoStore.auditLogs.unshift()`. Throws `422 Unprocessable Entity` on schema violations.
+- **Read**: Supports multi-parameter filtering (`eventType`, `severity`, `userId`, `search`) and pagination (`limit`, `page`).
+- **Update**: Performs immutable `_id` preservation while updating metadata and actor fields.
+- **Delete**: Removes target document by `_id` and returns deletion confirmation telemetry.
+
+---
+
+## 12. Relational Schema & Multi-Table SQL JOINs (`schema.sql`)
+
+### 12.1 Key Relational Queries
+- **Multi-Table INNER JOIN**: Joins `profiles` + `departments` + `sections` to generate verified departmental student rosters with section mappings.
+- **Multi-Table LEFT JOIN with Aggregations**: Joins `departments` with `profiles` to calculate real-time placement percentages, total candidates, and CTC averages per branch.
+- **CTE Multi-Table Pipeline JOIN**: Combines `drives`, `drive_applications`, `slot_allocations`, and `slot_candidate_bookings` to produce an end-to-end audit of drive attendance.
+
+---
+
+## 13. JavaScript Core Concepts Architecture (`utils/js-concepts.js`)
+
+### 13.1 Closures & Encapsulation
+- **Private State Enclosures**: `createSecureTokenVault()` encloses private token credentials and access counters.
+- **Higher-Order Memoization**: `memoizeWithClosure()` preserves an enclosed `Map` cache across function invocations.
+- **Debouncing**: `createDebounceWithClosure()` manages enclosed timer IDs to optimize UI event handling.
+
+### 13.2 Event Loop & Task Scheduling
+- **Execution Hierarchy**: Formulates and measures the execution lifecycle across:
+  1. Synchronous Call Stack
+  2. Microtask Queue (`Promise.resolve()`, `queueMicrotask()`)
+  3. Render Queue (`requestAnimationFrame()`)
+  4. Macrotask Queue (`setTimeout()`, `I/O`)
+
+### 13.3 Hoisting & Promisification
+- **Hoisting Patterns**: Demonstrates function declaration hoisting vs `let`/`const` Temporal Dead Zone (TDZ) safe variables.
+- **Promisify Utility**: Converts legacy Node/browser callback functions `(err, result)` into standard native Promises.
+
+---
+
+## 14. React 18 Component Composition & Hooks Architecture (`pages/react-studio.js`)
+
+### 14.1 Component Composition Hierarchy
+The React Studio utilizes multi-tiered Component Composition:
+- **Container Components**: `StudioCard` providing header badges, slot titles, and dynamic action buttons.
+- **Compound Components**: Composing `StudioHeader`, `StudioBody`, `StudioFooter`, and `StatBadge`.
+- **Presentational Components**: `CandidateCard` encapsulating candidate metrics, bookmark toggles, and status badges.
+
+### 14.2 State Management (`useState`)
+- Real-time candidate name search query filtering.
+- Dynamic department multi-select dropdown state.
+- Interactive range sliders for Minimum CGPA and Minimum ATS Score cutoffs.
+- Selected theme switcher (`cyber`, `emerald`, `solar`) modifying active CSS palette variables.
+- Pinned candidate shortlist `Set` management.
+
+### 14.3 Lifecycle Side-Effects (`useEffect`)
+- **Async API Data Fetching**: Triggers backend REST `/api/v1/health` and `/api/v1/drives` telemetry fetching on mount with `AbortController` cancellation cleanup on unmount.
+- **Auto-Updating Telemetry Ticker**: Runs a live 1-second interval counter with `clearInterval()` cleanup.
+- **Memory Leak Protection**: Strict `isMounted` guards preventing state mutations on unmounted components.

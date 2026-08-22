@@ -138,17 +138,22 @@ flowchart TB
             BlazeFace["BlazeFace Model (Facial Tracking & Gaze)"]
             COCOSSD["COCO-SSD Model (Mobile Phone & Object Detection)"]
             SpeechEngine["Web Speech API (SpeechRecognition & SpeechSynthesis)"]
+            ReactEngine["React 18 & ReactDOM Engine (Component Studio & Hooks)"]
         end
     end
 
     subgraph ServerRuntime["Node.js Routing Proxy Server (server.js)"]
+        MiddlewareStack["Middleware Pipeline (CORS, RequestLogger, RateLimiter, BodyParser)"]
+        RestAPI["RESTful API Endpoints (/api/v1/drives, /api/v1/health, /api/v1/reports)"]
+        MongoControllerNode["MongoDB NoSQL Controller (/api/v1/mongo/logs)"]
         StaticServer["HTTP Static File Server (Zero-Build Delivery)"]
         EnvInjector["Dynamic Env Injection (__ENV_PLACEHOLDER__)"]
-        AIGateway["Gemini AI Proxy Endpoint (/api/ai)"]
+        AIGateway["Gemini AI Proxy Endpoint (/api/ai & /api/v1/ai/generate)"]
     end
 
     subgraph CloudServices["External Cloud Platforms"]
         SupabaseCloud[("Supabase PostgreSQL Database & Auth")]
+        MongoCloud[("MongoDB Atlas NoSQL Cluster")]
         GeminiCloud["Google Gemini Generative AI (gemini-1.5-flash)"]
     end
 
@@ -163,6 +168,10 @@ flowchart TB
     P_Interview --> AIGateway
     P_Resume --> AIGateway
     
+    MiddlewareStack --> RestAPI
+    MiddlewareStack --> MongoControllerNode
+    MiddlewareStack --> AIGateway
+    MongoControllerNode --> MongoCloud
     StaticServer --> HTML
     AIGateway --> GeminiCloud
 ```
