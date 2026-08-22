@@ -67,6 +67,16 @@ export async function loadProfilePage(root, Store, maybeSupabase, activeTabId = 
 
   let user = loggedInUser;
   const targetId = targetStudentId || loggedInUser.id;
+
+  // Retrieve any cached profile snapshot for this user to ensure instant persistence
+  let localCachedProfile = {};
+  try {
+    const profileCache = JSON.parse(localStorage.getItem('placenix_profile_cache') || '{}');
+    if (targetId && profileCache[targetId]) {
+      localCachedProfile = profileCache[targetId];
+    }
+  } catch(e){}
+
   if (targetStudentId) {
     let localStudent = null;
     if (Store && Array.isArray(Store.students)) {
@@ -75,19 +85,28 @@ export async function loadProfilePage(root, Store, maybeSupabase, activeTabId = 
     
     user = {
       id: targetStudentId,
-      full_name: localStudent?.name || localStudent?.full_name || 'srithikan s',
-      department: localStudent?.dept || localStudent?.department || 'Computer Science & Engineering',
-      cgpa: localStudent?.cgpa || '8.0',
-      skills: localStudent?.skills || ['JavaScript', 'React', 'Node.js', 'Python', 'Machine Learning'],
+      full_name: localCachedProfile.full_name || localStudent?.name || localStudent?.full_name || 'srithikan s',
+      department: localCachedProfile.department || localStudent?.dept || localStudent?.department || 'Computer Science & Engineering',
+      cgpa: localCachedProfile.cgpa || localStudent?.cgpa || '8.0',
+      skills: localCachedProfile.skills || localStudent?.skills || ['JavaScript', 'React', 'Node.js', 'Python', 'Machine Learning'],
       role: 'student',
-      college: 'Kalasalingam University',
-      roll_number: localStudent?.rollNo || localStudent?.roll_number || '3652147',
-      register_number: localStudent?.rollNo || localStudent?.register_number || '3652147',
-      batch: localStudent?.batch || '2021 - 2025',
-      status: localStudent?.status || 'APPROVED',
+      college: localCachedProfile.college || 'Kalasalingam University',
+      roll_number: localCachedProfile.roll_number || localStudent?.rollNo || localStudent?.roll_number || '3652147',
+      register_number: localCachedProfile.register_number || localStudent?.rollNo || localStudent?.register_number || '3652147',
+      batch: localCachedProfile.batch_year || localStudent?.batch || '2021 - 2025',
+      status: localCachedProfile.status || localStudent?.status || 'APPROVED',
       ats: localStudent?.atsScore || localStudent?.ats || 70,
-      email: localStudent?.email || 'srithikan@klu.ac.in'
+      email: localCachedProfile.email || localStudent?.email || 'srithikan@klu.ac.in',
+      ...localCachedProfile
     };
+  } else {
+    user = {
+      ...localCachedProfile,
+      ...loggedInUser
+    };
+    if (Store.session) {
+      Store.session.user = user;
+    }
   }
 
   // Render profile HTML synchronously in 0ms to prevent skeleton layout height jump
@@ -107,21 +126,27 @@ export async function loadProfilePage(root, Store, maybeSupabase, activeTabId = 
       withTimeout(supabaseClient.from('academic_batches').select('*').order('batch_name'), 3000, { data: [] }),
       withTimeout(supabaseClient.from('section_requests').select('*').eq('student_id', targetId).eq('status', 'Pending').maybeSingle(), 2000, { data: null })
     ]).then(([profileRes, deptsRes, degreesRes, batchesRes, reqRes]) => {
-      let updatedUser = user;
+      let updatedUser = { ...user };
       if (profileRes && profileRes.data) {
         const remoteData = profileRes.data;
-        const mergedUser = { ...user };
         Object.keys(remoteData).forEach(k => {
           if (remoteData[k] !== null && remoteData[k] !== undefined && remoteData[k] !== '') {
-            mergedUser[k] = remoteData[k];
+            updatedUser[k] = remoteData[k];
           }
         });
-        updatedUser = mergedUser;
-        if (!targetStudentId || targetStudentId === loggedInUser.id) {
-          Store.session.user = updatedUser;
-          localStorage.setItem('placenix-mock-session', JSON.stringify(updatedUser));
-          localStorage.setItem('placenix_user_session', JSON.stringify(updatedUser));
-        }
+      }
+      
+      // Update local profile cache
+      try {
+        const profileCache = JSON.parse(localStorage.getItem('placenix_profile_cache') || '{}');
+        profileCache[targetId] = { ...(profileCache[targetId] || {}), ...updatedUser };
+        localStorage.setItem('placenix_profile_cache', JSON.stringify(profileCache));
+      } catch(e){}
+
+      if (!targetStudentId || targetStudentId === loggedInUser.id) {
+        Store.session.user = updatedUser;
+        localStorage.setItem('placenix-mock-session', JSON.stringify(updatedUser));
+        localStorage.setItem('placenix_user_session', JSON.stringify(updatedUser));
       }
       const depts = deptsRes?.data || [];
       const degrees = degreesRes?.data || [];
@@ -982,10 +1007,21 @@ function initProfileScripts(root, user, Store, supabase, depts = [], pendingReq 
             response = { error: { message: 'Database transaction offline.' } };
           }
 
-          // Always commit updates to local session and Store registry
+          // Always commit updates to local session, cache, and Store registry
           Store.session.user = { ...Store.session.user, ...updates };
           localStorage.setItem('placenix-mock-session', JSON.stringify(Store.session.user));
           localStorage.setItem('placenix_user_session', JSON.stringify(Store.session.user));
+          
+          try {
+            const profileCache = JSON.parse(localStorage.getItem('placenix_profile_cache') || '{}');
+            profileCache[user.id] = {
+              ...(profileCache[user.id] || {}),
+              ...Store.session.user,
+              ...updates
+            };
+            localStorage.setItem('placenix_profile_cache', JSON.stringify(profileCache));
+          } catch(e){}
+
           if (Array.isArray(Store.students)) {
             const idx = Store.students.findIndex(s => s.id === user.id);
             if (idx !== -1) {
@@ -997,6 +1033,17 @@ function initProfileScripts(root, user, Store, supabase, depts = [], pendingReq 
                 cgpa: updates.cgpa || Store.students[idx].cgpa,
                 skills: updates.skills || Store.students[idx].skills
               };
+            } else {
+              Store.students.push({
+                id: user.id,
+                name: updates.full_name || user.full_name || 'Student',
+                dept: updates.department || user.department || 'CSE',
+                cgpa: updates.cgpa || 8.0,
+                skills: updates.skills || [],
+                status: 'Approved',
+                avatar: ((updates.full_name || user.full_name || 'S')[0] || 'S').toUpperCase(),
+                ...updates
+              });
             }
           }
           saveStore();
@@ -1169,6 +1216,18 @@ function initProfileScripts(root, user, Store, supabase, depts = [], pendingReq 
         }
 
         Store.session.user.documents = docs;
+        try {
+          const profileCache = JSON.parse(localStorage.getItem('placenix_profile_cache') || '{}');
+          profileCache[user.id] = {
+            ...(profileCache[user.id] || {}),
+            ...Store.session.user,
+            documents: docs,
+            resume_url: user.resume_url || Store.session.user.resume_url,
+            resume_analysis: user.resume_analysis || Store.session.user.resume_analysis
+          };
+          localStorage.setItem('placenix_profile_cache', JSON.stringify(profileCache));
+        } catch(e){}
+        saveStore();
         
         if (upsertResponse?.error) {
           console.warn('⚠️ Profile document updates timed out/failed. Saved locally.');
@@ -1241,6 +1300,16 @@ function initProfileScripts(root, user, Store, supabase, depts = [], pendingReq 
           }
 
           Store.session.user.internships.push(item);
+          try {
+            const profileCache = JSON.parse(localStorage.getItem('placenix_profile_cache') || '{}');
+            profileCache[user.id] = {
+              ...(profileCache[user.id] || {}),
+              ...Store.session.user,
+              internships: Store.session.user.internships
+            };
+            localStorage.setItem('placenix_profile_cache', JSON.stringify(profileCache));
+          } catch(e){}
+          saveStore();
 
           if (response?.error) {
             console.warn('⚠️ Cloud commit failed/timed out. Saved internship locally.');
@@ -1268,6 +1337,16 @@ function initProfileScripts(root, user, Store, supabase, depts = [], pendingReq 
           }
 
           Store.session.user.projects.push(item);
+          try {
+            const profileCache = JSON.parse(localStorage.getItem('placenix_profile_cache') || '{}');
+            profileCache[user.id] = {
+              ...(profileCache[user.id] || {}),
+              ...Store.session.user,
+              projects: Store.session.user.projects
+            };
+            localStorage.setItem('placenix_profile_cache', JSON.stringify(profileCache));
+          } catch(e){}
+          saveStore();
 
           if (response?.error) {
             console.warn('⚠️ Cloud commit failed/timed out. Saved project locally.');

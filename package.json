@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "AI-Powered Employability & Campus Recruitment Operating System",
   "private": true,
+  "type": "module",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",

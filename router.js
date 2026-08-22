@@ -6,7 +6,8 @@ import { loadLandingPage }   from './pages/landing.js';
 import { loadAuthPage }      from './pages/auth.js';
 import { loadOnboardingPage } from './pages/onboarding.js';
 import { loadStudentDash }   from './pages/dashboard-student.js';
-import { loadTPODash, loadAdminDash } from './pages/dashboard-tpo.js';
+import { loadTPODash, loadAdminDash as loadTPOAdminDash } from './pages/dashboard-tpo.js';
+import { loadAdminDash }     from './pages/dashboard-admin.js';
 import { loadProfilePage }   from './pages/profile.js';
 import { loadDrivesPage }    from './pages/drives.js';
 import { loadAlumniPage }    from './pages/alumni.js';
@@ -31,7 +32,7 @@ import { loadAttendanceTrackerPage } from './pages/attendance-tracker.js';
 import { loadSaaSPage } from './pages/saas-admin.js';
 import { renderSkeleton } from './components/skeleton.js';
 
-import { renderSidebar, renderTopbar } from './components/sidebar.js';
+import { renderSidebar, renderTopbar, initTopbarEvents } from './components/sidebar.js';
 import { supabase   } from './supabase.js';
 import Store          from './store.js';
 
@@ -57,7 +58,7 @@ const routes = {
   'tpo-dashboard':     loadTPODash,
   'coordinator-dashboard': loadDeptDash,
   'department-dashboard':  loadDeptDash,
-  'admin-dashboard':   loadAdminControl,
+  'admin-dashboard':   loadAdminDash,
   'admin-setup':       loadAdminControl,
   'admin-staff':       loadAdminControl,
   'admin-roles':       loadAdminControl,
@@ -234,6 +235,7 @@ async function handleRoute() {
             </main>
           </div>`;
         initSidebar();
+        initTopbarEvents(Store);
         // Badge initial render after shell mounts
         setTimeout(() => window.NotificationService?.refreshBadge(), 150);
       } else {
@@ -246,6 +248,7 @@ async function handleRoute() {
         const topbarContainer = document.getElementById('topbar-container');
         if (topbarContainer) {
           topbarContainer.innerHTML = renderTopbar(user, route);
+          initTopbarEvents(Store);
           // Refresh badge after topbar re-render (badge span replaced by innerHTML)
           setTimeout(() => window.NotificationService?.refreshBadge(), 80);
         }

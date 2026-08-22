@@ -3,47 +3,46 @@ import { saveStore, getValidationStatus, saveValidationStatus } from '../store.j
 import { showToast } from '../components/toast.js';
 
 export async function loadFacultyAdvisorPage(root, Store) {
-  const realStudents = Store.students && Store.students.length > 0 ? Store.students : [
-    { id: '58ad3eee-0f28-4b73-bc81-2b234df9aeab', name: 'srithikan s', dept: 'CSE', cgpa: 7.0, atsScore: 84, empScore: 42, status: 'Shortlisted' },
-    { id: '2a0afaaf-1bac-42f8-82f1-da60ad34771a', name: 'Sai R', dept: 'CSE', cgpa: 8.0, atsScore: 80, empScore: 75, status: 'Applied' }
-  ];
-
-  const fallbackStudents = realStudents.map((s, idx) => {
-    const defaultStatus = idx === 0 ? 'Pending' : 'Approved';
-    const valState = getValidationStatus(s.id, null);
-    const statusVal = valState.status || defaultStatus;
-    const probVal = s.cgpa >= 8.5 ? 'High' : s.cgpa >= 7.5 ? 'Medium' : 'Low';
-    
-    // Parse metrics from s if available
-    const softSkills = s.employability_data?.score_breakdown?.communication || s.softSkills || Math.round(55 + (s.cgpa ? s.cgpa * 4 : 20));
-    const coding = s.employability_data?.score_breakdown?.technical || s.coding || Math.round(50 + (s.cgpa ? s.cgpa * 5 : 20));
-    const aptitude = s.employability_data?.score_breakdown?.problemSolving || s.aptitude || Math.round(60 + (s.cgpa ? s.cgpa * 3 : 20));
-    const technical = s.employability_data?.score_breakdown?.technical || s.technical || Math.round(52 + (s.cgpa ? s.cgpa * 4.5 : 20));
-
-    return {
-      id: s.id,
-      name: s.name,
-      regNo: idx === 0 ? '2025CSE001' : '2025CSE002',
-      dept: s.dept || 'CSE',
-      cgpa: s.cgpa || 8.0,
-      resumeScore: s.atsScore || s.resumeScore || 80,
-      empScore: s.empScore || 70,
-      prob: probVal,
-      status: statusVal,
-      readiness: s.empScore || 70,
-      softSkills: softSkills,
-      coding: coding,
-      aptitude: aptitude,
-      technical: technical,
-      interview_history: s.employability_data?.interview_history || []
-    };
-  });
-
   const currentHash = (typeof window !== 'undefined' && window.location?.hash ? window.location.hash : '#').replace('#', '').split('?')[0].replace(/_/g, '-').toLowerCase();
   let initialTab = 'dashboard';
   if (currentHash === 'fa-students') initialTab = 'students';
   else if (currentHash === 'fa-resume') initialTab = 'validation';
   else if (currentHash === 'fa-skills') initialTab = 'mentoring';
+
+  const mapStudentObject = (p, deptsList = []) => {
+    const resumeScore = p.resume_analysis?.ats_score || p.atsScore || p.resume_score || p.resumeScore || 0;
+    const empScore = p.employability_data?.overall_score || p.empScore || p.employability_score || 0;
+    const readiness = p.readiness_percentage || p.readiness || empScore || 0;
+    const valState = getValidationStatus(p.id, p.rejection_comments || null);
+
+    const softSkills = p.employability_data?.score_breakdown?.communication || p.softSkills || p.soft_skills || (p.cgpa ? Math.round(55 + p.cgpa * 4) : 70);
+    const coding = p.employability_data?.score_breakdown?.technical || p.coding || p.coding_score || (p.cgpa ? Math.round(50 + p.cgpa * 5) : 70);
+    const aptitude = p.employability_data?.score_breakdown?.problemSolving || p.aptitude || p.aptitude_score || (p.cgpa ? Math.round(60 + p.cgpa * 3) : 70);
+    const technical = p.employability_data?.score_breakdown?.technical || p.technical || p.technical_score || (p.cgpa ? Math.round(52 + p.cgpa * 4.5) : 70);
+
+    const deptName = deptsList.find(d => d.id === p.department)?.name || p.dept || p.department || 'CSE';
+    const cgpaVal = parseFloat(p.cgpa) || 0.0;
+
+    return {
+      id: p.id,
+      name: p.full_name || p.name || 'Student',
+      regNo: p.register_number || p.roll_number || p.regNo || 'N/A',
+      dept: deptName,
+      cgpa: cgpaVal,
+      resumeScore: resumeScore,
+      empScore: empScore,
+      prob: cgpaVal >= 8.5 ? 'High' : cgpaVal >= 7.2 ? 'Medium' : 'Low',
+      status: valState.status || p.status || 'Pending',
+      readiness: readiness,
+      softSkills: softSkills,
+      coding: coding,
+      aptitude: aptitude,
+      technical: technical,
+      interview_history: p.employability_data?.interview_history || []
+    };
+  };
+
+  let depts = [];
 
   let state = {
     activeTab: initialTab,
@@ -53,10 +52,10 @@ export async function loadFacultyAdvisorPage(root, Store) {
     filterProb: 'All',
     showAdvancedFilters: false,
     selectedTrend: 'Last 6 Months',
-    modalType: null, // 'announcement', 'insights', 'risk-analysis', 'schedule-mentoring', 'view-weak-comm', 'view-coding-gaps', 'view-low-conf', 'auto-schedule-success'
+    modalType: null,
     modalData: null,
     transfers: [],
-    students: [],
+    students: (Store.students || []).map(s => mapStudentObject(s)),
     mapping: 'None',
     mentoringCohort: null,
     mentoringSearchQuery: '',
@@ -67,9 +66,7 @@ export async function loadFacultyAdvisorPage(root, Store) {
     aiTab: 'critical'
   };
 
-  let depts = [];
-
-  // 🟢 Synchronize Student Registry
+  // 🟢 Synchronize Real Student Registry from Database
   async function syncStudents() {
     if (!supabase) return;
     try {
@@ -93,69 +90,31 @@ export async function loadFacultyAdvisorPage(root, Store) {
 
       console.log(`🛡️ Faculty Advisor [${userEmail}] Mapping: ${mapping}`);
 
-      // 2. Build filtered Supabase query
-      let query = supabase.from('profiles').select('*');
+      // 2. Build filtered Supabase query for real student profiles
+      let query = supabase.from('profiles').select('*').eq('role', 'student');
       
-      if (mapping !== 'Global') {
-        if (mapping && mapping !== 'None') {
-          if (mapping.includes(' - Section ')) {
-            const parts = mapping.split(' - Section ');
-            const deptPart = parts[0].trim();
-            const secPart = parts[1].trim();
-            query = query.eq('department', deptPart).eq('section_name', secPart);
-          } else {
-            query = query.eq('department', mapping.trim());
-          }
+      if (mapping && mapping !== 'None' && mapping !== 'Global') {
+        if (mapping.includes(' - Section ')) {
+          const parts = mapping.split(' - Section ');
+          const deptPart = parts[0].trim();
+          const secPart = parts[1].trim();
+          query = query.eq('department', deptPart).eq('section_name', secPart);
         } else {
-          // No mapping in DB, load fallback mock students
-          if (!state.students || state.students.length === 0) {
-            state.students = fallbackStudents;
-          }
-          return;
+          query = query.eq('department', mapping.trim());
         }
       }
 
       const { data, error } = await query.order('full_name');
       
       if (!error && data && data.length > 0) {
-        state.students = data.map(p => {
-          const resumeScore = p.resume_analysis?.ats_score || p.resume_score || 0;
-          const empScore = p.employability_data?.overall_score || p.employability_score || 0;
-          const readiness = p.readiness_percentage || empScore || 0;
-          
-          const softSkills = p.employability_data?.communication || p.soft_skills || Math.round(55 + (p.cgpa ? p.cgpa * 4 : 20));
-          const coding = p.employability_data?.coding || p.coding_score || Math.round(50 + (p.cgpa ? p.cgpa * 5 : 20));
-          const aptitude = p.employability_data?.aptitude || p.aptitude_score || Math.round(60 + (p.cgpa ? p.cgpa * 3 : 20));
-          const technical = p.employability_data?.technical || p.technical_score || Math.round(52 + (p.cgpa ? p.cgpa * 4.5 : 20));
-
-          return {
-            id: p.id,
-            name: p.full_name || 'Identity TBD',
-            regNo: p.register_number || p.roll_number || 'N/A',
-            dept: depts.find(d => d.id === p.department)?.name || p.department || 'General',
-            cgpa: p.cgpa || 0.0,
-            resumeScore: resumeScore,
-            empScore: empScore,
-            prob: p.cgpa >= 8.5 ? 'High' : p.cgpa >= 7.5 ? 'Medium' : 'Low',
-            status: getValidationStatus(p.id, p.rejection_comments).status,
-            readiness: readiness,
-            softSkills: softSkills,
-            coding: coding,
-            aptitude: aptitude,
-            technical: technical,
-            interview_history: p.employability_data?.interview_history || []
-          };
-        });
-      } else {
-        if (!state.students || state.students.length === 0) {
-          state.students = fallbackStudents;
-        }
+        state.students = data.map(p => mapStudentObject(p, depts));
+        render();
+      } else if (Store.students && Store.students.length > 0) {
+        state.students = Store.students.map(s => mapStudentObject(s, depts));
+        render();
       }
     } catch (err) {
       console.error('Failed to sync student profiles:', err);
-      if (!state.students || state.students.length === 0) {
-        state.students = fallbackStudents;
-      }
     }
   }
 
@@ -197,8 +156,8 @@ export async function loadFacultyAdvisorPage(root, Store) {
     return Math.round(total / state.students.length);
   };
 
-  // 🔥 Initial instant render with local/fallback data for 0ms response
-  state.students = fallbackStudents;
+  // 🔥 Initial instant render with Store data for 0ms response
+  state.students = (Store.students || []).map(s => mapStudentObject(s));
   state.transfers = (Store.transferRequests || []).filter(r => r.status === 'pending');
   render();
 
@@ -301,42 +260,105 @@ export async function loadFacultyAdvisorPage(root, Store) {
     render();
   };
 
-  window.handleOpenScheduleMentoring = (studentName) => {
-    const student = state.students.find(s => s.name === studentName) || { name: studentName, dept: 'CSE' };
+  window.handleOpenScheduleMentoring = (studentIdentifier) => {
+    const student = studentIdentifier ? (state.students.find(s => s.name === studentIdentifier || s.regNo === studentIdentifier || s.id === studentIdentifier) || null) : null;
     state.modalType = 'schedule-mentoring';
     state.modalData = student;
     render();
   };
 
+  window.handleMentorRegLookup = (typedVal) => {
+    const previewContainer = document.getElementById('mentor-student-preview-card');
+    if (!previewContainer) return;
+
+    const val = (typedVal || '').trim().toLowerCase();
+    if (!val) {
+      previewContainer.innerHTML = `
+        <div style="padding:14px; border-radius:10px; background:rgba(255,255,255,0.02); border:1px dashed var(--glass-border-subtle); display:flex; align-items:center; gap:10px; color:var(--text-muted); font-size:12px;">
+          <span style="font-size:18px;">🔍</span>
+          <span>Enter or pick a Register Number above to automatically load advisee intelligence.</span>
+        </div>
+      `;
+      return;
+    }
+
+    const matched = state.students.find(s => 
+      (s.regNo && s.regNo.toLowerCase() === val) || 
+      (s.regNo && s.regNo.toLowerCase().includes(val)) || 
+      (s.name && s.name.toLowerCase().includes(val))
+    );
+
+    if (matched) {
+      previewContainer.innerHTML = `
+        <div style="padding:14px 16px; border-radius:10px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.3); display:flex; justify-content:space-between; align-items:center; animation:fadeIn 0.2s ease;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg, #818cf8, #4f46e5); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; color:#fff;">
+              ${(matched.name || 'S')[0].toUpperCase()}
+            </div>
+            <div>
+              <div style="font-weight:800; color:#fff; font-size:14px;">${matched.name}</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Reg: <strong style="color:#fff;">${matched.regNo}</strong> • Dept: ${matched.dept}</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span style="font-size:11px; padding:3px 8px; border-radius:6px; background:rgba(255,255,255,0.06); color:#fff; font-weight:700; border:1px solid var(--glass-border-subtle);">
+              CGPA: ${matched.cgpa}
+            </span>
+            <span style="font-size:11px; padding:3px 8px; border-radius:6px; background:rgba(52,211,153,0.15); color:#34d399; font-weight:700; border:1px solid rgba(52,211,153,0.3);">
+              ${matched.readiness}% Readiness
+            </span>
+          </div>
+        </div>
+      `;
+    } else {
+      previewContainer.innerHTML = `
+        <div style="padding:14px; border-radius:10px; background:rgba(245,158,11,0.06); border:1px solid rgba(245,158,11,0.25); display:flex; align-items:center; gap:10px; color:#f59e0b; font-size:12px;">
+          <span style="font-size:18px;">⚠️</span>
+          <span>Register No "<strong>${typedVal}</strong>" is not yet mapped in active cohort, but you can still book a session.</span>
+        </div>
+      `;
+    }
+  };
+
   window.handleBookMentoringSession = (event) => {
     event.preventDefault();
-    const studentName = document.getElementById('mentor-student-name').value;
-    const topic = document.getElementById('mentor-topic').value;
-    const date = document.getElementById('mentor-date').value;
-    const time = document.getElementById('mentor-time').value;
-    const mode = document.getElementById('mentor-mode').value;
+    const regInput = document.getElementById('mentor-reg-input')?.value?.trim() || '';
+    const matched = state.students.find(s => 
+      (s.regNo && s.regNo.toLowerCase() === regInput.toLowerCase()) || 
+      (s.name && s.name.toLowerCase() === regInput.toLowerCase())
+    );
+    const studentName = matched ? matched.name : (regInput ? `Student (${regInput})` : 'Advisee Student');
+    const regNo = matched ? matched.regNo : regInput;
+    const topic = document.getElementById('mentor-topic')?.value || 'Resume & ATS Revamp';
+    const date = document.getElementById('mentor-date')?.value;
+    const time = document.getElementById('mentor-time')?.value;
+    const mode = document.getElementById('mentor-mode')?.value || 'Offline (Faculty Cabin)';
 
-    if (!date || !time) {
-      showToast('Date and time are required.', 'warning');
+    if (!regInput || !date || !time) {
+      showToast('Student Register Number, date, and time are required.', 'warning');
       return;
     }
 
     const session = {
       id: 'm_' + Date.now(),
-      studentName,
-      topic,
+      studentName: studentName,
+      regNo: regNo,
+      topic: topic,
+      time: `${date} · ${time}`,
       dateTime: `${date}T${time}`,
-      mode,
+      mode: mode,
+      staffEmail: Store.session?.user?.email || 'advisor@univ.edu',
       status: 'Confirmed'
     };
 
     if (!Store.slotAllocations) Store.slotAllocations = [];
-    Store.slotAllocations.push(session);
+    Store.slotAllocations.unshift(session);
     saveStore();
 
     state.modalType = null;
+    state.modalData = null;
     render();
-    showToast(`Mentoring session scheduled successfully with ${studentName}!`, 'success');
+    showToast(`Mentoring session scheduled successfully for ${studentName} (${regNo})!`, 'success');
   };
 
   // Cohort handlers
@@ -350,6 +372,11 @@ export async function loadFacultyAdvisorPage(root, Store) {
 
   window.handleExitCohortView = () => {
     state.mentoringCohort = null;
+    render();
+  };
+
+  window.handleSwitchTab = (tabName) => {
+    state.activeTab = tabName;
     render();
   };
 
@@ -1143,7 +1170,7 @@ export async function loadFacultyAdvisorPage(root, Store) {
         icon: '🛡️',
         desc: 'All mapped student metrics match standard university placement readiness models.',
         actionLabel: 'Audit Roster →',
-        actionStr: `state.activeTab = 'students'; render();`
+        actionStr: `window.handleSwitchTab('students')`
       });
     }
     if (generalGaps.length === 0) {
@@ -1154,7 +1181,7 @@ export async function loadFacultyAdvisorPage(root, Store) {
         icon: '💡',
         desc: 'No developmental skill gaps detected in the active department roster.',
         actionLabel: 'Audit Skill Matrix →',
-        actionStr: `state.activeTab = 'mentoring'; render();`
+        actionStr: `window.handleSwitchTab('mentoring')`
       });
     }
 
@@ -1187,11 +1214,11 @@ export async function loadFacultyAdvisorPage(root, Store) {
           </div>
           <div style="height:280px; display:flex; align-items:flex-end; gap:20px; padding:20px 0;">
             ${trendData.map((h, i) => `
-              <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:12px;">
-                <div style="width:100%; height:${h}%; background:linear-gradient(to top, var(--brand-electric-violet), #4f46e5); border-radius:8px; opacity:${0.5 + (i * (0.5 / trendData.length))}; position:relative; cursor:pointer;">
-                  <div style="position:absolute; top:-25px; left:50%; transform:translateX(-50%); font-size:0.7rem; font-weight:800;">${h}%</div>
+              <div style="flex:1; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:12px;">
+                <div style="width:100%; height:${h}%; background:linear-gradient(180deg, #818cf8 0%, #4f46e5 100%); border-radius:8px 8px 4px 4px; box-shadow: 0 4px 16px rgba(99,102,241,0.35); opacity:${0.6 + (i * (0.4 / trendData.length))}; position:relative; cursor:pointer; min-height:12px; transition: all 0.3s ease;">
+                  <div style="position:absolute; top:-24px; left:50%; transform:translateX(-50%); font-size:11px; font-weight:800; color:#fff; font-family:var(--font-display);">${h}%</div>
                 </div>
-                <div style="font-size:0.7rem; font-weight:700; color:var(--text-muted);">${trendLabels[i]}</div>
+                <div style="font-size:11px; font-weight:700; color:var(--text-muted);">${trendLabels[i]}</div>
               </div>
             `).join('')}
           </div>
@@ -1202,15 +1229,15 @@ export async function loadFacultyAdvisorPage(root, Store) {
             <h3 style="font-size:1rem; font-weight:800; margin-bottom:20px;">Skill Distribution</h3>
             <div style="display:flex; flex-direction:column; gap:16px;">
               ${[
-                ['Coding', getAverageSkillScore('coding'), '#7c3aed'],
-                ['Aptitude', getAverageSkillScore('aptitude'), '#3b82f6'],
-                ['Soft Skills', getAverageSkillScore('softSkills'), '#22c55e'],
-                ['Technical', getAverageSkillScore('technical'), '#f59e0b']
+                ['Coding & DSA', getAverageSkillScore('coding'), '#818cf8'],
+                ['Aptitude & Logic', getAverageSkillScore('aptitude'), '#38bdf8'],
+                ['Soft Skills & Fluency', getAverageSkillScore('softSkills'), '#34d399'],
+                ['Domain Technical', getAverageSkillScore('technical'), '#f59e0b']
               ].map(([lbl, val, clr]) => `
                 <div>
                   <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:6px;">
-                    <span style="font-weight:700;">${lbl}</span>
-                    <span style="color:var(--text-muted);">${val}%</span>
+                    <span style="font-weight:700; color:#fff;">${lbl}</span>
+                    <span style="color:var(--text-muted); font-weight:800;">${val}%</span>
                   </div>
                   <div class="readiness-meter"><div class="readiness-fill" style="width:${val}%; background:${clr};"></div></div>
                 </div>
@@ -1221,11 +1248,11 @@ export async function loadFacultyAdvisorPage(root, Store) {
             <h3 style="font-size:1rem; font-weight:800; margin-bottom:20px;">Resume Quality Index</h3>
             <div style="height:180px; display:flex; align-items:center; justify-content:center; position:relative;">
               <div style="width:140px; height:140px; border-radius:50%; border:12px solid rgba(255,255,255,0.05); display:flex; align-items:center; justify-content:center; flex-direction:column;">
-                <div style="font-size:1.8rem; font-weight:900;">${avgResume}%</div>
+                <div style="font-size:1.8rem; font-weight:900; color:#fff; font-family:var(--font-display);">${avgResume}%</div>
                 <div style="font-size:0.6rem; font-weight:700; color:var(--text-muted);">AVG SCORE</div>
               </div>
               <svg style="position:absolute; width:140px; height:140px; transform:rotate(-90deg);">
-                <circle cx="70" cy="70" r="64" fill="none" stroke="var(--brand-electric-violet)" stroke-width="12" stroke-dasharray="402" stroke-dashoffset="${strokeDashoffset}" stroke-linecap="round" />
+                <circle cx="70" cy="70" r="64" fill="none" stroke="#818cf8" stroke-width="12" stroke-dasharray="402" stroke-dashoffset="${strokeDashoffset}" stroke-linecap="round" />
               </svg>
             </div>
           </div>
@@ -1306,7 +1333,7 @@ export async function loadFacultyAdvisorPage(root, Store) {
             `).join('')}
           </div>
           
-          <button class="btn btn-secondary btn-sm" style="width:100%; border-radius:8px; font-size:11px;" onclick="window.handleExitCohortView(); state.activeTab = 'students'; render();">
+          <button class="btn btn-secondary btn-sm" style="width:100%; border-radius:8px; font-size:11px;" onclick="window.handleOpenScheduleMentoring()">
             + Schedule Session
           </button>
         </div>
@@ -1716,43 +1743,89 @@ export async function loadFacultyAdvisorPage(root, Store) {
         </div>
       `;
     } else if (state.modalType === 'schedule-mentoring') {
-      const s = state.modalData;
-      title = `📅 Schedule Mentoring Session`;
+      const selectedStudent = state.modalData || state.students[0] || {};
+      title = `📅 Schedule Advisee Mentoring Session`;
       contentHTML = `
         <form onsubmit="window.handleBookMentoringSession(event)" style="display:flex; flex-direction:column; gap:16px;">
           <div>
-            <label style="display:block; font-size:0.8rem; font-weight:700; color:var(--text-muted); margin-bottom:6px;">Student Name</label>
-            <input type="text" id="mentor-student-name" readonly value="${s.name}" style="width:100%; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); border-radius:10px; color:white; font-size:0.9rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Student Register Number</label>
+              <span style="font-size:10px; color:var(--brand-primary); font-weight:700;">⚡ Instant Live Lookup</span>
+            </div>
+            <input type="text" id="mentor-reg-input" list="advisee-reg-list" required 
+                   value="${selectedStudent.regNo || ''}" 
+                   placeholder="Type or select student Register No (e.g. 99220041005)..." 
+                   oninput="window.handleMentorRegLookup(this.value)" 
+                   autocomplete="off"
+                   style="width:100%; padding:11px 14px; background:rgba(5,8,16,0.95); border:1px solid var(--border-subtle); border-radius:10px; color:#fff; font-size:0.9rem;">
+            
+            <datalist id="advisee-reg-list">
+              ${state.students.map(st => `
+                <option value="${st.regNo}">${st.name} — ${st.dept} (CGPA: ${st.cgpa})</option>
+              `).join('')}
+            </datalist>
           </div>
+
+          <!-- Live Student Snapshot Preview -->
+          <div id="mentor-student-preview-card">
+            ${selectedStudent && selectedStudent.name ? `
+              <div style="padding:14px 16px; border-radius:10px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.3); display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div style="width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg, #818cf8, #4f46e5); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; color:#fff;">
+                    ${(selectedStudent.name || 'S')[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <div style="font-weight:800; color:#fff; font-size:14px;">${selectedStudent.name}</div>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Reg: <strong style="color:#fff;">${selectedStudent.regNo || 'N/A'}</strong> • Dept: ${selectedStudent.dept || 'CSE'}</div>
+                  </div>
+                </div>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <span style="font-size:11px; padding:3px 8px; border-radius:6px; background:rgba(255,255,255,0.06); color:#fff; font-weight:700; border:1px solid var(--glass-border-subtle);">
+                    CGPA: ${selectedStudent.cgpa || 8.0}
+                  </span>
+                  <span style="font-size:11px; padding:3px 8px; border-radius:6px; background:rgba(52,211,153,0.15); color:#34d399; font-weight:700; border:1px solid rgba(52,211,153,0.3);">
+                    ${selectedStudent.readiness || 75}% Readiness
+                  </span>
+                </div>
+              </div>
+            ` : `
+              <div style="padding:14px; border-radius:10px; background:rgba(255,255,255,0.02); border:1px dashed var(--glass-border-subtle); display:flex; align-items:center; gap:10px; color:var(--text-muted); font-size:12px;">
+                <span style="font-size:18px;">🔍</span>
+                <span>Enter or pick a Register Number above to automatically load advisee intelligence.</span>
+              </div>
+            `}
+          </div>
+
           <div>
-            <label style="display:block; font-size:0.8rem; font-weight:700; color:var(--text-muted); margin-bottom:6px;">Topic</label>
-            <select id="mentor-topic" style="width:100%; padding:10px; background:rgba(0,0,0,0.3); border:1px solid var(--border-subtle); border-radius:10px; color:white;">
-              <option value="Resume Revamp">Resume Revamp</option>
-              <option value="Technical Prep">Technical Prep</option>
-              <option value="Mock Interview">Mock Interview</option>
-              <option value="Career Counseling">Career Counseling</option>
+            <label style="display:block; font-size:0.8rem; font-weight:700; color:var(--text-muted); margin-bottom:6px;">Mentoring Topic</label>
+            <select id="mentor-topic" style="width:100%; padding:11px 14px; background:rgba(5,8,16,0.95); border:1px solid var(--border-subtle); border-radius:10px; color:#fff; appearance:auto;">
+              <option value="Resume & ATS Revamp" style="background:#050810; color:#fff;">📄 Resume & ATS Revamp</option>
+              <option value="Technical Coding & DSA Prep" style="background:#050810; color:#fff;">💻 Technical Coding & DSA Prep</option>
+              <option value="Mock HR & Fluency Interview" style="background:#050810; color:#fff;">🗣️ Mock HR & Fluency Interview</option>
+              <option value="Placement Probability & Guidance" style="background:#050810; color:#fff;">🎯 Placement Probability & Guidance</option>
+              <option value="Academic Marksheet Verification" style="background:#050810; color:#fff;">📋 Academic Marksheet Verification</option>
             </select>
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
             <div>
               <label style="display:block; font-size:0.8rem; font-weight:700; color:var(--text-muted); margin-bottom:6px;">Date</label>
-              <input type="date" id="mentor-date" required style="width:100%; padding:10px; background:rgba(0,0,0,0.3); border:1px solid var(--border-subtle); border-radius:10px; color:white; color-scheme: dark;">
+              <input type="date" id="mentor-date" required style="width:100%; padding:10px; background:rgba(5,8,16,0.95); border:1px solid var(--border-subtle); border-radius:10px; color:#fff; color-scheme: dark;">
             </div>
             <div>
               <label style="display:block; font-size:0.8rem; font-weight:700; color:var(--text-muted); margin-bottom:6px;">Time</label>
-              <input type="time" id="mentor-time" required style="width:100%; padding:10px; background:rgba(0,0,0,0.3); border:1px solid var(--border-subtle); border-radius:10px; color:white; color-scheme: dark;">
+              <input type="time" id="mentor-time" required style="width:100%; padding:10px; background:rgba(5,8,16,0.95); border:1px solid var(--border-subtle); border-radius:10px; color:#fff; color-scheme: dark;">
             </div>
           </div>
           <div>
             <label style="display:block; font-size:0.8rem; font-weight:700; color:var(--text-muted); margin-bottom:6px;">Session Mode</label>
-            <select id="mentor-mode" style="width:100%; padding:10px; background:rgba(0,0,0,0.3); border:1px solid var(--border-subtle); border-radius:10px; color:white;">
-              <option value="Offline">Offline (Faculty Cabin)</option>
-              <option value="Online">Online (Placenix Meet)</option>
+            <select id="mentor-mode" style="width:100%; padding:11px 14px; background:rgba(5,8,16,0.95); border:1px solid var(--border-subtle); border-radius:10px; color:#fff; appearance:auto;">
+              <option value="Offline (Faculty Cabin)" style="background:#050810; color:#fff;">🏢 Offline (Faculty Cabin)</option>
+              <option value="Online (Placenix Meet)" style="background:#050810; color:#fff;">🌐 Online (Placenix Meet)</option>
             </select>
           </div>
           <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:16px;">
             <button type="button" class="btn btn-secondary btn-sm" onclick="window.handleCloseModal()">Cancel</button>
-            <button type="submit" class="btn btn-primary btn-sm">Confirm Session</button>
+            <button type="submit" class="btn btn-primary btn-sm" style="font-weight:800; padding:8px 20px;">Confirm & Book Session →</button>
           </div>
         </form>
       `;

@@ -156,6 +156,8 @@ async function bootApp() {
 
     // 4. Start Router AFTER session check is resolved
     initRouter();
+    // Expose Store globally for ⌘K search in topbar
+    window.__PlacenixStore = Store;
 
     // 5. Sync Institutional Data Registry in background (non-blocking)
     if (supabase) {

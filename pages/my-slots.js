@@ -389,20 +389,14 @@ export async function loadMySlotsPage(root, Store, supabase) {
       });
     }
 
-    // Default demonstration allocation if student has no allocated slot in memory
-    if (myAllocations.length === 0) {
-      myAllocations.push({
-        company: 'TCS',
-        role: 'Developer',
-        roundName: 'Aptitude',
-        date: '2026-07-10',
-        venue: 'Seminar Hall A',
-        slotTime: '9:00 AM - 10:00 AM',
-        slotNo: 'Slot 1',
-        attendance: 'pending',
-        checkInTime: null,
-        isDemo: true
-      });
+    // Helper to format date cleanly
+    function formatSlotDate(dStr) {
+      if (!dStr || dStr === 'N/A') return 'TBD';
+      try {
+        const dt = new Date(String(dStr).trim());
+        if (!isNaN(dt.getTime())) return dt.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+        return dStr;
+      } catch(e) { return dStr; }
     }
 
     root.innerHTML = `
@@ -428,7 +422,7 @@ export async function loadMySlotsPage(root, Store, supabase) {
 
         <!-- Dynamic Slot Lifecycle Grid -->
         <div style="display:grid; grid-template-columns: 1fr; gap: 32px;">
-          ${myAllocations.map(alloc => {
+          ${myAllocations.length > 0 ? myAllocations.map(alloc => {
             const isCheckedIn = alloc.attendance === 'present';
             const isCompleted = alloc.attendance === 'completed';
             let currentStage = 2;
@@ -479,7 +473,7 @@ export async function loadMySlotsPage(root, Store, supabase) {
                     <div class="label-ent" style="color:var(--brand-primary); font-size:10px; margin-bottom:6px; font-weight:800; letter-spacing:0.06em;">DATE OF PROCESS</div>
                     <div style="font-weight:900; color:#fff; font-size:15px; background:rgba(5,8,16,0.65); border:1px solid rgba(0,200,255,0.2); padding:8px 16px; border-radius:12px; display:inline-flex; align-items:center; gap:8px;">
                       <svg width="14" height="14" fill="none" stroke="var(--brand-primary)" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                      <span>${alloc.date}</span>
+                      <span>${formatSlotDate(alloc.date)}</span>
                     </div>
                   </div>
                 </div>
@@ -616,7 +610,20 @@ export async function loadMySlotsPage(root, Store, supabase) {
 
               </div>
             `;
-          }).join('')}
+          }).join('') : `
+            <div class="card-ent" style="padding:64px 32px; text-align:center; background:var(--bg-card); border:1px dashed rgba(0,200,255,0.25); border-radius:20px;">
+              <div style="width:64px; height:64px; border-radius:18px; background:rgba(0,200,255,0.1); border:1px solid rgba(0,200,255,0.25); display:inline-flex; align-items:center; justify-content:center; font-size:30px; margin-bottom:20px;">
+                📅
+              </div>
+              <h3 style="font-size:20px; font-weight:800; color:#fff; font-family:var(--font-display); margin-bottom:8px;">No Interview Slots Assigned Yet</h3>
+              <p style="color:var(--text-description); font-size:14px; max-width:540px; margin:0 auto 28px; line-height:1.6;">
+                You haven't been allocated an interview or test slot yet. Once you apply for eligible placement drives and the Placement Cell releases your batch schedule, your assigned venue room, time slot, and entry token will appear here.
+              </p>
+              <button class="btn-premium" onclick="window.location.hash='#drives'" style="padding:12px 28px; border-radius:10px; font-weight:700; font-size:13px; cursor:pointer;">
+                Explore Eligible Placement Drives →
+              </button>
+            </div>
+          `}
         </div>
 
       </div>

@@ -71,30 +71,138 @@ function getAuthHTML(mode) {
     
     /* ── Left Panel ─────────────────────────────────────── */
     .auth-visual { 
-      background-image: url('placement_clean_bg.png');
-      background-size: 110% 110%; 
-      background-position: center;
-      background-repeat: no-repeat;
+      background: radial-gradient(circle at 15% 15%, rgba(0, 200, 255, 0.12) 0%, transparent 50%),
+                  radial-gradient(circle at 85% 85%, rgba(124, 58, 237, 0.14) 0%, transparent 60%),
+                  linear-gradient(135deg, #07090e 0%, #0d121f 50%, #06080d 100%);
       display: flex; 
       flex-direction: column; 
-      justify-content: flex-end;
-      padding: 60px 72px;
+      justify-content: space-between;
+      padding: 56px 64px;
       position: relative; 
       overflow: hidden;
-      animation: slow-pan 24s ease-in-out infinite;
     }
-    @keyframes slow-pan {
-      0%, 100% { background-position: center; background-size: 110% 110%; }
-      50% { background-position: 48% 52%; background-size: 115% 115%; }
+
+    /* Ambient cyber grid */
+    .auth-visual::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 40px 40px;
+      mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+      -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Glow orb animation */
+    .auth-visual-glow {
+      position: absolute;
+      width: 440px;
+      height: 440px;
+      background: radial-gradient(circle, rgba(0, 200, 255, 0.16) 0%, rgba(99, 102, 241, 0.06) 50%, transparent 70%);
+      top: 10%;
+      left: 10%;
+      filter: blur(50px);
+      border-radius: 50%;
+      pointer-events: none;
+      animation: float-glow 14s ease-in-out infinite alternate;
+      z-index: 1;
+    }
+    @keyframes float-glow {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(35px, 25px) scale(1.15); }
+    }
+
+    .auth-hero-branding {
+      position: relative;
+      z-index: 4;
+      margin-top: auto;
+      margin-bottom: auto;
+      padding: 16px 0;
+    }
+    .auth-hero-logo-box {
+      width: 76px;
+      height: 76px;
+      background: #FFFFFF;
+      border: 2px solid rgba(255, 255, 255, 0.95);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 32px rgba(255, 255, 255, 0.28), 0 8px 24px rgba(0, 0, 0, 0.4);
+      margin-bottom: 24px;
+      padding: 10px;
+    }
+    .auth-hero-logo-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .auth-hero-title {
+      font-family: var(--font-display);
+      font-size: 2.35rem;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: -0.04em;
+      line-height: 1.15;
+      margin: 0 0 12px;
+    }
+    .auth-hero-desc {
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: #94A3B8;
+      max-width: 460px;
+      margin-bottom: 26px;
+    }
+    .auth-pill-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 460px;
+    }
+    .auth-pill-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      font-size: 13px;
+      font-weight: 600;
+      color: #E2E8F0;
+      transition: all 0.2s ease;
+    }
+    .auth-pill-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(0, 200, 255, 0.25);
+      transform: translateX(4px);
+    }
+    .auth-pill-icon {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      background: rgba(0, 200, 255, 0.12);
+      color: #00C8FF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
     }
 
     /* Stat cards overlay on left panel */
     .auth-stat-cards {
       display: flex;
-      gap: 16px;
+      gap: 14px;
       flex-wrap: wrap;
       position: relative;
       z-index: 4;
+      margin-top: 20px;
     }
     .auth-stat-card {
       background: rgba(10, 15, 28, 0.72);
@@ -102,27 +210,28 @@ function getAuthHTML(mode) {
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border-radius: 16px;
-      padding: 18px 22px;
+      padding: 16px 20px;
       display: flex;
       flex-direction: column;
       gap: 4px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
       transition: transform 0.3s ease, box-shadow 0.3s ease;
-      min-width: 130px;
+      min-width: 125px;
+      flex: 1;
     }
     .auth-stat-card:hover {
-      transform: translateY(-4px);
+      transform: translateY(-3px);
       box-shadow: 0 16px 40px rgba(0,0,0,0.5), 0 0 20px rgba(0,200,255,0.1), inset 0 1px 0 rgba(255,255,255,0.08);
     }
     .auth-stat-value {
-      font-size: 1.6rem;
+      font-size: 1.5rem;
       font-weight: 800;
       color: #fff;
       letter-spacing: -0.03em;
       line-height: 1;
     }
     .auth-stat-label {
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 600;
       color: #64748B;
       text-transform: uppercase;
@@ -130,26 +239,12 @@ function getAuthHTML(mode) {
       margin-top: 2px;
     }
     .auth-stat-icon {
-      width: 28px; height: 28px;
+      width: 26px; height: 26px;
       background: rgba(0,200,255,0.12);
       border-radius: 8px;
       display: flex; align-items: center; justify-content: center;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       color: #00C8FF;
-    }
-
-    /* Left panel gradient overlays */
-    .auth-visual-grad-bottom {
-      position: absolute; bottom: 0; left: 0; right: 0;
-      height: 55%;
-      background: linear-gradient(to top, rgba(8,10,16,0.92) 0%, rgba(8,10,16,0) 100%);
-      pointer-events: none; z-index: 2;
-    }
-    .auth-visual-grad-right {
-      position: absolute; top: 0; right: 0; bottom: 0;
-      width: 30%;
-      background: linear-gradient(to left, rgba(8,10,16,0.9) 0%, transparent 100%);
-      pointer-events: none; z-index: 3;
     }
 
     /* ── Right Panel ─────────────────────────────────────── */
@@ -179,15 +274,16 @@ function getAuthHTML(mode) {
     /* Brand */
     .auth-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
     .auth-brand-logo { 
-      width: 34px; height: 34px;
-      background: linear-gradient(135deg,#00C8FF22,#6366f122);
-      border: 1px solid rgba(0,200,255,0.25);
+      width: 38px; height: 38px;
+      background: #FFFFFF;
+      border: 1.5px solid rgba(255, 255, 255, 0.95);
       border-radius: 10px;
       display: flex; align-items: center; justify-content: center;
       overflow: hidden;
-      box-shadow: 0 0 20px rgba(0,200,255,0.15);
+      box-shadow: 0 0 16px rgba(255, 255, 255, 0.25), 0 4px 12px rgba(0, 0, 0, 0.3);
+      padding: 5px;
     }
-    .auth-brand-logo img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 15%; }
+    .auth-brand-logo img { width: 100%; height: 100%; object-fit: contain; }
     .auth-brand-name { font-family: var(--font-display); font-size: 1.2rem; font-weight: 800; color: #fff; letter-spacing: -0.02em; }
 
     /* Headline */
@@ -431,9 +527,36 @@ function getAuthHTML(mode) {
 
   <div class="auth-page">
     <div class="auth-visual">
-      <div class="auth-visual-grad-bottom"></div>
-      <div class="auth-visual-grad-right"></div>
-      <div class="auth-stat-cards">
+      <div class="auth-visual-glow"></div>
+      
+      <div class="auth-hero-branding">
+        <div class="auth-hero-logo-box animate-fade-in-up">
+          <img src="logo.png" alt="Placenix Official Emblem">
+        </div>
+        <h2 class="auth-hero-title animate-fade-in-up">
+          Campus Recruitment <br><span style="background:linear-gradient(90deg,#00C8FF,#818CF8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Intelligence</span>
+        </h2>
+        <p class="auth-hero-desc animate-fade-in-up">
+          Next-generation employability OS, automated placement logistics & multi-tier institutional governance.
+        </p>
+
+        <div class="auth-pill-list animate-fade-in-up">
+          <div class="auth-pill-item">
+            <div class="auth-pill-icon">⚡</div>
+            <span>AI Resume ATS Scanner & Skill Radar Gap Analysis</span>
+          </div>
+          <div class="auth-pill-item">
+            <div class="auth-pill-icon">🤖</div>
+            <span>Virtual Multi-Round Technical & HR Interview Coach</span>
+          </div>
+          <div class="auth-pill-item">
+            <div class="auth-pill-icon">📊</div>
+            <span>Live Recruitment Pipeline, Kanban & Placement Telemetry</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="auth-stat-cards animate-fade-in-up">
         <div class="auth-stat-card">
           <div class="auth-stat-icon">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
