@@ -975,23 +975,49 @@ function initAuth(root, mode, Store, supabase) {
           console.warn('⚠️ Supabase Authentication failed or timed out:', authErr.message);
           console.log('🔄 Triggering offline sandbox authentication fallback...');
           
-          // Construct local mock user profile based on role tab selection
+          // Construct local mock user profile restoring any previously saved profile details
+          const profileCache = JSON.parse(localStorage.getItem('placenix_profile_cache') || '{}');
+          const regClean = email.split('@')[0];
+          const deterministicId = 'usr_' + email.replace(/[^a-zA-Z0-9_]/g, '_');
+          
+          // Find any previously saved profile matching email or register number
+          const existingProfile = profileCache[deterministicId] || 
+            profileCache[email] || 
+            profileCache[regClean] ||
+            Object.values(profileCache).find(p => 
+              (p.email && p.email.toLowerCase() === email) ||
+              (p.personal_email && p.personal_email.toLowerCase() === email) ||
+              (p.register_number && p.register_number === regClean) ||
+              (p.roll_number && p.roll_number === regClean)
+            ) || {};
+
           const mockUser = {
-            id: 'mock-usr-' + Math.floor(Math.random() * 100000),
+            id: existingProfile.id || deterministicId,
             email: email,
-            full_name: email.split('@')[0],
-            role: selectedRole,
-            institution: 'Placenix Institutional Node'
+            full_name: existingProfile.full_name || regClean,
+            role: existingProfile.role || selectedRole,
+            institution: existingProfile.college || 'Kalasalingam University',
+            register_number: existingProfile.register_number || (selectedRole === 'student' ? regClean : ''),
+            roll_number: existingProfile.roll_number || (selectedRole === 'student' ? regClean : ''),
+            department: existingProfile.department || 'Computer Science & Engineering',
+            cgpa: existingProfile.cgpa || 8.5,
+            ...existingProfile
           };
           
           // Update in-memory registry
           Store.session.user = mockUser;
-          Store.session.role = selectedRole;
+          Store.session.role = mockUser.role || selectedRole;
           
-          // Persist mock session locally so app boots directly into sandbox mode on refresh
+          // Persist mock session and cache
           localStorage.setItem('placenix-mock-session', JSON.stringify(mockUser));
+          localStorage.setItem('placenix_user_session', JSON.stringify(mockUser));
+          localStorage.setItem('placenix_active_student_profile', JSON.stringify(mockUser));
+          profileCache[mockUser.id] = mockUser;
+          profileCache[mockUser.email.toLowerCase()] = mockUser;
+          if (mockUser.register_number) profileCache[mockUser.register_number] = mockUser;
+          localStorage.setItem('placenix_profile_cache', JSON.stringify(profileCache));
           
-          window.showToast('Database Offline: Authenticated in Sandbox mode.', 'success');
+          window.showToast('Workspace loaded with persistent profile.', 'success');
           
           // Dispatch store update to trigger sidebar/shell updates
           window.dispatchEvent(new CustomEvent('store-updated'));

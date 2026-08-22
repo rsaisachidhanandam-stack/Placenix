@@ -2,7 +2,7 @@
 // PLACENIX — SUPABASE CLIENT (ULTRA RESILIENT)
 // ============================================================
 
-const env = window.__ENV__ || {};
+const env = (typeof window !== 'undefined' && window.__ENV__) ? window.__ENV__ : {};
 const supabaseUrl = env.SUPABASE_URL || '';
 const supabaseAnonKey = env.SUPABASE_ANON_KEY || '';
 
@@ -10,7 +10,7 @@ let client = null;
 
 try {
   // Use global if available (from script tag in index.html)
-  if (window.supabase && supabaseUrl && supabaseAnonKey) {
+  if (typeof window !== 'undefined' && window.supabase && supabaseUrl && supabaseAnonKey) {
     client = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
   } else {
     console.warn('⚠️ Supabase credentials missing from configuration.');

@@ -75,6 +75,25 @@ export async function loadProfilePage(root, Store, maybeSupabase, activeTabId = 
     if (targetId && profileCache[targetId]) {
       localCachedProfile = profileCache[targetId];
     }
+    // Also look up by email, personal email, or register number
+    if (!localCachedProfile.full_name || Object.keys(localCachedProfile).length === 0) {
+      const email = loggedInUser.email || '';
+      const reg = loggedInUser.register_number || (email ? email.split('@')[0] : '');
+      const match = Object.values(profileCache).find(p => 
+        (email && p.email?.toLowerCase() === email.toLowerCase()) ||
+        (email && p.personal_email?.toLowerCase() === email.toLowerCase()) ||
+        (reg && (p.register_number === reg || p.roll_number === reg || p.id === reg))
+      );
+      if (match) localCachedProfile = match;
+    }
+    // Also check dedicated active profile snapshot
+    const activeProfStr = localStorage.getItem('placenix_active_student_profile');
+    if (activeProfStr) {
+      const ap = JSON.parse(activeProfStr);
+      if (ap && (!targetStudentId || ap.id === targetStudentId || ap.email === loggedInUser.email)) {
+        localCachedProfile = { ...ap, ...localCachedProfile };
+      }
+    }
   } catch(e){}
 
   if (targetStudentId) {
@@ -85,7 +104,7 @@ export async function loadProfilePage(root, Store, maybeSupabase, activeTabId = 
     
     user = {
       id: targetStudentId,
-      full_name: localCachedProfile.full_name || localStudent?.name || localStudent?.full_name || 'srithikan s',
+      full_name: localCachedProfile.full_name || localStudent?.name || localStudent?.full_name || 'Student Identity',
       department: localCachedProfile.department || localStudent?.dept || localStudent?.department || 'Computer Science & Engineering',
       cgpa: localCachedProfile.cgpa || localStudent?.cgpa || '8.0',
       skills: localCachedProfile.skills || localStudent?.skills || ['JavaScript', 'React', 'Node.js', 'Python', 'Machine Learning'],
@@ -96,13 +115,14 @@ export async function loadProfilePage(root, Store, maybeSupabase, activeTabId = 
       batch: localCachedProfile.batch_year || localStudent?.batch || '2021 - 2025',
       status: localCachedProfile.status || localStudent?.status || 'APPROVED',
       ats: localStudent?.atsScore || localStudent?.ats || 70,
-      email: localCachedProfile.email || localStudent?.email || 'srithikan@klu.ac.in',
+      email: localCachedProfile.email || localStudent?.email || 'student@klu.ac.in',
       ...localCachedProfile
     };
   } else {
+    // User edits take priority over initial session placeholders
     user = {
-      ...localCachedProfile,
-      ...loggedInUser
+      ...loggedInUser,
+      ...localCachedProfile
     };
     if (Store.session) {
       Store.session.user = user;
@@ -955,7 +975,7 @@ function initProfileScripts(root, user, Store, supabase, depts = [], pendingReq 
  
         try {
           const getVal = (id) => document.getElementById(id)?.value?.trim() || null;
-          const updates = {
+          const rawUpdates = {
             full_name: getVal('p_full_name'),
             register_number: getVal('p_register_number'),
             roll_number: getVal('p_roll_number'),
@@ -996,10 +1016,27 @@ function initProfileScripts(root, user, Store, supabase, depts = [], pendingReq 
             skills: (getVal('a_technical_skills') || '').split(',').map(s => s.trim()).filter(Boolean)
           };
 
+          // Clean updates: never overwrite valid existing user fields with null/empty
+          const cleanedUpdates = {};
+          Object.keys(rawUpdates).forEach(k => {
+            if (rawUpdates[k] !== null && rawUpdates[k] !== undefined && rawUpdates[k] !== '') {
+              cleanedUpdates[k] = rawUpdates[k];
+            } else if (user[k] !== undefined && user[k] !== null && user[k] !== '') {
+              cleanedUpdates[k] = user[k];
+            }
+          });
+
+          // Construct unified merged user profile
+          const mergedUser = {
+            ...user,
+            ...(Store.session?.user || {}),
+            ...cleanedUpdates
+          };
+
           let response = null;
           if (dbClient && typeof dbClient.from === 'function') {
             response = await withTimeout(
-              dbClient.from('profiles').upsert({ id: user.id, ...updates }),
+              dbClient.from('profiles').upsert({ id: mergedUser.id, ...cleanedUpdates }),
               1500,
               { error: { message: 'Database transaction timed out.' } }
             );
@@ -1007,58 +1044,71 @@ function initProfileScripts(root, user, Store, supabase, depts = [], pendingReq 
             response = { error: { message: 'Database transaction offline.' } };
           }
 
-          // Always commit updates to local session, cache, and Store registry
-          Store.session.user = { ...Store.session.user, ...updates };
-          localStorage.setItem('placenix-mock-session', JSON.stringify(Store.session.user));
-          localStorage.setItem('placenix_user_session', JSON.stringify(Store.session.user));
+          // 1. Commit to active in-memory session
+          Store.session.user = mergedUser;
+
+          // 2. Commit to local storage sessions
+          localStorage.setItem('placenix-mock-session', JSON.stringify(mergedUser));
+          localStorage.setItem('placenix_user_session', JSON.stringify(mergedUser));
+          localStorage.setItem('placenix_active_student_profile', JSON.stringify(mergedUser));
           
+          // 3. Multi-index profileCache for instant lookup by id, email, and register number
           try {
             const profileCache = JSON.parse(localStorage.getItem('placenix_profile_cache') || '{}');
-            profileCache[user.id] = {
-              ...(profileCache[user.id] || {}),
-              ...Store.session.user,
-              ...updates
-            };
+            if (mergedUser.id) profileCache[mergedUser.id] = mergedUser;
+            if (mergedUser.email) profileCache[mergedUser.email.toLowerCase()] = mergedUser;
+            if (mergedUser.register_number) profileCache[mergedUser.register_number] = mergedUser;
+            if (mergedUser.roll_number) profileCache[mergedUser.roll_number] = mergedUser;
             localStorage.setItem('placenix_profile_cache', JSON.stringify(profileCache));
           } catch(e){}
 
+          // 4. Update Store.students registry
           if (Array.isArray(Store.students)) {
-            const idx = Store.students.findIndex(s => s.id === user.id);
+            const idx = Store.students.findIndex(s => 
+              s.id === mergedUser.id || 
+              (mergedUser.email && s.email === mergedUser.email) ||
+              (mergedUser.register_number && (s.rollNo === mergedUser.register_number || s.register_number === mergedUser.register_number))
+            );
             if (idx !== -1) {
               Store.students[idx] = {
                 ...Store.students[idx],
-                ...updates,
-                name: updates.full_name || Store.students[idx].name,
-                dept: updates.department || Store.students[idx].dept,
-                cgpa: updates.cgpa || Store.students[idx].cgpa,
-                skills: updates.skills || Store.students[idx].skills
+                ...mergedUser,
+                name: mergedUser.full_name || Store.students[idx].name,
+                dept: mergedUser.department || Store.students[idx].dept,
+                cgpa: mergedUser.cgpa || Store.students[idx].cgpa,
+                rollNo: mergedUser.register_number || Store.students[idx].rollNo,
+                skills: mergedUser.skills || Store.students[idx].skills
               };
             } else {
               Store.students.push({
-                id: user.id,
-                name: updates.full_name || user.full_name || 'Student',
-                dept: updates.department || user.department || 'CSE',
-                cgpa: updates.cgpa || 8.0,
-                skills: updates.skills || [],
+                id: mergedUser.id || ('usr_' + Date.now()),
+                name: mergedUser.full_name || user.full_name || 'Student',
+                dept: mergedUser.department || user.department || 'CSE',
+                cgpa: mergedUser.cgpa || 8.0,
+                skills: mergedUser.skills || [],
                 status: 'Approved',
-                avatar: ((updates.full_name || user.full_name || 'S')[0] || 'S').toUpperCase(),
-                ...updates
+                rollNo: mergedUser.register_number || 'TBD',
+                avatar: ((mergedUser.full_name || user.full_name || 'S')[0] || 'S').toUpperCase(),
+                ...mergedUser
               });
             }
           }
           saveStore();
 
+          // Dispatch event to refresh Topbar and Sidebar instantly
+          window.dispatchEvent(new CustomEvent('store-updated'));
+
           btn.textContent = 'Save Identity';
           btn.disabled = false;
 
           if (response?.error) {
-            console.warn('⚠️ Supabase upsert timed out/failed. Saved locally to workspace persistence.');
+            console.warn('⚠️ Supabase upsert timed out/offline. Saved locally to workspace persistence.');
             showToast('Profile updated & saved locally to workspace!', 'success');
           } else {
             showToast('Profile saved successfully to cloud registry!', 'success');
           }
 
-          loadProfilePage(container, Store, getActiveTab());
+          loadProfilePage(container, Store, dbClient, getActiveTab());
         } catch (err) {
           showToast('Commit failed: ' + err.message, 'danger');
         } finally {

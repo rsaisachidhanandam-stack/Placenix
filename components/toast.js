@@ -33,4 +33,6 @@ export function showToast(message, type = 'info', duration = 3500) {
   setTimeout(() => toast.remove(), duration);
 }
 
-window.showToast = showToast;
+if (typeof window !== 'undefined') {
+  window.showToast = showToast;
+}

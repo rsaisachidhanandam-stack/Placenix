@@ -698,9 +698,14 @@ export function loadStoreFromLocalStorage() {
     // Merge cached profile fields into active session user if available
     try {
       const profileCache = JSON.parse(localStorage.getItem('placenix_profile_cache') || '{}');
-      const userId = Store.session?.user?.id;
-      if (userId && profileCache[userId]) {
-        Store.session.user = { ...profileCache[userId], ...(Store.session.user || {}) };
+      const u = Store.session?.user;
+      if (u) {
+        const cached = (u.id && profileCache[u.id]) || 
+          (u.email && profileCache[u.email.toLowerCase()]) || 
+          (u.register_number && profileCache[u.register_number]) ||
+          (u.roll_number && profileCache[u.roll_number]) ||
+          Object.values(profileCache).find(p => (u.email && p.email?.toLowerCase() === u.email.toLowerCase())) || {};
+        Store.session.user = { ...(Store.session.user || {}), ...cached };
       }
     } catch(e){}
 

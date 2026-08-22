@@ -38,15 +38,26 @@ async function bootApp() {
 
     // 2. Load any existing local sandbox/mock session only when on deep dashboard routes
     const currentHash = window.location.hash.replace('#', '').split('?')[0];
-    const mockSessionStr = localStorage.getItem('placenix-mock-session');
+    const mockSessionStr = localStorage.getItem('placenix-mock-session') || localStorage.getItem('placenix_user_session') || localStorage.getItem('placenix_active_student_profile');
     if (mockSessionStr && currentHash && currentHash !== 'login' && currentHash !== 'signup') {
       try {
-        const mockUser = JSON.parse(mockSessionStr);
+        let mockUser = JSON.parse(mockSessionStr);
+        // Merge with full cached profile so custom saved fields are never lost
+        try {
+          const profileCache = JSON.parse(localStorage.getItem('placenix_profile_cache') || '{}');
+          const cached = (mockUser.id && profileCache[mockUser.id]) || 
+            (mockUser.email && profileCache[mockUser.email.toLowerCase()]) || 
+            (mockUser.register_number && profileCache[mockUser.register_number]) ||
+            (mockUser.roll_number && profileCache[mockUser.roll_number]) ||
+            Object.values(profileCache).find(p => (mockUser.email && p.email?.toLowerCase() === mockUser.email.toLowerCase())) || {};
+          mockUser = { ...mockUser, ...cached };
+        } catch(ce){}
+
         Store.session.user = mockUser;
         const role = resolveUserRole(mockUser);
         Store.session.user.role = role;
         Store.session.role = role;
-        console.log('🔄 Sandbox session loaded on boot:', mockUser.email, 'Role:', role);
+        console.log('🔄 Persistent session loaded on boot:', mockUser.full_name || mockUser.email, 'Role:', role);
       } catch (e) {
         console.error("Failed to parse mock session:", e);
       }
@@ -174,4 +185,10 @@ async function bootApp() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', bootApp);
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootApp);
+  } else {
+    bootApp();
+  }
+}
