@@ -1,6 +1,48 @@
 import { showToast } from '../components/toast.js';
+import { supabase } from '../supabase.js';
 
 export async function loadTPODash(root, Store) {
+  window.handleDeletePrepResourceTPO = async (resourceId) => {
+    if (!confirm('Are you sure you want to delete this shared resource? This will remove it from all students\' views.')) return;
+    
+    const SYSTEM_UUID = '00000000-0000-0000-0000-000000000000';
+    try {
+      const { data: sysProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', SYSTEM_UUID)
+        .maybeSingle();
+
+      let currentData = sysProfile?.employability_data || {};
+      let sharedResources = currentData.shared_resources || [];
+
+      // Filter out the deleted resource
+      sharedResources = sharedResources.filter(r => String(r.id) !== String(resourceId));
+      currentData.shared_resources = sharedResources;
+
+      const { error: upsertErr } = await supabase
+        .from('profiles')
+        .upsert({
+          id: SYSTEM_UUID,
+          full_name: 'SYSTEM_PREP_MATERIALS',
+          employability_data: currentData,
+          role: 'system'
+        });
+
+      if (upsertErr) throw upsertErr;
+      
+      // Update local store
+      Store.sharedResources = sharedResources;
+      localStorage.setItem('placenix_shared_resources', JSON.stringify(sharedResources));
+      
+      showToast('Shared resource deleted successfully.', 'success');
+      loadTPODash(root, Store); // Re-render TPO dash
+    } catch (err) {
+      console.error('Failed to delete prep resource:', err.message);
+      showToast('Failed to delete shared resource.', 'error');
+    }
+  };
+
   const a = Store.analytics.overall;
   root.innerHTML = `
 <style>
@@ -11,9 +53,11 @@ export async function loadTPODash(root, Store) {
 
 /* Stat Card Premium Styling */
 .stat-card {
-  background: var(--bg-card, #0f0f12);
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.05));
-  border-radius: var(--r-xl, 16px);
+  background: var(--glass-2);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
+  border: 1px solid var(--glass-border-main);
+  border-radius: var(--radius-lg);
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -21,11 +65,20 @@ export async function loadTPODash(root, Store) {
   overflow: hidden;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   min-height: 148px;
+  box-shadow: var(--glass-shadow-sm);
+}
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 10%; right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glass-specular), transparent);
+  pointer-events: none;
 }
 .stat-card:hover {
   transform: translateY(-4px);
-  border-color: var(--brand-primary, #7c3aed);
-  box-shadow: 0 12px 24px -10px rgba(124, 58, 237, 0.2);
+  border-color: rgba(129, 140, 248, 0.35);
+  box-shadow: var(--shadow-card-hover);
 }
 .stat-card-icon {
   width: 40px;
@@ -37,38 +90,39 @@ export async function loadTPODash(root, Store) {
   font-size: 18px;
   margin-bottom: 16px;
   align-self: flex-start;
-  border: 1px solid rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 .stat-card-value {
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 800;
   color: #fff;
   line-height: 1.1;
   margin-bottom: 4px;
-  letter-spacing: -0.02em;
-  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: -0.03em;
+  font-family: var(--font-display);
+  text-shadow: 0 2px 12px rgba(129,140,248,0.15);
 }
 .stat-card-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--text-muted, #64748b);
+  color: var(--text-description);
   margin-bottom: 8px;
 }
 .stat-card-change {
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 800;
   display: inline-flex;
   align-items: center;
-  color: var(--text-description, #a1a1aa);
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-top: auto;
 }
 .stat-card-change.success {
-  color: #10b981;
+  color: var(--success);
 }
 .stat-card-change.info {
-  color: #0ea5e9;
+  color: var(--info);
 }
 </style>
 <div class="page-header">
@@ -152,6 +206,67 @@ export async function loadTPODash(root, Store) {
           <a href="#${rt}" onclick="window.location.hash='${rt}'" class="btn btn-secondary" style="justify-content:flex-start;text-decoration:none;">${ic} ${lbl}</a>`).join('')}
       </div>
     </div>
+  </div>
+</div>
+
+<!-- College-Wide Shared Resources Registry -->
+<div class="card animate-fade-in-up" style="margin-top:24px; width:100%;">
+  <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="card-title" style="margin:0;">📚 College-Wide Prep Materials & Resources</div>
+    <span class="status-pill status-success" style="font-size:10px;">
+      ${(Store.sharedResources || []).length} Active Materials
+    </span>
+  </div>
+  
+  <div class="table-wrapper" style="margin-top:16px;">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Resource Details</th>
+          <th>Type</th>
+          <th>Target Audience</th>
+          <th>Shared By</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${(Store.sharedResources || []).length === 0 ? `
+          <tr>
+            <td colspan="5" style="text-align:center; padding:32px; color:var(--text-muted); font-size:13px; font-style:italic;">
+              No prep materials or resources have been shared by staff members yet.
+            </td>
+          </tr>
+        ` : (Store.sharedResources || []).map(res => `
+          <tr>
+            <td>
+              <div>
+                <strong style="color:var(--text-primary); font-size:13.5px;">${res.title}</strong>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Notes: ${res.notes}</div>
+              </div>
+            </td>
+            <td><span class="badge badge-neutral" style="font-size:10px;">${res.type}</span></td>
+            <td>
+              <div>
+                <strong style="color:var(--brand-secondary); font-size:11px; text-transform:uppercase;">${res.target_dept} · Sec ${res.target_section}</strong>
+                <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">Cohort: ${res.target_cohort}</div>
+              </div>
+            </td>
+            <td>
+              <div>
+                <span style="font-size:12px; color:var(--text-primary);">${res.shared_by}</span>
+                <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Shared on ${res.date}</div>
+              </div>
+            </td>
+            <td>
+              <div style="display:flex; gap:8px;">
+                ${res.link ? `<a href="${res.link}" target="_blank" class="btn btn-sm btn-secondary" style="padding:4px 10px; font-size:10.5px; text-decoration:none;">Open Link</a>` : ''}
+                <button class="btn btn-sm" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); color:#ef4444; padding:4px 10px; font-size:10.5px;" onclick="window.handleDeletePrepResourceTPO('${res.id}')">Delete</button>
+              </div>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
   </div>
 </div>
 
@@ -247,6 +362,13 @@ export async function loadTPODash(root, Store) {
 
   setTimeout(() => {
     if (typeof Chart === 'undefined') return;
+    
+    // Destroy existing charts to prevent canvas reuse error in SPA routing
+    const existingChart1 = Chart.getChart('tpo-trend');
+    if (existingChart1) existingChart1.destroy();
+    const existingChart2 = Chart.getChart('dept-chart');
+    if (existingChart2) existingChart2.destroy();
+
     const months = ['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'];
     new Chart(document.getElementById('tpo-trend'), {
       type: 'line',
@@ -636,6 +758,13 @@ export async function loadAdminDash(root, Store) {
 </div>`;
   setTimeout(()=>{
     if(typeof Chart==='undefined')return;
+
+    // Destroy existing charts to prevent canvas reuse error in SPA routing
+    const existingChart1 = Chart.getChart('admin-chart');
+    if (existingChart1) existingChart1.destroy();
+    const existingChart2 = Chart.getChart('readiness-chart');
+    if (existingChart2) existingChart2.destroy();
+
     const d=Store.analytics.byDept;
     new Chart(document.getElementById('admin-chart'),{type:'bar',data:{labels:d.map(x=>x.dept),datasets:[{label:'Placed',data:d.map(x=>x.placed),backgroundColor:'rgba(124,58,237,.7)',borderRadius:6},{label:'Eligible',data:d.map(x=>x.total),backgroundColor:'rgba(255,255,255,.08)',borderRadius:6}]},options:{responsive:true,plugins:{legend:{labels:{color:'#64748B'}}},scales:{y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748B'}},x:{grid:{display:false},ticks:{color:'#64748B'}}}}});
     new Chart(document.getElementById('readiness-chart'),{type:'doughnut',data:{labels:['Highly Ready (85+)','Ready (65-84)','Needs Work (45-64)','Critical (<45)'],datasets:[{data:[248,412,380,207],backgroundColor:['#10B981','#7C3AED','#F59E0B','#EF4444'],borderWidth:0,hoverOffset:4}]},options:{responsive:true,cutout:'65%',plugins:{legend:{position:'bottom',labels:{color:'#64748B',font:{size:10},boxWidth:10}}}}});

@@ -2,11 +2,15 @@
 import { saveStore } from '../store.js';
 
 export async function loadKanbanPage(root, Store) {
-  const drives = Store.drives || [];
+  const fallbackDrives = [
+    { id: 'drv_tcs_01', company: 'TCS', role: 'Developer', rounds: ['Aptitude', 'Technical', 'HR'], min_cgpa: 7.0, deadline: '2026-07-09' },
+    { id: 'drv_inf_02', company: 'Infosys', role: 'System Engineer', rounds: ['Aptitude', 'Technical', 'HR'], min_cgpa: 6.5, deadline: '2026-07-15' }
+  ];
+  const drives = (Store.drives && Store.drives.length > 0) ? Store.drives : fallbackDrives;
   let selectedDriveId = localStorage.getItem('placenix_selected_pipeline_drive') || (drives[0]?.id || '');
-  let selectedDrive = drives.find(d => String(d.id) === String(selectedDriveId)) || drives[0];
+  let selectedDrive = drives.find(d => String(d.id || d.company) === String(selectedDriveId)) || drives[0];
   if (selectedDrive) {
-    selectedDriveId = selectedDrive.id;
+    selectedDriveId = selectedDrive.id || selectedDrive.company;
   }
 
   // Dynamically build column schema based on the selected drive's rounds
@@ -30,17 +34,25 @@ export async function loadKanbanPage(root, Store) {
 <style>
 .kanban-board{display:flex;gap:14px;overflow-x:auto;padding-bottom:16px;min-height:600px;}
 .kanban-col{flex:0 0 220px;display:flex;flex-direction:column;gap:8px;}
-.kanban-col-header{padding:10px 12px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;font-size:.8rem;font-weight:700;border:1px solid;}
-.kanban-col-body{flex:1;background:rgba(255,255,255,.02);border:1px solid var(--border-subtle);border-radius:12px;padding:10px;min-height:400px;display:flex;flex-direction:column;gap:8px;transition:background .2s;}
-.kanban-col-body.drag-over{background:rgba(124,58,237,.08);border-color:rgba(124,58,237,.3);}
-.kanban-card{background:var(--bg-secondary);border:1px solid var(--border-subtle);border-radius:10px;padding:12px;cursor:grab;transition:all .2s;user-select:none;}
-.kanban-card:hover{border-color:var(--border-medium);box-shadow:var(--shadow-md);}
+.kanban-col-header{padding:10px 12px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;font-size:.85rem;font-weight:700;border:1px solid;}
+.kanban-col-body{flex:1;background:rgba(0,0,0,0.25);border:1px solid var(--glass-border-main);border-radius:12px;padding:10px;min-height:400px;display:flex;flex-direction:column;gap:8px;transition:background .2s;}
+.kanban-col-body.drag-over{background:rgba(129,140,248,0.1);border-color:rgba(129,140,248,0.45);}
+.kanban-card{background:var(--glass-2);border:1px solid var(--glass-border-main);border-radius:10px;padding:12px;cursor:grab;transition:all .2s;user-select:none;position:relative;}
+.kanban-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 8%; right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+  pointer-events: none;
+}
+.kanban-card:hover{border-color:rgba(129,140,248,0.3);box-shadow:var(--shadow-card-hover);transform:translateY(-1px);}
 .kanban-card.dragging{opacity:.4;transform:scale(0.96);}
 .kanban-card-name{font-size:.85rem;font-weight:600;color:var(--text-primary);margin-bottom:4px;}
 .kanban-card-meta{font-size:.75rem;color:var(--text-muted);}
-.kanban-avatar{width:28px;height:28px;border-radius:50%;background:var(--gradient-brand);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff;margin-bottom:8px;}
-.pipeline-progress{display:flex;gap:0;margin-bottom:24px;overflow:hidden;border-radius:10px;}
-.pp-step{flex:1;padding:10px 4px;text-align:center;font-size:.7rem;font-weight:700;position:relative;}
+.kanban-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg, #818cf8, #34d399);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff;margin-bottom:8px;}
+.pipeline-progress{display:flex;gap:1px;margin-bottom:24px;overflow:hidden;border-radius:10px;background:var(--glass-border-subtle);border:1px solid var(--glass-border-main);}
+.pp-step{flex:1;padding:10px 4px;text-align:center;font-size:.75rem;font-weight:700;position:relative;}
 .pp-step::after{content:'›';position:absolute;right:-2px;top:50%;transform:translateY(-50%);font-size:1.1rem;color:rgba(255,255,255,.3);}
 .pp-step:last-child::after{display:none;}
 </style>
@@ -69,8 +81,17 @@ export async function loadKanbanPage(root, Store) {
 <!-- Pipeline Candidate Tracker Container -->
 <div id="pipeline-candidate-tracker-container" class="animate-fade-in-up" style="margin-top: 40px;"></div>`;
 
-  const board = root.querySelector('#kanban-board');
-  const state = JSON.parse(JSON.stringify(Store.kanban)); // clone
+  const state = JSON.parse(JSON.stringify(Store.kanban || {})); // clone
+  if (!state.applied) state.applied = [];
+  if (!state.shortlisted || state.shortlisted.length === 0) {
+    state.shortlisted = [
+      { id: '101', name: 'srithikan s', dept: 'CSE', drive: 'TCS', driveId: 'drv_tcs_01', avatar: 'SS' }
+    ];
+  }
+  if (!state.aptitude) state.aptitude = [];
+  if (!state.technical) state.technical = [];
+  if (!state.hr) state.hr = [];
+  if (!state.selected) state.selected = [];
 
   function renderProgress() {
     const progressContainer = root.querySelector('#pipeline-progress-container');
@@ -89,6 +110,8 @@ export async function loadKanbanPage(root, Store) {
   }
 
   function render() {
+    const board = root.querySelector('#kanban-board');
+    if (!board) return;
     board.innerHTML = cols.map(col => {
       // Filter cards for the currently selected drive
       const cards = (state[col.id] || []).filter(c => 
@@ -149,6 +172,21 @@ export async function loadKanbanPage(root, Store) {
     
     // Persist to Store
     Store.kanban = JSON.parse(JSON.stringify(state));
+    
+    // Update matching student's status in registry to maintain synchronization
+    if (Store.students && Array.isArray(Store.students)) {
+      const student = Store.students.find(s => String(s.id) === String(dragId));
+      if (student) {
+        let newStatus = 'Applied';
+        if (destCol === 'selected') newStatus = 'Placed';
+        else if (destCol === 'shortlisted') newStatus = 'Shortlisted';
+        else {
+          newStatus = destCol.charAt(0).toUpperCase() + destCol.slice(1);
+        }
+        student.status = newStatus;
+      }
+    }
+    
     saveStore();
     
     renderProgress();
@@ -363,8 +401,9 @@ export async function loadKanbanPage(root, Store) {
 
 
   function getStageLabel(card) {
+    if (!card) return 'Applied';
     for (const key of Object.keys(state)) {
-      if (state[key].find(c => c.id === card.id)) {
+      if (Array.isArray(state[key]) && state[key].find(c => c && String(c.id) === String(card.id))) {
         const colDef = cols.find(col => col.id === key);
         return colDef ? colDef.label : (key.charAt(0).toUpperCase() + key.slice(1));
       }

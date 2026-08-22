@@ -3,7 +3,7 @@
 // ============================================================
 
 export async function loadAdminControl(root, Store, supabase) {
-  const hash = window.location.hash.replace('#', '');
+  const hash = window.location.hash.replace(/^#+/, '');
   
   // Show a beautiful loader while syncing neural grid
   root.innerHTML = `
@@ -13,87 +13,93 @@ export async function loadAdminControl(root, Store, supabase) {
     </div>
   `;
 
+  const dbClient = (supabase && typeof supabase.from === 'function') ? supabase
+                 : (window.supabase && typeof window.supabase.from === 'function') ? window.supabase
+                 : null;
+
   // 1. Pull live Departments and bound Section nodes from Supabase
-  try {
-    const { data: dbDepts, error: deptErr } = await supabase
-      .from('departments')
-      .select(`
-        id,
-        name,
-        sections (
-          section_name
-        )
-      `);
+  if (dbClient) {
+    try {
+      const { data: dbDepts, error: deptErr } = await dbClient
+        .from('departments')
+        .select(`
+          id,
+          name,
+          sections (
+            section_name
+          )
+        `);
 
-    if (deptErr) throw deptErr;
+      if (!deptErr && dbDepts) {
+        Store.departments = dbDepts.map(d => ({
+          id: d.id,
+          name: d.name,
+          sections: d.sections ? d.sections.map(s => s.section_name) : []
+        }));
+      }
+    } catch (err) {
+      console.warn('⚠️ Sync failure on Departments namespace:', err);
+    }
+  }
 
-    if (dbDepts) {
-      Store.departments = dbDepts.map(d => ({
-        id: d.id,
-        name: d.name,
-        sections: d.sections ? d.sections.map(s => s.section_name) : []
-      }));
-    }
-  } catch (err) {
-    console.error('⚠️ Sync failure on Departments namespace:', err);
-    // Fallback if table not migrated yet
-    if (!Store.departments) {
-      Store.departments = [
-        { id: 'CSE', name: 'Computer Science & Engineering', sections: ['A', 'B', 'C'] },
-        { id: 'ECE', name: 'Electronics & Communication', sections: ['A', 'B'] },
-        { id: 'MECH', name: 'Mechanical Engineering', sections: ['A'] }
-      ];
-    }
+  if (!Store.departments || Store.departments.length === 0) {
+    Store.departments = [
+      { id: 'CSE', name: 'Computer Science & Engineering', sections: ['A', 'B', 'C'] },
+      { id: 'ECE', name: 'Electronics & Communication', sections: ['A', 'B'] },
+      { id: 'MECH', name: 'Mechanical Engineering', sections: ['A'] }
+    ];
   }
 
   // 2. Pull live Staff Profiles and mappings from Supabase
-  try {
-    const { data: dbStaff, error: staffErr } = await supabase
-      .from('staff_profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
+  if (dbClient) {
+    try {
+      const { data: dbStaff, error: staffErr } = await dbClient
+        .from('staff_profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (staffErr) throw staffErr;
-
-    if (dbStaff) {
-      Store.staff = dbStaff;
-    }
-  } catch (err) {
-    console.error('⚠️ Sync failure on Staff namespace:', err);
-    // Fallback if table not migrated yet
-    if (!Store.staff) {
-      Store.staff = [
-        { id: 1, name: 'Dr. Ramesh Kumar', email: 'ramesh.k@univ.edu', status: 'Pending', role: 'None', mapping: 'None' },
-        { id: 2, name: 'Prof. Anita Desai', email: 'anita.d@univ.edu', status: 'Approved', role: 'faculty', mapping: 'CSE - Section A' },
-        { id: 3, name: 'Srinivas Rao', email: 'srinivas.r@univ.edu', status: 'Pending', role: 'None', mapping: 'None' },
-        { id: 4, name: 'Dr. John Doe', email: 'johndoe@univ.edu', status: 'Approved', role: 'coordinator', mapping: 'MECH' },
-        { id: 5, name: 'TPO Office', email: 'tpo@univ.edu', status: 'Approved', role: 'tpo', mapping: 'Global' }
-      ];
+      if (!staffErr && dbStaff) {
+        Store.staff = dbStaff;
+      }
+    } catch (err) {
+      console.warn('⚠️ Sync failure on Staff namespace:', err);
     }
   }
 
+  if (!Store.staff || Store.staff.length === 0) {
+    Store.staff = [
+      { id: 1, name: 'Faculty Advisor 1', email: 'fa1@gamail.com', status: 'Approved', role: 'faculty', mapping: 'Computer Science & Engineering - Section A' },
+      { id: 2, name: 'Department Coordinator', email: 'dept@gmail.com', status: 'Approved', role: 'coordinator', mapping: 'Computer Science & Engineering' },
+      { id: 3, name: 'Placement Officer (TPO)', email: 'saiganka2410@gmail.com', status: 'Approved', role: 'tpo', mapping: 'Global' },
+      { id: 4, name: 'Institutional Admin', email: 'srithikansrinivasan+admin@gmail.com', status: 'Approved', role: 'admin', mapping: 'Global' }
+    ];
+  }
+
   // 3. Pull live Degree Programs and Academic Batches from Supabase
-  try {
-    const { data: dbDegrees } = await supabase.from('degrees').select('*').order('degree_name');
-    const { data: dbBatches } = await supabase.from('academic_batches').select('*').order('batch_name');
-    
-    Store.degrees = dbDegrees || [];
-    Store.batches = dbBatches || [];
-  } catch (err) {
-    console.error('⚠️ Sync failure on Degrees/Batches namespace:', err);
-    if (!Store.degrees) {
-      Store.degrees = [
-        { degree_name: 'B.Tech' },
-        { degree_name: 'M.Tech' },
-        { degree_name: 'MBA' }
-      ];
+  if (dbClient) {
+    try {
+      const { data: dbDegrees } = await dbClient.from('degrees').select('*').order('degree_name');
+      const { data: dbBatches } = await dbClient.from('academic_batches').select('*').order('batch_name');
+      if (dbDegrees) Store.degrees = dbDegrees;
+      if (dbBatches) Store.batches = dbBatches;
+    } catch (err) {
+      console.warn('⚠️ Sync failure on Degrees/Batches namespace:', err);
     }
-    if (!Store.batches) {
-      Store.batches = [
-        { batch_name: '2021 - 2025' },
-        { batch_name: '2022 - 2026' }
-      ];
-    }
+  }
+  if (!Store.degrees || Store.degrees.length === 0) {
+    Store.degrees = [
+      { degree_name: 'B.Tech' },
+      { degree_name: 'M.Tech' },
+      { degree_name: 'MBA' }
+    ];
+  }
+  if (!Store.batches || Store.batches.length === 0) {
+    Store.batches = [
+      { batch_name: '2021 - 2025' },
+      { batch_name: '2022 - 2026' },
+      { batch_name: '2023 - 2027' },
+      { batch_name: '2024 - 2028' }
+    ];
   }
 
   const render = () => {

@@ -5,12 +5,14 @@ export async function loadOnboardingPage(root, Store, supabase) {
 
 function getOnboardingHTML() {
   return `
-  <div style="min-height:100vh; background:var(--bg-primary); display:flex; align-items:center; justify-content:center; padding:24px; position:relative; overflow:hidden;">
+  <div style="min-height:100vh; background:transparent; display:flex; align-items:center; justify-content:center; padding:24px; position:relative; overflow:hidden;">
     <div style="position:absolute; inset:0; background:radial-gradient(circle at top right, rgba(124,58,237,0.1) 0%, transparent 50%), radial-gradient(circle at bottom left, rgba(34,211,238,0.05) 0%, transparent 50%);"></div>
     
     <div class="card" style="width:100%; max-width:680px; position:relative; z-index:10; padding:64px; box-shadow:0 32px 64px rgba(0,0,0,0.4);">
       <div style="text-align:center; margin-bottom:48px;">
-        <div style="font-size:32px; margin-bottom:24px;">🎓</div>
+        <div style="width:56px; height:56px; background:#fff; border-radius:16px; display:inline-flex; align-items:center; justify-content:center; overflow:hidden; box-shadow:0 8px 32px rgba(255,255,255,0.05); margin-bottom:24px;">
+          <img src="logo.png" style="width:100%; height:100%; object-fit:cover; object-position:50% 15%;">
+        </div>
         <h1 style="font-size:28px; font-weight:800; color:var(--text-main);">Institutional Onboarding</h1>
         <p style="font-size:14px; color:var(--text-description); margin-top:8px;">Initialize your professional identity within the Placenix ecosystem.</p>
       </div>

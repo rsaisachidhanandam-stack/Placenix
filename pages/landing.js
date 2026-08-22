@@ -5,7 +5,7 @@
 export async function loadLandingPage(root, Store) {
   root.innerHTML = `
   <style>
-    .landing-wrapper { background: #09090b; color: #fff; font-family: 'Inter', sans-serif; }
+    .landing-wrapper { background: transparent; color: #fff; font-family: 'Inter', sans-serif; }
     
     /* Global Navigation */
     .nav { 
@@ -14,7 +14,8 @@ export async function loadLandingPage(root, Store) {
       position: sticky; top: 0; background: rgba(9,9,11,0.8); backdrop-filter: blur(12px); z-index: 100;
     }
     .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.02em; }
-    .logo-icon { width: 32px; height: 32px; background: #7c3aed; border-radius: 8px; display: flex; items-center; justify-content: center; }
+    .logo-icon { width: 32px; height: 32px; background: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .logo-icon img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 15%; }
     
     .nav-links { display: flex; gap: 32px; font-size: 0.9rem; font-weight: 600; color: #a1a1aa; }
     .nav-links a:hover { color: #fff; }
@@ -22,11 +23,22 @@ export async function loadLandingPage(root, Store) {
     /* Executive Hero */
     .hero { padding: 120px 80px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.05); position: relative; overflow: hidden; }
     .hero-badge { 
-      display: inline-flex; items-center; padding: 6px 12px; background: rgba(124,58,237,0.1); 
-      border: 1px solid rgba(124,58,237,0.2); border-radius: 99px; color: #a78bfa; 
+      display: inline-flex; items-center; padding: 6px 12px; background: rgba(0, 200, 255, 0.1); 
+      border: 1px solid rgba(0, 200, 255, 0.25); border-radius: 99px; color: #00C8FF; 
       font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 24px;
     }
-    .hero-title { font-size: 4rem; font-weight: 800; line-height: 1.05; letter-spacing: -0.04em; margin-bottom: 24px; }
+    .hero-title { 
+      font-size: 4rem; 
+      font-weight: 800; 
+      line-height: 1.05; 
+      letter-spacing: -0.04em; 
+      margin-bottom: 24px; 
+      background: linear-gradient(90deg, #fff, #00C8FF, #F59E0B, #fff);
+      background-size: 300% 100%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: gradient-shift 8s ease infinite;
+    }
     .hero-sub { font-size: 1.25rem; color: #a1a1aa; max-width: 720px; margin: 0 auto 48px; line-height: 1.6; }
 
     /* Enterprise CTA Group */
@@ -54,9 +66,9 @@ export async function loadLandingPage(root, Store) {
       box-shadow: 0 20px 50px rgba(0,0,0,0.5); position: relative;
     }
     .mock-header { display: flex; items-center; justify-between; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.05); }
-    .mock-tag { font-size: 10px; padding: 4px 8px; background: rgba(124,58,237,0.2); color: #a78bfa; border-radius: 4px; font-weight: 800; }
+    .mock-tag { font-size: 10px; padding: 4px 8px; background: rgba(0, 200, 255, 0.15); color: #00C8FF; border-radius: 4px; font-weight: 800; }
     
-    .feature-tag { color: #7c3aed; font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 16px; display: block; }
+    .feature-tag { color: #00C8FF; font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 16px; display: block; }
     .feature-title { font-size: 2.5rem; font-weight: 800; margin-bottom: 24px; letter-spacing: -0.02em; }
     .feature-desc { color: #a1a1aa; line-height: 1.7; font-size: 1.1rem; margin-bottom: 32px; }
 
@@ -67,7 +79,7 @@ export async function loadLandingPage(root, Store) {
       padding: 48px; background: #121214; border: 1px solid rgba(255,255,255,0.05); border-radius: 24px; 
       text-align: left; transition: all 0.3s;
     }
-    .plan-card.featured { border-color: rgba(124,58,237,0.3); background: #18181b; box-shadow: 0 0 40px rgba(124,58,237,0.05); }
+    .plan-card.featured { border-color: rgba(0, 200, 255, 0.4); background: #0A0E1A; box-shadow: 0 0 40px rgba(0, 200, 255, 0.12); }
     .plan-name { font-size: 1rem; font-weight: 700; color: #a1a1aa; margin-bottom: 8px; }
     .plan-price { font-size: 3rem; font-weight: 800; margin-bottom: 16px; }
     .plan-price span { font-size: 1rem; color: #71717a; }
@@ -82,7 +94,9 @@ export async function loadLandingPage(root, Store) {
   <div class="landing-wrapper">
     <nav class="nav">
       <div class="logo">
-        <div class="logo-icon">🎓</div>
+        <div class="logo-icon">
+          <img src="logo.png" alt="Placenix Logo">
+        </div>
         <span>Placenix</span>
       </div>
       <div class="nav-links">
@@ -142,7 +156,7 @@ export async function loadLandingPage(root, Store) {
             </div>
             <div class="mock-tag">LIVE TELEMETRY</div>
           </div>
-          <div style="height:240px; background:linear-gradient(180deg, rgba(124,58,237,0.1) 0%, transparent 100%); border-radius:12px; border:1px dashed rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:16px;">
+          <div style="height:240px; background:linear-gradient(180deg, rgba(0,200,255,0.12) 0%, transparent 100%); border-radius:12px; border:1px dashed rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:16px;">
             <div style="font-size:32px; font-weight:800; color:white;">84.2</div>
             <div style="font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.2em;">Avg. Employability Score</div>
           </div>
@@ -168,7 +182,7 @@ export async function loadLandingPage(root, Store) {
         </div>
         
         <div class="plan-card featured">
-          <div class="plan-name" style="color:#a78bfa;">Growth Campus</div>
+          <div class="plan-name" style="color:#00C8FF;">Growth Campus</div>
           <div class="plan-price">₹7.2L<span>/yr</span></div>
           <p style="font-size:0.9rem; color:#71717a;">Up to 2,500 students. Full AI Intelligence suite.</p>
           <div class="plan-features">
@@ -176,7 +190,7 @@ export async function loadLandingPage(root, Store) {
             <div class="feature-item"><span class="feature-icon">✓</span> Employability Engine</div>
             <div class="feature-item"><span class="feature-icon">✓</span> Priority Data Success</div>
           </div>
-          <button class="btn-main btn-primary-ent" style="width:100%; margin-top:32px; background:#7c3aed; color:white;">Consult with Expert</button>
+          <button class="btn-main btn-primary-ent" style="width:100%; margin-top:32px; background:#00C8FF; color:#050810; font-weight:800;">Consult with Expert</button>
         </div>
 
         <div class="plan-card">
@@ -194,7 +208,12 @@ export async function loadLandingPage(root, Store) {
     </section>
 
     <footer>
-      <div class="logo">🎓 Placenix</div>
+      <div class="logo" style="display: flex; align-items: center; gap: 10px;">
+        <div class="logo-icon" style="width: 24px; height: 24px; background: #fff; border-radius: 6px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+          <img src="logo.png" style="width: 100%; height: 100%; object-fit: cover; object-position: 50% 15%;">
+        </div>
+        <span>Placenix</span>
+      </div>
       <div style="font-size:0.85rem; color:#71717a;">© 2026 Placenix Technologies Pvt Ltd. Institutional Operating System.</div>
       <div class="flex gap-4" style="font-size:0.85rem; color:#71717a;">
         <a>Legal</a>

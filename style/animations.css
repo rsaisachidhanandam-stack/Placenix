@@ -40,13 +40,13 @@
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(124,58,237,0.2); }
-  50%       { box-shadow: 0 0 40px rgba(124,58,237,0.5), 0 0 80px rgba(124,58,237,0.2); }
+  0%, 100% { box-shadow: 0 0 20px rgba(0, 200, 255, 0.2); }
+  50%       { box-shadow: 0 0 40px rgba(0, 200, 255, 0.5), 0 0 80px rgba(0, 200, 255, 0.2); }
 }
 
 @keyframes pulse-glow-cyan {
-  0%, 100% { box-shadow: 0 0 20px rgba(34,211,238,0.15); }
-  50%       { box-shadow: 0 0 40px rgba(34,211,238,0.4), 0 0 80px rgba(34,211,238,0.15); }
+  0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.15); }
+  50%       { box-shadow: 0 0 40px rgba(16, 185, 129, 0.4), 0 0 80px rgba(16, 185, 129, 0.15); }
 }
 
 @keyframes float {
@@ -126,12 +126,12 @@
 
 @keyframes hero-bg-pulse {
   0%, 100% {
-    background: radial-gradient(ellipse 80% 60% at 60% 30%, rgba(124,58,237,0.22) 0%, transparent 70%),
-                radial-gradient(ellipse 50% 40% at 20% 80%, rgba(34,211,238,0.12) 0%, transparent 70%);
+    background: radial-gradient(ellipse 80% 60% at 60% 30%, rgba(0, 200, 255, 0.18) 0%, transparent 70%),
+                radial-gradient(ellipse 50% 40% at 20% 80%, rgba(245, 158, 11, 0.08) 0%, transparent 70%);
   }
   50% {
-    background: radial-gradient(ellipse 85% 65% at 55% 35%, rgba(124,58,237,0.3) 0%, transparent 70%),
-                radial-gradient(ellipse 55% 45% at 25% 75%, rgba(34,211,238,0.18) 0%, transparent 70%);
+    background: radial-gradient(ellipse 85% 65% at 55% 35%, rgba(0, 200, 255, 0.26) 0%, transparent 70%),
+                radial-gradient(ellipse 55% 45% at 25% 75%, rgba(245, 158, 11, 0.14) 0%, transparent 70%);
   }
 }
 
@@ -220,3 +220,292 @@
 .glow-on-hover:hover::after {
   opacity: 0.6;
 }
+
+/* ============================================================
+   HIGH-FIDELITY ROUTE TRANSITIONS & MOTION DESIGN OVERHAUL
+   ============================================================ */
+
+.page-transition-container {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto;
+  align-items: start;
+  align-content: start;
+}
+
+.page-view {
+  grid-area: 1 / 1 / 2 / 2;
+  width: 100%;
+  transition: transform var(--t-spring), opacity var(--t-fade);
+  will-change: transform, opacity;
+}
+
+.page-view-incoming {
+  transform: translateX(40px);
+  opacity: 0;
+}
+
+.page-view-active {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.page-view-outgoing {
+  transform: translateX(-40px);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* --- Scroll Reveal Effects --- */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1), transform 0.8s var(--ease-spring);
+  will-change: opacity, transform;
+}
+
+.reveal.revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal.delay-1 { transition-delay: 100ms; }
+.reveal.delay-2 { transition-delay: 200ms; }
+.reveal.delay-3 { transition-delay: 300ms; }
+.reveal.delay-4 { transition-delay: 400ms; }
+
+/* --- Ripple Click Effect --- */
+.ripple-effect {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(0);
+  animation: ripple-animation 0.6s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+  pointer-events: none;
+}
+
+@keyframes ripple-animation {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* --- Premium Springy Card & Button Hover Glows --- */
+.spring-hover {
+  transition: var(--t-spring);
+}
+.spring-hover:hover {
+  transform: translateY(-3px) scale(1.008);
+  box-shadow: 0 12px 30px -4px rgba(0, 200, 255, 0.22), 0 0 0 1px rgba(0, 200, 255, 0.15);
+  border-color: rgba(0, 200, 255, 0.35) !important;
+}
+
+/* Shimmer Skeleton Loaders */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #1C2128 25%, #22272E 50%, #1C2128 75%);
+  background-size: 200% 100%;
+  animation: shimmer-swipe 1.6s infinite linear;
+}
+
+@keyframes shimmer-swipe {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* ============================================================
+   GLOBAL BOOT LOADER & OFFLINE BANNER STYLES
+   ============================================================ */
+
+/* --- Keyframes --- */
+@keyframes loader-bar-fill {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
+@keyframes logo-pulse-glow {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 15px rgba(0, 200, 255, 0.4)) drop-shadow(0 0 30px rgba(245, 158, 11, 0.2));
+  }
+  50% {
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 30px rgba(0, 200, 255, 0.8)) drop-shadow(0 0 60px rgba(245, 158, 11, 0.4));
+  }
+}
+
+@keyframes wifi-scan-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(248, 113, 113, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0);
+  }
+}
+
+@keyframes offline-slide-down {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes offline-slide-up {
+  from { transform: translateY(0); }
+  to { transform: translateY(-100%); }
+}
+
+/* --- Global Loader Overlay --- */
+.placenix-loader-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-app);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.5s cubic-bezier(0.25, 1, 0.5, 1), visibility 0.5s;
+  overflow: hidden;
+}
+
+.placenix-loader-overlay.fade-out {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.placenix-loader-content {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 320px;
+  width: 90%;
+}
+
+.placenix-loader-logo-container {
+  margin-bottom: 24px;
+  position: relative;
+}
+
+.placenix-loader-logo {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  animation: logo-pulse-glow 3s ease-in-out infinite;
+}
+
+.placenix-loader-title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.placenix-loader-title span {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.placenix-loader-subtitle {
+  font-size: var(--f-xs);
+  color: var(--text-muted);
+  margin-bottom: 32px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.placenix-loader-progress-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.placenix-loader-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--brand-primary), var(--brand-secondary));
+  width: 0%;
+  border-radius: var(--radius-full);
+  transition: width 0.3s cubic-bezier(0.1, 0.8, 0.3, 1);
+}
+
+.placenix-loader-status {
+  font-size: var(--f-xs);
+  color: var(--text-description);
+  height: 18px;
+}
+
+/* Background grid / radial mesh for loader */
+.placenix-loader-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: 
+    radial-gradient(circle at 30% 30%, rgba(0, 200, 255, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 70% 70%, rgba(245, 158, 11, 0.10) 0%, transparent 50%),
+    var(--bg-app);
+}
+
+/* --- Offline Banner --- */
+.offline-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9998;
+  background: rgba(248, 113, 113, 0.15);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
+  border-bottom: 1px solid rgba(248, 113, 113, 0.3);
+  padding: 10px var(--s-5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  animation: offline-slide-down 0.4s var(--ease-spring) forwards;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+}
+
+.offline-banner.slide-up {
+  animation: offline-slide-up 0.3s ease-in forwards;
+}
+
+.offline-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: rgba(248, 113, 113, 0.2);
+  color: var(--danger);
+  animation: wifi-scan-pulse 2s infinite;
+}
+
+.offline-banner-text {
+  font-size: var(--f-sm);
+  font-weight: 500;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+}
+

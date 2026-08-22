@@ -32,3 +32,5 @@ export function showToast(message, type = 'info', duration = 3500) {
   setTimeout(() => toast.style.animation = 'slideUp 0.3s ease reverse', duration - 300);
   setTimeout(() => toast.remove(), duration);
 }
+
+window.showToast = showToast;

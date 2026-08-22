@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "description": "AI-Powered Employability & Campus Recruitment Operating System",
   "private": true,
+  "type": "module",
   "scripts": {
-    "start": "npx serve . -p 3000",
-    "dev": "npx serve . -p 3000",
-    "serve": "npx serve . -p 3000"
+    "start": "node server.js",
+    "dev": "node server.js",
+    "serve": "node server.js"
   },
   "keywords": ["placement", "ai", "saas", "university", "recruitment"],
   "author": "Placenix Technologies",

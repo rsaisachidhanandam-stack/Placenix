@@ -8,8 +8,11 @@ import { saveStore, syncWithSupabase, getValidationStatus, saveValidationStatus 
 
 // ── Main Dashboard ──────────────────────────────────────────
 export async function loadDeptDash(root, Store, supabase) {
+  // Non-blocking background sync with Supabase
   if (supabase) {
-    await syncWithSupabase(supabase);
+    syncWithSupabase(supabase).then(() => {
+      try { render(); } catch(e){}
+    }).catch(err => console.warn('Background Supabase sync warning:', err));
   }
   const analytics = Store.analytics?.overall || {};
   
@@ -25,7 +28,7 @@ export async function loadDeptDash(root, Store, supabase) {
   }
   
   let selectedSlotId = localStorage.getItem('placenix_dept_selected_slot_id') || activeAlloc?.slots?.[0]?.id || '';
-  if (activeAlloc && !activeAlloc.slots.find(s => s.id === selectedSlotId)) {
+  if (activeAlloc && Array.isArray(activeAlloc.slots) && !activeAlloc.slots.find(s => s.id === selectedSlotId)) {
     selectedSlotId = activeAlloc.slots[0]?.id || '';
   }
 
@@ -35,12 +38,14 @@ export async function loadDeptDash(root, Store, supabase) {
       if (alloc && alloc.allocations) {
         alloc.allocations.forEach(student => {
           let foundAttendance = 'pending';
-          for (const stage of Object.keys(Store.kanban)) {
-            if (Array.isArray(Store.kanban[stage])) {
-              const card = Store.kanban[stage].find(c => String(c.id) === String(student.studentId));
-              if (card && card.attendance) {
-                foundAttendance = card.attendance;
-                break;
+          if (Store.kanban && typeof Store.kanban === 'object') {
+            for (const stage of Object.keys(Store.kanban)) {
+              if (Array.isArray(Store.kanban[stage])) {
+                const card = Store.kanban[stage].find(c => String(c.id) === String(student.studentId));
+                if (card && card.attendance) {
+                  foundAttendance = card.attendance;
+                  break;
+                }
               }
             }
           }
@@ -61,19 +66,19 @@ export async function loadDeptDash(root, Store, supabase) {
     const slottedStudents = activeAlloc && activeSlot ? activeAlloc.allocations.filter(student => student.slotId === activeSlot.id) : [];
 
     root.innerHTML = `
-    <div style="padding: 40px; max-width: 1560px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px;">
+    <div style="display: flex; flex-direction: column; gap: 32px;">
       
       <!-- Operational Header -->
       <div style="display:flex; justify-content:space-between; align-items:flex-end;">
         <div>
           <div class="label-ent" style="margin-bottom: 8px; color:var(--brand-primary);">Departmental Node</div>
           <h1 class="h1-ent">Departmental Intelligence Hub</h1>
-          <p style="color:var(--text-description); font-size:15px; margin-top:4px;">Institutional oversight and recruitment telemetry for the ${Store.session.user.department} department.</p>
+          <p style="color:var(--text-description); font-size:15px; margin-top:4px;">Institutional oversight and recruitment telemetry for the ${Store.session?.user?.department || 'Computer Science'} department.</p>
         </div>
         <div style="display:flex; gap:16px;">
           <div style="background:var(--bg-card); border:1px solid var(--border-main); padding:8px 16px; border-radius:10px; display:flex; align-items:center; gap:12px; font-size:12px; font-weight:700;">
             <div style="width:8px; height:8px; background:var(--brand-secondary); border-radius:50%; box-shadow:0 0 8px var(--brand-secondary);"></div>
-            ${Store.session.user.institution} Node Online
+            ${Store.session?.user?.institution || 'Placenix University'} Node Online
           </div>
         </div>
       </div>
@@ -939,155 +944,180 @@ export async function loadDeptSkills(root, Store) {
 export async function loadDeptNewJobs(root, Store, supabase) {
   console.log('📡 FA/Dept New Jobs: Calibrating operational views...');
   if (supabase) {
-    try {
-      await syncWithSupabase(supabase);
-      console.log('📡 FA/Dept New Jobs: Supabase sync completed.');
-    } catch (err) {
+    syncWithSupabase(supabase).catch(err => {
       console.warn('⚠️ FA/Dept New Jobs: Supabase sync deferred. Using local state cache.', err);
-    }
+    });
   }
 
-  const drives = Store.drives || [];
-  const students = await getFilteredStudents(Store);
-  const openDrives = drives.filter(d => d.status === 'Open');
+  const renderContent = async () => {
+    const drives = Store.drives || [];
+    const students = await getFilteredStudents(Store);
+    const openDrives = drives.filter(d => d.status === 'Open');
 
-  console.log(`📡 FA/Dept New Jobs: Rendering ${openDrives.length} active pipelines. Total students available: ${students.length}`);
+    console.log(`📡 FA/Dept New Jobs: Rendering ${openDrives.length} active pipelines. Total students available: ${students.length}`);
 
-  root.innerHTML = `
-    <div style="padding: 40px; max-width: 1560px; margin: 0 auto; animation: fadeIn 0.4s ease-out;">
-      <div style="margin-bottom: 40px;">
-        <h1 class="h1-ent" style="font-size:28px;">Active Recruitment Pipelines</h1>
-        <p style="color:var(--text-description); font-size:14px;">Real-time monitoring of live campus drives and student engagement telemetry.</p>
-      </div>
+    root.innerHTML = `
+      <div style="padding: 40px; max-width: 1560px; margin: 0 auto; animation: fadeIn 0.4s ease-out;">
+        <div style="margin-bottom: 40px;">
+          <h1 class="h1-ent" style="font-size:28px;">Active Recruitment Pipelines</h1>
+          <p style="color:var(--text-description); font-size:14px;">Real-time monitoring of live campus drives and student engagement telemetry.</p>
+        </div>
 
-      <div style="display:flex; flex-direction:column; gap:32px;">
-        ${openDrives.length === 0 ? `
-          <div class="card-ent" style="padding:64px 32px; text-align:center; border: 1.5px dashed var(--border-main); border-radius:24px; background:rgba(255,255,255,0.005); backdrop-filter:blur(8px);">
-            <div style="font-size:64px; margin-bottom:24px; filter: drop-shadow(0 0 16px rgba(139,92,246,0.15));">💼</div>
-            <h3 style="font-size:20px; font-weight:800; color:#fff; margin-bottom:10px;">No Active Recruitment Pipelines</h3>
-            <p style="color:var(--text-description); font-size:14px; max-width:480px; margin:0 auto; line-height:1.6;">There are no live recruitment drives broadcasted by the TPO at the moment. When a placement drive is initialized, it will instantly register here.</p>
-          </div>
-        ` : openDrives.map(d => {
-          const driveApplicants = d.applicants || 0;
-          return `
-            <div class="card-ent" style="padding:32px; border-radius:24px; border:1px solid var(--border-main); background:rgba(255,255,255,0.015);">
-              <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:32px;">
-                <div style="display:flex; gap:20px; align-items:center;">
-                  <div style="width:64px; height:64px; font-size:40px; background:var(--bg-elevated); border:1px solid var(--border-main); border-radius:16px; display:flex; align-items:center; justify-content:center; box-shadow: 0 8px 32px rgba(0,0,0,0.2);">${d.logo || '🏢'}</div>
-                  <div>
-                    <h3 style="font-size:20px; font-weight:800; color:#fff;">${d.company || 'Unnamed Company'} — ${d.role || 'General SDE'}</h3>
-                    <div style="display:flex; flex-wrap:wrap; gap:16px; margin-top:6px;">
-                      <span style="font-size:12px; color:var(--text-muted); font-weight:600; display:flex; align-items:center; gap:4px;">💰 ${d.package || 'N/A'}</span>
-                      <span style="font-size:12px; color:var(--text-muted); font-weight:600; display:flex; align-items:center; gap:4px;">📅 Deadline: ${d.deadline || 'N/A'}</span>
-                      <span style="font-size:12px; color:var(--brand-secondary); font-weight:800; display:flex; align-items:center; gap:4px;">📍 ${d.location || 'General'}</span>
+        <div style="display:flex; flex-direction:column; gap:32px;">
+          ${openDrives.length === 0 ? `
+            <div class="card-ent" style="padding:64px 32px; text-align:center; border: 1.5px dashed var(--border-main); border-radius:24px; background:rgba(255,255,255,0.005); backdrop-filter:blur(8px);">
+              <div style="font-size:64px; margin-bottom:24px; filter: drop-shadow(0 0 16px rgba(139,92,246,0.15));">💼</div>
+              <h3 style="font-size:20px; font-weight:800; color:#fff; margin-bottom:10px;">No Active Recruitment Pipelines</h3>
+              <p style="color:var(--text-description); font-size:14px; max-width:480px; margin:0 auto; line-height:1.6;">There are no live recruitment drives broadcasted by the TPO at the moment. When a placement drive is initialized, it will instantly register here.</p>
+            </div>
+          ` : openDrives.map(d => {
+            const driveApplicants = d.applicants || 0;
+            return `
+              <div class="card-ent" style="padding:32px; border-radius:24px; border:1px solid var(--border-main); background:rgba(255,255,255,0.015);">
+                <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:32px;">
+                  <div style="display:flex; gap:20px; align-items:center;">
+                    <div style="width:64px; height:64px; font-size:40px; background:var(--bg-elevated); border:1px solid var(--border-main); border-radius:16px; display:flex; align-items:center; justify-content:center; box-shadow: 0 8px 32px rgba(0,0,0,0.2);">${d.logo || '🏢'}</div>
+                    <div>
+                      <h3 style="font-size:20px; font-weight:800; color:#fff;">${d.company || 'Unnamed Company'} — ${d.role || 'General SDE'}</h3>
+                      <div style="display:flex; flex-wrap:wrap; gap:16px; margin-top:6px;">
+                        <span style="font-size:12px; color:var(--text-muted); font-weight:600; display:flex; align-items:center; gap:4px;">💰 ${d.package || 'N/A'}</span>
+                        <span style="font-size:12px; color:var(--text-muted); font-weight:600; display:flex; align-items:center; gap:4px;">📅 Deadline: ${d.deadline || 'N/A'}</span>
+                        <span style="font-size:12px; color:var(--brand-secondary); font-weight:800; display:flex; align-items:center; gap:4px;">📍 ${d.location || 'General'}</span>
+                      </div>
                     </div>
                   </div>
+                  <div style="text-align:right; background:rgba(139,92,246,0.03); border:1px solid rgba(139,92,246,0.1); padding:10px 20px; border-radius:14px;">
+                    <div style="font-size:24px; font-weight:800; color:#fff;">${driveApplicants}</div>
+                    <div class="label-ent" style="font-size:9px; color:var(--brand-primary); letter-spacing:0.05em; font-weight:800;">ACTIVE APPLICANTS</div>
+                  </div>
                 </div>
-                <div style="text-align:right; background:rgba(139,92,246,0.03); border:1px solid rgba(139,92,246,0.1); padding:10px 20px; border-radius:14px;">
-                  <div style="font-size:24px; font-weight:800; color:#fff;">${driveApplicants}</div>
-                  <div class="label-ent" style="font-size:9px; color:var(--brand-primary); letter-spacing:0.05em; font-weight:800;">ACTIVE APPLICANTS</div>
-                </div>
-              </div>
 
-              <div style="border-top:1px solid var(--border-main); padding-top:24px;">
-                <h4 class="label-ent" style="font-size:10px; margin-bottom:16px; letter-spacing:0.08em;">OPERATIONAL APPLICANT REGISTRY</h4>
-                <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
-                  ${students.length === 0 ? `
-                    <span style="color:var(--text-muted); font-size:12px; font-style:italic;">No students currently indexed in departmental registry.</span>
-                  ` : students.slice(0, 5).map(s => `
-                    <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-subtle); padding:8px 14px; border-radius:12px; display:flex; align-items:center; gap:10px; transition:all 0.2s;">
-                      <div style="width:24px; height:24px; background:var(--bg-elevated); border:1px solid var(--border-main); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:var(--brand-primary);">${s.avatar || 'ST'}</div>
-                      <div style="font-size:12px; font-weight:600; color:#fff;">${s.name || 'Student'}</div>
-                      <span class="status-pill status-success" style="font-size:8px; padding:2px 6px; border-radius:6px;">Applied</span>
-                    </div>
-                  `).join('')}
-                  ${driveApplicants > 5 ? `
-                    <div style="background:rgba(139,92,246,0.05); border:1px dashed var(--brand-primary); padding:8px 14px; border-radius:12px; font-size:12px; font-weight:700; color:var(--brand-primary); cursor:pointer; transition:all 0.3s;" onmouseover="this.style.background='rgba(139,92,246,0.1)'" onmouseout="this.style.background='rgba(139,92,246,0.05)'">
-                      +${driveApplicants - 5} others
-                    </div>
-                  ` : ''}
+                <div style="border-top:1px solid var(--border-main); padding-top:24px;">
+                  <h4 class="label-ent" style="font-size:10px; margin-bottom:16px; letter-spacing:0.08em;">OPERATIONAL APPLICANT REGISTRY</h4>
+                  <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
+                    ${students.length === 0 ? `
+                      <span style="color:var(--text-muted); font-size:12px; font-style:italic;">No students currently indexed in departmental registry.</span>
+                    ` : students.slice(0, 5).map(s => `
+                      <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-subtle); padding:8px 14px; border-radius:12px; display:flex; align-items:center; gap:10px; transition:all 0.2s;">
+                        <div style="width:24px; height:24px; background:var(--bg-elevated); border:1px solid var(--border-main); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:var(--brand-primary);">${s.avatar || 'ST'}</div>
+                        <div style="font-size:12px; font-weight:600; color:#fff;">${s.name || 'Student'}</div>
+                        <span class="status-pill status-success" style="font-size:8px; padding:2px 6px; border-radius:6px;">Applied</span>
+                      </div>
+                    `).join('')}
+                    ${driveApplicants > 5 ? `
+                      <div style="background:rgba(139,92,246,0.05); border:1px dashed var(--brand-primary); padding:8px 14px; border-radius:12px; font-size:12px; font-weight:700; color:var(--brand-primary); cursor:pointer; transition:all 0.3s;" onmouseover="this.style.background='rgba(139,92,246,0.1)'" onmouseout="this.style.background='rgba(139,92,246,0.05)'">
+                        +${driveApplicants - 5} others
+                      </div>
+                    ` : ''}
+                  </div>
                 </div>
               </div>
-            </div>
-          `;
-        }).join('')}
+            `;
+          }).join('')}
+        </div>
       </div>
-    </div>
-    <style>
-      @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    </style>
-  `;
+      <style>
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+      </style>
+    `;
+  };
+
+  await renderContent();
+
+  const onStoreUpdate = async () => await renderContent();
+  window.addEventListener('store-updated', onStoreUpdate);
+
+  const obs = new MutationObserver(() => {
+    if (!document.body.contains(root)) {
+      window.removeEventListener('store-updated', onStoreUpdate);
+      obs.disconnect();
+    }
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
 }
 
 // ── (e) Previous Job Application ─────────────────────────
 export async function loadDeptPrevJobs(root, Store, supabase) {
   console.log('📡 FA/Dept Previous Jobs: Calibrating analytical views...');
   if (supabase) {
-    try {
-      await syncWithSupabase(supabase);
-    } catch (err) {
+    syncWithSupabase(supabase).catch(err => {
       console.warn('⚠️ FA/Dept Previous Jobs: Supabase sync deferred.', err);
-    }
+    });
   }
 
-  const drives = Store.drives || [];
-  const concludedDrives = drives.filter(d => d.status !== 'Open');
+  const renderContent = () => {
+    const drives = Store.drives || [];
+    const concludedDrives = drives.filter(d => d.status !== 'Open');
 
-  console.log(`📡 FA/Dept Previous Jobs: Rendering ${concludedDrives.length} completed cycles.`);
+    console.log(`📡 FA/Dept Previous Jobs: Rendering ${concludedDrives.length} completed cycles.`);
 
-  root.innerHTML = `
-    <div style="padding: 40px; max-width: 1560px; margin: 0 auto; animation: fadeIn 0.4s ease-out;">
-      <div style="margin-bottom: 40px;">
-        <h1 class="h1-ent" style="font-size:28px;">Placement Historical Analytics</h1>
-        <p style="color:var(--text-description); font-size:14px;">Review of completed recruitment cycles and departmental outcome reports.</p>
-      </div>
-
-      ${concludedDrives.length === 0 ? `
-        <div class="card-ent" style="padding:64px 32px; text-align:center; border: 1.5px dashed var(--border-main); border-radius:24px; background:rgba(255,255,255,0.005); backdrop-filter:blur(8px);">
-          <div style="font-size:64px; margin-bottom:24px; filter: drop-shadow(0 0 16px rgba(139,92,246,0.15));">📊</div>
-          <h3 style="font-size:20px; font-weight:800; color:#fff; margin-bottom:10px;">No Concluded Placement Cycles</h3>
-          <p style="color:var(--text-description); font-size:14px; max-width:480px; margin:0 auto; line-height:1.6;">There are no completed or historical recruitment drives recorded in the data stream yet.</p>
+    root.innerHTML = `
+      <div style="padding: 40px; max-width: 1560px; margin: 0 auto; animation: fadeIn 0.4s ease-out;">
+        <div style="margin-bottom: 40px;">
+          <h1 class="h1-ent" style="font-size:28px;">Placement Historical Analytics</h1>
+          <p style="color:var(--text-description); font-size:14px;">Review of completed recruitment cycles and departmental outcome reports.</p>
         </div>
-      ` : `
-        <div class="card-ent" style="padding:0; overflow:hidden; border-radius:24px; border:1px solid var(--border-main);">
-          <table style="width:100%; border-collapse:collapse; text-align:left;">
-            <thead>
-              <tr style="background:rgba(255,255,255,0.02); border-bottom:1px solid var(--border-main);">
-                <th style="padding:20px; font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">Company Node</th>
-                <th style="padding:20px; font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">Role Sector</th>
-                <th style="padding:20px; font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">Funnel Analytics</th>
-                <th style="padding:20px; font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${concludedDrives.map(d => `
-                <tr class="table-row-ent" style="border-bottom:1px solid var(--border-main); transition:all 0.2s;">
-                  <td style="padding:20px;">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                      <div style="width:40px; height:40px; background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:24px;">${d.logo || '🏢'}</div>
-                      <div style="font-weight:700; color:#fff; font-size:14px;">${d.company || 'Unnamed Company'}</div>
-                    </div>
-                  </td>
-                  <td style="padding:20px; color:var(--text-description); font-size:13px; font-weight:600;">${d.role || 'General'}</td>
-                  <td style="padding:20px;">
-                    <div style="font-size:12px; color:#fff; font-weight:700;">${d.applicants || 0} Applicants</div>
-                    <div style="font-size:11px; color:var(--brand-secondary); font-weight:600;">${Math.floor((d.applicants || 0) * 0.2)} Institutional Placements</div>
-                  </td>
-                  <td style="padding:20px;">
-                    <span class="status-pill status-muted" style="font-size:10px; padding:4px 10px; border-radius:8px;">Cycle Concluded</span>
-                  </td>
+
+        ${concludedDrives.length === 0 ? `
+          <div class="card-ent" style="padding:64px 32px; text-align:center; border: 1.5px dashed var(--border-main); border-radius:24px; background:rgba(255,255,255,0.005); backdrop-filter:blur(8px);">
+            <div style="font-size:64px; margin-bottom:24px; filter: drop-shadow(0 0 16px rgba(139,92,246,0.15));">📊</div>
+            <h3 style="font-size:20px; font-weight:800; color:#fff; margin-bottom:10px;">No Concluded Placement Cycles</h3>
+            <p style="color:var(--text-description); font-size:14px; max-width:480px; margin:0 auto; line-height:1.6;">There are no completed or historical recruitment drives recorded in the data stream yet.</p>
+          </div>
+        ` : `
+          <div class="card-ent" style="padding:0; overflow:hidden; border-radius:24px; border:1px solid var(--border-main);">
+            <table style="width:100%; border-collapse:collapse; text-align:left;">
+              <thead>
+                <tr style="background:rgba(255,255,255,0.02); border-bottom:1px solid var(--border-main);">
+                  <th style="padding:20px; font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">Company Node</th>
+                  <th style="padding:20px; font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">Role Sector</th>
+                  <th style="padding:20px; font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">Funnel Analytics</th>
+                  <th style="padding:20px; font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">Status</th>
                 </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      `}
-    </div>
-    <style>
-      @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-      .table-row-ent:hover { background: rgba(255,255,255,0.015) !important; }
-    </style>
-  `;
+              </thead>
+              <tbody>
+                ${concludedDrives.map(d => `
+                  <tr class="table-row-ent" style="border-bottom:1px solid var(--border-main); transition:all 0.2s;">
+                    <td style="padding:20px;">
+                      <div style="display:flex; align-items:center; gap:12px;">
+                        <div style="width:40px; height:40px; background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:24px;">${d.logo || '🏢'}</div>
+                        <div style="font-weight:700; color:#fff; font-size:14px;">${d.company || 'Unnamed Company'}</div>
+                      </div>
+                    </td>
+                    <td style="padding:20px; color:var(--text-description); font-size:13px; font-weight:600;">${d.role || 'General'}</td>
+                    <td style="padding:20px;">
+                      <div style="font-size:12px; color:#fff; font-weight:700;">${d.applicants || 0} Applicants</div>
+                      <div style="font-size:11px; color:var(--brand-secondary); font-weight:600;">${Math.floor((d.applicants || 0) * 0.2)} Institutional Placements</div>
+                    </td>
+                    <td style="padding:20px;">
+                      <span class="status-pill status-muted" style="font-size:10px; padding:4px 10px; border-radius:8px;">Cycle Concluded</span>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `}
+      </div>
+      <style>
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .table-row-ent:hover { background: rgba(255,255,255,0.015) !important; }
+      </style>
+    `;
+  };
+
+  renderContent();
+
+  const onStoreUpdate = () => renderContent();
+  window.addEventListener('store-updated', onStoreUpdate);
+
+  const obs = new MutationObserver(() => {
+    if (!document.body.contains(root)) {
+      window.removeEventListener('store-updated', onStoreUpdate);
+      obs.disconnect();
+    }
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
 }
 
 // ── (f) Announcements ────────────────────────────────────
@@ -1366,11 +1396,28 @@ export async function loadDeptQueries(root, Store) {
 async function getFilteredStudents(Store) {
   try {
     let mapping = 'None';
-    let role = Store.session?.role || 'guest';
+    const dbClient = (supabase && typeof supabase.from === 'function') ? supabase
+                   : (window.supabase && typeof window.supabase.from === 'function') ? window.supabase
+                   : null;
+
+    if (!dbClient) {
+      return (Store.students || []).map(s => {
+        const valState = getValidationStatus(s.id, null);
+        return {
+          ...s,
+          rollNo: s.rollNo || s.regNo || 'N/A',
+          batch: s.batch || '2025',
+          status: valState.status,
+          placed: valState.status === 'Approved'
+        };
+      });
+    }
+
+    const role = Store.session?.role || 'student';
     const userEmail = Store.session?.user?.email;
     
     if (userEmail && ['faculty', 'coordinator', 'department'].includes(role)) {
-      const { data: staffData } = await supabase
+      const { data: staffData } = await dbClient
         .from('staff_profiles')
         .select('mapping')
         .eq('email', userEmail)
@@ -1378,11 +1425,7 @@ async function getFilteredStudents(Store) {
       if (staffData && staffData.mapping) {
         mapping = staffData.mapping;
       }
-    } else {
-      return Store.students || [];
     }
-
-    console.log(`🛡️ [Dept Dashboard Sync] Filtering students for role ${role} with mapping ${mapping}`);
 
     if (mapping === 'Global') {
       return Store.students || [];
@@ -1401,7 +1444,7 @@ async function getFilteredStudents(Store) {
       });
     }
 
-    let query = supabase.from('profiles').select('*').eq('role', 'student');
+    let query = dbClient.from('profiles').select('*').eq('role', 'student');
     
     if (mapping.includes(' - Section ')) {
       const parts = mapping.split(' - Section ');
@@ -1414,7 +1457,6 @@ async function getFilteredStudents(Store) {
 
     const { data: profiles, error } = await query.order('full_name');
     if (error || !profiles) {
-      console.warn('⚠️ getFilteredStudents query failed, falling back to basic mapping filter on Store.');
       const deptCode = mapping.split(' - ')[0].trim();
       return (Store.students || []).filter(s => s.dept === deptCode).map(s => {
         const valState = getValidationStatus(s.id, null);
@@ -1428,7 +1470,7 @@ async function getFilteredStudents(Store) {
       });
     }
 
-    const { data: dbDepts } = await supabase.from('departments').select('*');
+    const { data: dbDepts } = await dbClient.from('departments').select('*');
     const depts = dbDepts || [];
 
     return profiles.map(p => {
