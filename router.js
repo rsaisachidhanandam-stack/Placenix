@@ -30,6 +30,7 @@ import { loadSlotAllocationPage } from './pages/slot-allocation.js';
 import { loadMySlotsPage } from './pages/my-slots.js';
 import { loadAttendanceTrackerPage } from './pages/attendance-tracker.js';
 import { loadSaaSPage } from './pages/saas-admin.js';
+import { loadReactStudioPage } from './pages/react-studio.js';
 import { renderSkeleton } from './components/skeleton.js';
 
 import { renderSidebar, renderTopbar, initTopbarEvents } from './components/sidebar.js';
@@ -45,7 +46,7 @@ const DASHBOARD_PAGES = [
   'faculty-advisor', 'faculty-dashboard', 'fa-students', 'fa-resume', 'fa-skills', 'fa-new-jobs', 'fa-prev-jobs',
   'admin-dept', 'resume', 'resume-analysis', 'kanban', 'saas-admin',
   'dept-students', 'dept-resume', 'dept-skills', 'dept-new-jobs', 'dept-prev-jobs', 'dept-announcements', 'dept-queries',
-  'admin-setup', 'admin-staff', 'admin-roles', 'admin-mapping', 'slot-allocation', 'my-slots', 'attendance-tracker'
+  'admin-setup', 'admin-staff', 'admin-roles', 'admin-mapping', 'slot-allocation', 'my-slots', 'attendance-tracker', 'react-studio'
 ];
 
 const routes = {
@@ -86,6 +87,7 @@ const routes = {
   'attendance-tracker': loadAttendanceTrackerPage,
   'slot-allocation':   loadSlotAllocationPage,
   'saas-admin':        loadSaaSPage,
+  'react-studio':      loadReactStudioPage,
   'dept-students':      loadDeptStudents,
   'dept-resume':        loadDeptResume,
   'dept-skills':        loadDeptSkills,
@@ -176,33 +178,33 @@ async function handleRoute() {
           'student-dashboard', 'student-details', 'profile', 'resume-analysis', 'resume', 
           'employability', 'skill-analysis', 'ai-modules', 'ai-predictor',
           'new-applications', 'my-applications', 'my-slots', 'alumni-connect', 'alumni',
-          'communication', 'queries', 'virtual-interview', 'interview-repo'
+          'communication', 'queries', 'virtual-interview', 'interview-repo', 'react-studio'
         ],
         'tpo': [
           'tpo-dashboard', 'drives', 'kanban', 'attendance-tracker', 'slot-allocation',
           'alumni-connect', 'alumni', 'profile', 'student-details', 'analytics', 'completed-batches',
-          'new-applications', 'interview-repo', 'virtual-interview'
+          'new-applications', 'interview-repo', 'virtual-interview', 'react-studio'
         ],
         'coordinator': [
           'coordinator-dashboard', 'department-dashboard', 'dept-students', 'dept-resume',
           'dept-skills', 'dept-new-jobs', 'dept-prev-jobs', 'attendance-tracker', 'slot-allocation', 'my-slots',
-          'dept-announcements', 'dept-queries', 'alumni-connect', 'alumni', 'profile', 'student-details', 'analytics', 'virtual-interview'
+          'dept-announcements', 'dept-queries', 'alumni-connect', 'alumni', 'profile', 'student-details', 'analytics', 'virtual-interview', 'react-studio'
         ],
         'department': [
           'coordinator-dashboard', 'department-dashboard', 'dept-students', 'dept-resume',
           'dept-skills', 'dept-new-jobs', 'dept-prev-jobs', 'attendance-tracker', 'slot-allocation', 'my-slots',
-          'dept-announcements', 'dept-queries', 'alumni-connect', 'alumni', 'profile', 'student-details', 'analytics', 'virtual-interview'
+          'dept-announcements', 'dept-queries', 'alumni-connect', 'alumni', 'profile', 'student-details', 'analytics', 'virtual-interview', 'react-studio'
         ],
         'faculty': [
           'faculty-dashboard', 'fa-students', 'fa-resume', 'fa-skills', 'fa-new-jobs',
-          'fa-prev-jobs', 'attendance-tracker', 'slot-allocation', 'my-slots', 'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview'
+          'fa-prev-jobs', 'attendance-tracker', 'slot-allocation', 'my-slots', 'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview', 'react-studio'
         ],
         'admin': [
           'admin-dashboard', 'admin-setup', 'admin-staff', 'admin-roles', 'admin-mapping',
-          'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview'
+          'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview', 'react-studio'
         ],
         'saas-admin': [
-          'saas-admin', 'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview'
+          'saas-admin', 'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview', 'react-studio'
         ]
       };
 

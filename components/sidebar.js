@@ -23,6 +23,7 @@ const SECTIONS = {
       { label: 'Resume Scan', icon: 'intelligence', route: 'resume-analysis' },
       { label: 'Employability Score', icon: 'intelligence', route: 'employability' },
       { label: 'AI Modules', icon: 'intelligence', route: 'ai-modules' },
+      { label: 'React Studio & Lab', icon: 'intelligence', route: 'react-studio' },
     ]},
     { label: 'RECRUITMENT', items: [
       { label: 'Opportunity Hub', icon: 'recruitment', route: 'new-applications' },
@@ -44,6 +45,7 @@ const SECTIONS = {
     { label: 'AI INTELLIGENCE', items: [
       { label: 'Resume Analysis', icon: 'intelligence', route: 'dept-resume' },
       { label: 'Skill Analysis', icon: 'intelligence', route: 'dept-skills' },
+      { label: 'React Studio & Lab', icon: 'intelligence', route: 'react-studio' },
     ]},
     { label: 'RECRUITMENT', items: [
       { label: 'New Job Applications', icon: 'recruitment', route: 'dept-new-jobs' },
@@ -60,6 +62,7 @@ const SECTIONS = {
   admin: [
     { label: 'OVERVIEW', items: [
       { label: 'Admin Dashboard', icon: 'dashboard', route: 'admin-dashboard' },
+      { label: 'React Studio & Lab', icon: 'intelligence', route: 'react-studio' },
     ]},
     { label: 'INSTITUTIONAL SETUP', items: [
       { label: 'Departments & Sections', icon: 'network', route: 'admin-setup' },
@@ -85,6 +88,7 @@ const SECTIONS = {
     { label: 'AI INTELLIGENCE', items: [
       { label: 'Resume Analysis', icon: 'intelligence', route: 'fa-resume' },
       { label: 'Skill Analysis', icon: 'intelligence', route: 'fa-skills' },
+      { label: 'React Studio & Lab', icon: 'intelligence', route: 'react-studio' },
     ]},
     { label: 'RECRUITMENT', items: [
       { label: 'New Job Application', icon: 'recruitment', route: 'fa-new-jobs' },
@@ -103,12 +107,14 @@ const SECTIONS = {
       { label: 'Previous Job Application', icon: 'recruitment', route: 'kanban' },
       { label: 'Attendance Tracker', icon: 'clock', route: 'attendance-tracker' },
       { label: 'Slot Allocation', icon: 'intelligence', route: 'slot-allocation' },
+      { label: 'React Studio & Lab', icon: 'intelligence', route: 'react-studio' },
       { label: 'Alumni Network', icon: 'network', route: 'alumni-connect' },
     ]}
   ],
   'saas-admin': [
     { label: 'PLATFORM MANAGEMENT', items: [
       { label: 'SaaS Platform Control', icon: 'dashboard', route: 'saas-admin' },
+      { label: 'React Studio & Lab', icon: 'intelligence', route: 'react-studio' },
     ]},
     { label: 'ECOSYSTEM', items: [
       { label: 'Alumni Network', icon: 'network', route: 'alumni-connect' },
