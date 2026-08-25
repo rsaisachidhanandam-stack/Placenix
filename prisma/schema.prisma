@@ -1,0 +1,193 @@
+// ============================================================
+// PLACENIX — PRISMA ORM SCHEMA SPECIFICATION (PostgreSQL)
+// Demonstrates:
+// 1. Relational Entity Models, Primary Keys, Foreign Keys
+// 2. 1:1, 1:Many, and Many:Many Prisma Relations (@relation)
+// 3. Enums, Default Values, Unique Constraints, and Performance Indexes (@@index)
+// ============================================================
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  STUDENT      @map("student")
+  TPO          @map("tpo")
+  COORDINATOR  @map("coordinator")
+  DEPARTMENT   @map("department")
+  FACULTY      @map("faculty")
+  ADMIN        @map("admin")
+  SAAS_ADMIN   @map("saas-admin")
+  SYSTEM       @map("system")
+}
+
+enum PlacementStatus {
+  APPLIED      @map("Applied")
+  SHORTLISTED  @map("Shortlisted")
+  PLACED       @map("Placed")
+  REJECTED     @map("Rejected")
+}
+
+enum DriveStatus {
+  UPCOMING     @map("Upcoming")
+  OPEN         @map("Open")
+  IN_PROGRESS  @map("In-Progress")
+  CLOSED       @map("Closed")
+}
+
+enum ApplicationStage {
+  APPLIED      @map("Applied")
+  SHORTLISTED  @map("Shortlisted")
+  APTITUDE     @map("Aptitude")
+  TECHNICAL    @map("Technical")
+  HR           @map("HR")
+  SELECTED     @map("Selected")
+  REJECTED     @map("Rejected")
+}
+
+enum AttendanceStatus {
+  PENDING      @map("pending")
+  PRESENT      @map("present")
+  ABSENT       @map("absent")
+}
+
+// ── Model 1: Department ──────────────────────────────────────
+model Department {
+  id          String    @id @db.VarChar(10) // e.g. "CSE", "IT", "ECE"
+  name        String    @db.VarChar(255)
+  facultyHead String?   @map("faculty_head") @db.VarChar(255)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  sections    Section[]
+  profiles    Profile[]
+
+  @@map("departments")
+}
+
+// ── Model 2: Section (1:Many child of Department) ─────────────
+model Section {
+  id           String     @id @default(uuid()) @db.Uuid
+  departmentId String     @map("department_id") @db.VarChar(10)
+  sectionName  String     @map("section_name") @db.VarChar(10)
+  roomNumber   String?    @map("room_number") @db.VarChar(50)
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  // Relations
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  profiles     Profile[]
+
+  @@unique([departmentId, sectionName], name: "uq_dept_section")
+  @@map("sections")
+}
+
+// ── Model 3: Profile (Student / Faculty / TPO User) ───────────
+model Profile {
+  id              String           @id @default(uuid()) @db.Uuid
+  email           String           @unique @db.VarChar(255)
+  fullName        String           @map("full_name") @db.VarChar(255)
+  role            Role             @default(STUDENT)
+  departmentId    String?          @map("department_id") @db.VarChar(10)
+  sectionId       String?          @map("section_id") @db.Uuid
+  registerNumber  String?          @unique @map("register_number") @db.VarChar(50)
+  cgpa            Decimal?         @default(0.00) @db.Decimal(4, 2)
+  batchYear       String?          @map("batch_year") @db.VarChar(20)
+  currentSemester Int?             @map("current_semester")
+  status          PlacementStatus  @default(APPLIED)
+  packageLpa      Decimal?         @default(0.00) @map("package_lpa") @db.Decimal(5, 2)
+  company         String?          @db.VarChar(255)
+  passwordHash    String?          @map("password_hash") @db.VarChar(255)
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  department      Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  section         Section?         @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  createdDrives   Drive[]          @relation("DriveCreator")
+  applications    DriveApplication[]
+  slotBookings    SlotCandidateBooking[]
+
+  @@index([departmentId], name: "idx_profiles_dept")
+  @@index([status], name: "idx_profiles_status")
+  @@map("profiles")
+}
+
+// ── Model 4: Recruitment Drive ───────────────────────────────
+model Drive {
+  id                String             @id @default(uuid()) @db.Uuid
+  company           String             @db.VarChar(255)
+  role              String             @db.VarChar(255)
+  packageLpa        Decimal            @map("package_lpa") @db.Decimal(5, 2)
+  minCgpa           Decimal?           @default(0.00) @map("min_cgpa") @db.Decimal(4, 2)
+  totalSlotsCapacity Int               @default(50) @map("total_slots_capacity")
+  remainingSlots    Int                @default(50) @map("remaining_slots")
+  deadline          DateTime           @db.Date
+  status            DriveStatus        @default(OPEN)
+  applicants        Int                @default(0)
+  createdById       String?            @map("created_by") @db.Uuid
+  createdAt         DateTime           @default(now()) @map("created_at")
+
+  // Relations
+  createdBy         Profile?           @relation("DriveCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  applications      DriveApplication[]
+  slotAllocations   SlotAllocation[]
+
+  @@map("drives")
+}
+
+// ── Model 5: Drive Application (Junction Many-to-Many) ────────
+model DriveApplication {
+  id           String           @id @default(uuid()) @db.Uuid
+  driveId      String           @map("drive_id") @db.Uuid
+  studentId    String           @map("student_id") @db.Uuid
+  currentStage ApplicationStage @default(APPLIED) @map("current_stage")
+  appliedAt    DateTime         @default(now()) @map("applied_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  drive        Drive            @relation(fields: [driveId], references: [id], onDelete: Cascade)
+  student      Profile          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([driveId, studentId], name: "uq_student_drive")
+  @@index([driveId], name: "idx_applications_drive")
+  @@index([currentStage], name: "idx_applications_stage")
+  @@map("drive_applications")
+}
+
+// ── Model 6: Slot Allocation Round ────────────────────────────
+model SlotAllocation {
+  id              String                 @id @default(uuid()) @db.Uuid
+  driveId         String                 @map("drive_id") @db.Uuid
+  roundName       String                 @map("round_name") @db.VarChar(100)
+  allocationDate  DateTime               @map("allocation_date") @db.Date
+  totalCandidates Int                    @default(0) @map("total_candidates")
+  createdAt       DateTime               @default(now()) @map("created_at")
+
+  // Relations
+  drive           Drive                  @relation(fields: [driveId], references: [id], onDelete: Cascade)
+  bookings        SlotCandidateBooking[]
+
+  @@map("slot_allocations")
+}
+
+// ── Model 7: Slot Candidate Booking ───────────────────────────
+model SlotCandidateBooking {
+  id               String           @id @default(uuid()) @db.Uuid
+  slotAllocationId String           @map("slot_allocation_id") @db.Uuid
+  studentId        String           @map("student_id") @db.Uuid
+  venueName        String           @map("venue_name") @db.VarChar(100)
+  slotTime         String           @map("slot_time") @db.VarChar(50)
+  attendanceStatus AttendanceStatus @default(PENDING) @map("attendance_status")
+  verifiedAt       DateTime?        @map("verified_at")
+
+  // Relations
+  slotAllocation   SlotAllocation   @relation(fields: [slotAllocationId], references: [id], onDelete: Cascade)
+  student          Profile          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("slot_candidate_bookings")
+}

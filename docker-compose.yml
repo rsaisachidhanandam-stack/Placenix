@@ -1,0 +1,112 @@
+# ============================================================
+# PLACENIX — FULL-STACK MULTI-CONTAINER ORCHESTRATION
+# Orchestrates:
+# 1. Placenix App (Node.js REST/WebSocket Server & Static UI)
+# 2. PostgreSQL 16 Relational Database (Normalized Schema)
+# 3. MongoDB 7 NoSQL Database (Document Store & Aggregations)
+# 4. Redis 7 In-Memory Cache (Sub-millisecond Performance)
+# ============================================================
+
+version: '3.8'
+
+services:
+  # ── 1. Placenix Web & API Server ────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: placenix_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://placenix_user:placenix_secure_pass_2026@postgres:5432/placenix_db?schema=public
+      - MONGO_URI=mongodb://mongo_admin:mongo_secure_pass_2026@mongo:27017/placenix_nosql?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=placenix_production_super_secret_jwt_key_2026
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - placenix_network
+
+  # ── 2. PostgreSQL Relational Database ───────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: placenix_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: placenix_user
+      POSTGRES_PASSWORD: placenix_secure_pass_2026
+      POSTGRES_DB: placenix_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U placenix_user -d placenix_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - placenix_network
+
+  # ── 3. MongoDB NoSQL Document Store ─────────────────────────
+  mongo:
+    image: mongo:7.0-jammy
+    container_name: placenix_mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongo_admin
+      MONGO_INITDB_ROOT_PASSWORD: mongo_secure_pass_2026
+      MONGO_INITDB_DATABASE: placenix_nosql
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - placenix_network
+
+  # ── 4. Redis In-Memory Cache Store ──────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: placenix_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - placenix_network
+
+# ── Shared Storage Volumes ───────────────────────────────────
+volumes:
+  pgdata:
+    driver: local
+  mongodata:
+    driver: local
+  redisdata:
+    driver: local
+
+# ── Isolated Internal Bridge Network ─────────────────────────
+networks:
+  placenix_network:
+    driver: bridge

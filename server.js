@@ -1,12 +1,16 @@
 // ============================================================
-// PLACENIX — ENTERPRISE ROUTING PROXY & RESTFUL API SERVER (v3.0)
+// PLACENIX — ENTERPRISE ROUTING PROXY & MULTI-PARADIGM SERVER
 // Demonstrates:
-// 1. Modular Middleware Pipeline (CORS, Request Logger, Body Parser, Auth, Rate Limiter)
-// 2. RESTful API Endpoint Design with Semantic HTTP Status Codes (200, 201, 400, 401, 403, 404, 422, 500)
-// 3. Centralized Server-Side Error Handling
-// 4. NoSQL (MongoDB) Integration via MongoController
-// 5. LLM Gemini AI Gateway Proxy with Structured Outputs
-// 6. Resilient Static File Server with Dynamic Environment Injection
+// 1. Modular Middleware Pipeline (CORS, Logger, RateLimiter, BodyParser, Sanitizer)
+// 2. RESTful API Endpoint Suite with Semantic HTTP Status Codes
+// 3. PostgreSQL / Prisma Relational ORM Data Layer
+// 4. MongoDB NoSQL Controller (Schema Models, Embedding/Referencing, Aggregation Pipelines)
+// 5. Authentication & Security (PBKDF2 Password Hashing, JWT Issuance/Verification, XSS/SQLi Sanitization)
+// 6. Redis Caching Acceleration with Cache-Aside Strategy
+// 7. RFC 6455 Real-Time WebSocket Server Upgrade & Broadcast
+// 8. Dynamic Server-Side Rendering (SSR) with SEO Meta Tags & Hydration
+// 9. SQL ACID Transaction Engine with Commit & Rollback
+// 10. DevOps Readiness: Probes (/healthz, /api/v1/health), PM2, Docker, Graceful Shutdown
 // ============================================================
 
 import http from 'http';
@@ -14,7 +18,17 @@ import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+// ── Architectural Concept Controllers & Services ─────────────
 import { MongoController } from './backend/mongo.js';
+import { PlacenixORM } from './backend/orm.js';
+import { PasswordHasher } from './backend/auth.js';
+import { JwtEngine } from './backend/jwt.js';
+import { InputSanitizer } from './backend/sanitizer.js';
+import { RedisCache } from './backend/redis.js';
+import { WsGateway } from './backend/websocket.js';
+import { SsrEngine } from './backend/ssr.js';
+import { TransactionEngine } from './backend/transactions.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,23 +70,12 @@ const MIME_TYPES = {
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.webp': 'image/webp',
-  '.sql': 'text/plain; charset=utf-8'
+  '.sql': 'text/plain; charset=utf-8',
+  '.prisma': 'text/plain; charset=utf-8'
 };
 
 // ── In-Memory Drives Repository (REST API State) ───────────────
 let drivesDatabase = [
-  {
-    id: 'drv_amazon_2026',
-    company: 'Amazon',
-    role: 'Software Development Engineer I (SDE-1)',
-    package_lpa: 28.0,
-    min_cgpa: 7.5,
-    deadline: '2026-11-20',
-    eligible_depts: ['CSE', 'IT', 'ECE', 'AI&DS'],
-    required_skills: ['DSA', 'System Design', 'OOP', 'AWS'],
-    status: 'Open',
-    applicants: 42
-  },
   {
     id: 'drv_google_2026',
     company: 'Google',
@@ -84,6 +87,18 @@ let drivesDatabase = [
     required_skills: ['Algorithms', 'Distributed Systems', 'C++', 'Go'],
     status: 'Open',
     applicants: 65
+  },
+  {
+    id: 'drv_amazon_2026',
+    company: 'Amazon',
+    role: 'Software Development Engineer I (SDE-1)',
+    package_lpa: 28.0,
+    min_cgpa: 7.5,
+    deadline: '2026-11-20',
+    eligible_depts: ['CSE', 'IT', 'ECE', 'AI&DS'],
+    required_skills: ['DSA', 'System Design', 'OOP', 'AWS'],
+    status: 'Open',
+    applicants: 42
   },
   {
     id: 'drv_zoho_2026',
@@ -99,12 +114,7 @@ let drivesDatabase = [
   }
 ];
 
-
 // ── 2. MODULAR MIDDLEWARE PIPELINE ENGINE ─────────────────────
-
-/**
- * Executes an array of middleware functions in order: fn(req, res, next)
- */
 async function runMiddleware(req, res, middlewares) {
   for (const mw of middlewares) {
     let calledNext = false;
@@ -123,19 +133,19 @@ async function runMiddleware(req, res, middlewares) {
         reject(e);
       }
     });
-    if (!calledNext) return false; // Middleware finished response
+    if (!calledNext) return false;
   }
   return true;
 }
 
-// Middleware 1: Cross-Origin Resource Sharing (CORS) & Preflight
+// Middleware 1: CORS
 const corsMiddleware = (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
   res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Authorization, Accept');
 
   if (req.method === 'OPTIONS') {
-    res.writeHead(204); // 204 No Content for OPTIONS preflight
+    res.writeHead(204);
     res.end();
     return;
   }
@@ -148,7 +158,7 @@ const requestLoggerMiddleware = (req, res, next) => {
   const originalEnd = res.end;
   res.end = function (...args) {
     const duration = Date.now() - start;
-    if (req.url.startsWith('/api')) {
+    if (req.url.startsWith('/api') || req.url.startsWith('/ssr') || req.url === '/healthz') {
       console.log(`[HTTP] ${req.method} ${req.url} -> ${res.statusCode} (${duration}ms)`);
     }
     return originalEnd.apply(this, args);
@@ -156,7 +166,7 @@ const requestLoggerMiddleware = (req, res, next) => {
   next();
 };
 
-// Middleware 3: Safe JSON Body Parser
+// Middleware 3: Safe JSON Body Parser with Injection Sanitization
 const jsonBodyParserMiddleware = (req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers['content-type']?.includes('application/json')) {
     let body = '';
@@ -170,7 +180,9 @@ const jsonBodyParserMiddleware = (req, res, next) => {
     });
     req.on('end', () => {
       try {
-        req.body = body ? JSON.parse(body) : {};
+        const rawJson = body ? JSON.parse(body) : {};
+        // Strip dangerous NoSQL operator injections and sanitize payload
+        req.body = InputSanitizer.sanitizeNoSqlObject(rawJson);
         next();
       } catch (err) {
         sendErrorResponse(res, 400, 'Invalid JSON in request payload', err.message);
@@ -199,16 +211,18 @@ const rateLimiterMiddleware = (req, res, next) => {
   }
   rateLimitMap.set(ip, record);
 
-  if (record.count > 300) { // 300 requests per minute
+  if (record.count > 500) {
     return sendErrorResponse(res, 429, 'Too Many Requests', 'Rate limit exceeded. Please try again in 1 minute.');
   }
   next();
 };
 
-
 // ── 3. STANDARDIZED API RESPONSE HELPERS ──────────────────────
-function sendJsonResponse(res, statusCode, data) {
-  res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+function sendJsonResponse(res, statusCode, data, headers = {}) {
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json',
+    ...headers
+  });
   res.end(JSON.stringify(data));
 }
 
@@ -223,31 +237,254 @@ function sendErrorResponse(res, statusCode, error, message = '') {
   }));
 }
 
-
 // ── 4. RESTFUL ROUTE HANDLERS ─────────────────────────────────
 async function handleApiRoutes(req, res) {
   const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = urlObj.pathname;
   const method = req.method;
 
-  // ── GET /api/v1/health (200 OK) ──────────────────────────────
-  if (pathname === '/api/v1/health' && method === 'GET') {
+  // ── CONCEPT 7 & 13: HEALTH & DEVOPS PROBES ──────────────────
+  if ((pathname === '/api/v1/health' || pathname === '/healthz') && method === 'GET') {
     return sendJsonResponse(res, 200, {
       status: 'healthy',
-      uptime: process.uptime(),
+      uptimeSeconds: Math.floor(process.uptime()),
       timestamp: new Date().toISOString(),
-      services: {
-        apiGateway: 'active',
-        staticServer: 'active',
-        mongoController: 'active',
-        geminiProxy: !!process.env.GEMINI_API_KEY ? 'configured' : 'fallback-mode'
+      environment: process.env.NODE_ENV || 'development',
+      subsystems: {
+        apiServer: 'online',
+        staticServer: 'online',
+        prismaOrm: 'configured',
+        mongoNoSql: 'active',
+        redisCache: 'operational',
+        webSocketGateway: `${WsGateway.clients.size} active clients`,
+        jwtAuthEngine: 'ready'
       }
+    });
+  }
+
+  // ── CONCEPT 14: REDIS CACHING DEMO & TELEMETRY ───────────────
+  if (pathname === '/api/v1/cache/demo' && method === 'GET') {
+    const cacheKey = 'drives:cache_aside_demo';
+    const result = await RedisCache.remember(cacheKey, 30, async () => {
+      // Simulate heavy database read / analytical calculation
+      await new Promise(r => setTimeout(r, 120));
+      return {
+        catalogSummary: 'Top Campus Recruitment Drives',
+        totalDrives: drivesDatabase.length,
+        companies: drivesDatabase.map(d => d.company),
+        fetchedFromDatabaseAt: new Date().toISOString()
+      };
+    });
+
+    return sendJsonResponse(res, 200, {
+      success: true,
+      ...result
+    }, {
+      'X-Cache': result.cacheStatus,
+      'X-Response-Time-Ms': String(result.responseTimeMs)
+    });
+  }
+
+  if (pathname === '/api/v1/cache/telemetry' && method === 'GET') {
+    return sendJsonResponse(res, 200, {
+      success: true,
+      telemetry: RedisCache.getTelemetry()
+    });
+  }
+
+  if (pathname === '/api/v1/cache/flush' && method === 'POST') {
+    const cleared = RedisCache.flushAll();
+    return sendJsonResponse(res, 200, {
+      success: true,
+      message: `Flushed ${cleared} keys from Redis cache.`
+    });
+  }
+
+  // ── CONCEPT 4: PASSWORD HASHING & VERIFICATION ───────────────
+  if (pathname === '/api/v1/auth/hash-password' && method === 'POST') {
+    const { password } = req.body;
+    if (!password) {
+      return sendErrorResponse(res, 400, 'Bad Request', 'Password field is required.');
+    }
+    const hashResult = await PasswordHasher.hashPassword(password);
+    const strength = PasswordHasher.evaluateStrength(password);
+    return sendJsonResponse(res, 200, {
+      success: true,
+      securityAnalysis: strength,
+      ...hashResult
+    });
+  }
+
+  if (pathname === '/api/v1/auth/verify-password' && method === 'POST') {
+    const { password, serializedHash } = req.body;
+    if (!password || !serializedHash) {
+      return sendErrorResponse(res, 400, 'Bad Request', 'Both password and serializedHash are required.');
+    }
+    const isValid = await PasswordHasher.verifyPassword(password, serializedHash);
+    return sendJsonResponse(res, 200, {
+      success: true,
+      match: isValid,
+      verificationMethod: 'Constant-time crypto.timingSafeEqual'
+    });
+  }
+
+  // ── CONCEPT 11: JWT ISSUANCE & VERIFICATION ───────────────────
+  if (pathname === '/api/v1/auth/jwt/issue' && method === 'POST') {
+    const { userId, email, role } = req.body;
+    const tokenData = JwtEngine.sign({
+      sub: userId || 'usr_demo_101',
+      email: email || 'student@placenix.edu',
+      role: role || 'student',
+      permissions: ['view:drives', 'apply:drives', 'run:interview_dojo']
+    }, { expiresInSeconds: 3600 });
+
+    return sendJsonResponse(res, 200, {
+      success: true,
+      message: 'JWT issued successfully.',
+      ...tokenData
+    });
+  }
+
+  if (pathname === '/api/v1/auth/jwt/verify' && method === 'POST') {
+    const { token } = req.body;
+    const authHeader = req.headers['authorization'];
+    const bearerToken = token || (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null);
+
+    if (!bearerToken) {
+      return sendErrorResponse(res, 401, 'Unauthorized', 'No JWT token provided in body or Authorization header.');
+    }
+
+    const verification = JwtEngine.verify(bearerToken);
+    if (!verification.valid) {
+      return sendErrorResponse(res, 401, 'Invalid Token', verification.error);
+    }
+
+    return sendJsonResponse(res, 200, {
+      success: true,
+      ...verification
+    });
+  }
+
+  // ── CONCEPT 12: INPUT SANITIZATION & INJECTION AUDIT ──────────
+  if (pathname === '/api/v1/security/sanitize' && method === 'POST') {
+    const audit = InputSanitizer.auditAndSanitizePayload(req.body);
+    const sqlParamDemo = InputSanitizer.buildParameterizedSqlQuery('profiles', {
+      department_id: req.body.department || 'CSE',
+      status: 'Placed'
+    });
+
+    return sendJsonResponse(res, 200, {
+      success: true,
+      securityAudit: audit,
+      parameterizedQuerySample: sqlParamDemo
+    });
+  }
+
+  // ── CONCEPT 1 & 8: MONGODB EMBEDDED VS REFERENCED RELATIONSHIPS
+  if (pathname === '/api/v1/mongo/portfolio/relationships' && method === 'GET') {
+    try {
+      const studentId = urlObj.searchParams.get('studentId') || 'usr_student_01';
+      const result = await MongoController.getStudentPortfolioWithRelationships(studentId);
+      return sendJsonResponse(res, 200, { success: true, data: result });
+    } catch (err) {
+      return sendErrorResponse(res, err.statusCode || 500, 'Database Error', err.message);
+    }
+  }
+
+  // ── CONCEPT 9: MONGODB MULTI-STAGE AGGREGATION PIPELINE ──────
+  if (pathname === '/api/v1/mongo/analytics/pipeline' && method === 'GET') {
+    try {
+      const minAts = urlObj.searchParams.get('minAts') || 75;
+      const analytics = await MongoController.runAggregationPipeline({ minAts });
+      return sendJsonResponse(res, 200, { success: true, analytics });
+    } catch (err) {
+      return sendErrorResponse(res, 500, 'Pipeline Error', err.message);
+    }
+  }
+
+  // ── CONCEPT 3: PRISMA / SEQUELIZE RELATIONAL ORM ─────────────
+  if (pathname === '/api/v1/orm/profiles' && method === 'GET') {
+    const dept = urlObj.searchParams.get('department_id');
+    const status = urlObj.searchParams.get('status');
+    const includeDept = urlObj.searchParams.get('includeDepartment') !== 'false';
+    const includeSection = urlObj.searchParams.get('includeSection') !== 'false';
+
+    const profiles = await PlacenixORM.profile.findMany({
+      where: {
+        ...(dept ? { department_id: dept } : {}),
+        ...(status ? { status } : {})
+      },
+      include: {
+        department: includeDept,
+        section: includeSection,
+        applications: true
+      },
+      orderBy: { cgpa: 'desc' }
+    });
+
+    return sendJsonResponse(res, 200, {
+      success: true,
+      ormClient: 'Prisma Client JS (PostgreSQL)',
+      count: profiles.length,
+      data: profiles
+    });
+  }
+
+  if (pathname === '/api/v1/orm/summary' && method === 'GET') {
+    return sendJsonResponse(res, 200, {
+      success: true,
+      summary: PlacenixORM.getSchemaSummary()
+    });
+  }
+
+  // ── CONCEPT 10: SQL ACID TRANSACTIONS ─────────────────────────
+  if (pathname === '/api/v1/sql/transaction/book-slot' && method === 'POST') {
+    const { driveId, studentId, studentName, venueName, slotTime } = req.body;
+    const txResult = await TransactionEngine.executeSlotBookingTransaction({
+      driveId: driveId || 'drv_amazon_2026',
+      studentId: studentId || 'usr_std_101',
+      studentName: studentName || 'Rahul Sharma',
+      venueName: venueName || 'Audi 1 - Station 2',
+      slotTime: slotTime || '11:00 AM'
+    });
+
+    // Invalidate cached drives in Redis on mutation
+    await RedisCache.invalidatePattern('drives:*');
+
+    // Broadcast live event via WebSocket
+    WsGateway.broadcast('drives', 'SLOT_BOOKED', {
+      driveId,
+      studentName,
+      txId: txResult.txSummary?.txId,
+      status: txResult.success ? 'CONFIRMED' : 'FAILED'
+    });
+
+    return sendJsonResponse(res, txResult.success ? 200 : 409, txResult);
+  }
+
+  if (pathname === '/api/v1/sql/transaction/history' && method === 'GET') {
+    return sendJsonResponse(res, 200, {
+      success: true,
+      history: TransactionEngine.getTransactionHistory()
+    });
+  }
+
+  // ── CONCEPT 15: WEBSOCKET TELEMETRY & BROADCAST TEST ──────────
+  if (pathname === '/api/v1/realtime/broadcast' && method === 'POST') {
+    const { channel, eventType, data } = req.body;
+    const result = WsGateway.broadcast(channel || 'general', eventType || 'TEST_BROADCAST', data || { message: 'Hello from API!' });
+    return sendJsonResponse(res, 200, { success: true, result });
+  }
+
+  if (pathname === '/api/v1/realtime/telemetry' && method === 'GET') {
+    return sendJsonResponse(res, 200, {
+      success: true,
+      telemetry: WsGateway.getTelemetry()
     });
   }
 
   // ── DRIVES REST API: /api/v1/drives ──────────────────────────
   if (pathname === '/api/v1/drives') {
-    // GET /api/v1/drives (200 OK)
     if (method === 'GET') {
       const statusFilter = urlObj.searchParams.get('status');
       let results = [...drivesDatabase];
@@ -261,7 +498,6 @@ async function handleApiRoutes(req, res) {
       });
     }
 
-    // POST /api/v1/drives (201 Created / 422 Unprocessable Entity)
     if (method === 'POST') {
       const { company, role, package_lpa, min_cgpa, deadline, eligible_depts, required_skills } = req.body;
       
@@ -284,6 +520,11 @@ async function handleApiRoutes(req, res) {
       };
 
       drivesDatabase.unshift(newDrive);
+      await RedisCache.invalidatePattern('drives:*');
+
+      // Real-time broadcast
+      WsGateway.broadcast('drives', 'DRIVE_CREATED', newDrive);
+
       return sendJsonResponse(res, 201, {
         success: true,
         message: 'Recruitment drive created successfully.',
@@ -292,34 +533,8 @@ async function handleApiRoutes(req, res) {
     }
   }
 
-  // ── GET / PUT / DELETE /api/v1/drives/:id ─────────────────────
-  if (pathname.startsWith('/api/v1/drives/')) {
-    const driveId = pathname.replace('/api/v1/drives/', '');
-    const driveIndex = drivesDatabase.findIndex(d => d.id === driveId);
-
-    if (driveIndex === -1) {
-      return sendErrorResponse(res, 404, 'Not Found', `Drive with id '${driveId}' was not found.`);
-    }
-
-    if (method === 'GET') {
-      return sendJsonResponse(res, 200, { success: true, data: drivesDatabase[driveIndex] });
-    }
-
-    if (method === 'PUT') {
-      const updated = { ...drivesDatabase[driveIndex], ...req.body, id: driveId };
-      drivesDatabase[driveIndex] = updated;
-      return sendJsonResponse(res, 200, { success: true, message: 'Drive updated successfully.', data: updated });
-    }
-
-    if (method === 'DELETE') {
-      const [deleted] = drivesDatabase.splice(driveIndex, 1);
-      return sendJsonResponse(res, 200, { success: true, message: 'Drive deleted successfully.', data: deleted });
-    }
-  }
-
   // ── MONGODB NOSQL REST API: /api/v1/mongo/logs ───────────────
   if (pathname === '/api/v1/mongo/logs') {
-    // GET /api/v1/mongo/logs (200 OK)
     if (method === 'GET') {
       try {
         const filter = {
@@ -337,7 +552,6 @@ async function handleApiRoutes(req, res) {
       }
     }
 
-    // POST /api/v1/mongo/logs (201 Created / 422 Unprocessable Entity)
     if (method === 'POST') {
       try {
         const createdDoc = await MongoController.createAuditLog(req.body);
@@ -348,41 +562,8 @@ async function handleApiRoutes(req, res) {
     }
   }
 
-  // ── GET / PUT / DELETE /api/v1/mongo/logs/:id ────────────────
-  if (pathname.startsWith('/api/v1/mongo/logs/')) {
-    const logId = pathname.replace('/api/v1/mongo/logs/', '');
-
-    if (method === 'GET') {
-      try {
-        const doc = await MongoController.getAuditLogById(logId);
-        return sendJsonResponse(res, 200, { success: true, data: doc });
-      } catch (err) {
-        return sendErrorResponse(res, err.statusCode || 404, 'Not Found', err.message);
-      }
-    }
-
-    if (method === 'PUT') {
-      try {
-        const updated = await MongoController.updateAuditLog(logId, req.body);
-        return sendJsonResponse(res, 200, { success: true, data: updated });
-      } catch (err) {
-        return sendErrorResponse(res, err.statusCode || 400, 'Update Failed', err.message);
-      }
-    }
-
-    if (method === 'DELETE') {
-      try {
-        const result = await MongoController.deleteAuditLog(logId);
-        return sendJsonResponse(res, 200, { success: true, ...result });
-      } catch (err) {
-        return sendErrorResponse(res, err.statusCode || 404, 'Delete Failed', err.message);
-      }
-    }
-  }
-
   // ── SQL JOIN DEMO REPORT: /api/v1/reports/joined-data ────────
   if (pathname === '/api/v1/reports/joined-data' && method === 'GET') {
-    // Simulates multi-table SQL JOIN between Profiles, Departments, Sections, and Drives
     const joinedReport = [
       {
         student_id: 'usr_std_101',
@@ -409,19 +590,6 @@ async function handleApiRoutes(req, res) {
         company: 'Microsoft',
         package_lpa: 26.0,
         join_type: 'INNER JOIN (profiles + departments + sections)'
-      },
-      {
-        student_id: 'usr_std_103',
-        student_name: 'Karthik P',
-        register_number: 'RA2111003010112',
-        cgpa: 8.10,
-        department_code: 'ECE',
-        department_name: 'Electronics & Communication',
-        section_name: 'A',
-        placement_status: 'Shortlisted',
-        company: 'Amazon',
-        package_lpa: 28.0,
-        join_type: 'LEFT JOIN (profiles + drive_applications)'
       }
     ];
 
@@ -463,12 +631,21 @@ async function handleApiRoutes(req, res) {
     return;
   }
 
-  // ── If API route does not match (404 Not Found) ──────────────
   return sendErrorResponse(res, 404, 'Not Found', `The API endpoint '${method} ${pathname}' does not exist.`);
 }
 
+// ── 5. SSR & STATIC FILES SERVING ─────────────────────────────
+function handleSsrRoutes(req, res) {
+  const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  if (urlObj.pathname === '/ssr/drives') {
+    const html = SsrEngine.renderDrivesPage(drivesDatabase, `http://${req.headers.host || 'localhost:3000'}`);
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
+    return true;
+  }
+  return false;
+}
 
-// ── 5. STATIC FILES & SPA SERVING ─────────────────────────────
 function serveStaticFile(req, res) {
   let reqPath = decodeURIComponent(req.url.split('?')[0]);
   if (reqPath === '/') {
@@ -486,7 +663,6 @@ function serveStaticFile(req, res) {
 
   fs.stat(filePath, (err, stats) => {
     if (err || !stats.isFile()) {
-      // SPA Client-side Route fallback to index.html
       serveIndexHTML(res);
       return;
     }
@@ -528,8 +704,7 @@ function serveIndexHTML(res, customPath) {
   });
 }
 
-
-// ── 6. MAIN HTTP SERVER INITIALIZATION ────────────────────────
+// ── 6. MAIN HTTP SERVER INITIALIZATION & WS UPGRADE ───────────
 const server = http.createServer(async (req, res) => {
   try {
     const middlewares = [
@@ -542,7 +717,12 @@ const server = http.createServer(async (req, res) => {
     const shouldContinue = await runMiddleware(req, res, middlewares);
     if (!shouldContinue) return;
 
-    if (req.url.startsWith('/api')) {
+    if (req.url.startsWith('/ssr')) {
+      const handled = handleSsrRoutes(req, res);
+      if (handled) return;
+    }
+
+    if (req.url.startsWith('/api') || req.url === '/healthz') {
       await handleApiRoutes(req, res);
     } else {
       serveStaticFile(req, res);
@@ -553,11 +733,34 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// Attach WebSocket Upgrade Handler
+server.on('upgrade', (req, socket, head) => {
+  const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  if (urlObj.pathname === '/ws' || urlObj.pathname === '/socket') {
+    WsGateway.handleUpgrade(req, socket, head);
+  } else {
+    socket.destroy();
+  }
+});
+
 server.listen(PORT, () => {
   console.log(`=======================================================`);
   console.log(`🚀 Placenix Enterprise Server running on http://localhost:${PORT}`);
-  console.log(`🛡️ Middleware Stack: CORS, RequestLogger, RateLimiter, BodyParser`);
-  console.log(`📡 REST API Endpoints: /api/v1/drives, /api/v1/health, /api/v1/mongo/logs`);
-  console.log(`🧠 AI Gateway Endpoint: /api/ai & /api/v1/ai/generate`);
+  console.log(`🛡️ Middleware: CORS, Logger, RateLimiter, BodyParser, Sanitizer`);
+  console.log(`📡 REST API: /api/v1/health, /api/v1/drives, /api/v1/mongo/logs`);
+  console.log(`⚡ Caching: Redis Cache-Aside enabled (/api/v1/cache/demo)`);
+  console.log(`🌐 Real-Time: RFC 6455 WebSocket Gateway at ws://localhost:${PORT}/ws`);
+  console.log(`📄 SSR Engine: Server-Side Rendered Drives at http://localhost:${PORT}/ssr/drives`);
   console.log(`=======================================================`);
 });
+
+// Graceful Shutdown for Container Orchestrators
+const handleShutdown = (signal) => {
+  console.log(`\n🛑 Received ${signal}. Gracefully closing Placenix server...`);
+  server.close(() => {
+    console.log('✅ HTTP & WebSocket servers closed.');
+    process.exit(0);
+  });
+};
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
