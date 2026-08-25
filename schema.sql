@@ -1,20 +1,42 @@
 -- ============================================================
--- PLACENIX — RELATIONAL POSTGRESQL SCHEMA DESIGN & SQL JOINS
+-- PLACENIX — RELATIONAL POSTGRESQL SCHEMA DESIGN & SQL SUITE
 -- Demonstrates:
--- 1. Relational Schema Modeling with PK, FK, Constraints & Indexes
--- 2. Multi-Table SQL JOINs (INNER JOIN, LEFT JOIN, GROUP BY, CTEs)
+-- 1. Normalization Basics (1NF, 2NF, 3NF, BCNF) & Anomaly Elimination
+-- 2. Multi-Table Relational Schema with PK, FK, Constraints & Indexes
+-- 3. Multi-Table SQL JOINs (INNER JOIN, LEFT JOIN, GROUP BY, CTEs)
+-- 4. ACID SQL Transactions (BEGIN, SAVEPOINT, COMMIT, ROLLBACK)
 -- ============================================================
 
--- ── 1. RELATIONAL SCHEMA DDL (PK / FK & Constraints) ─────────
+-- ─────────────────────────────────────────────────────────────
+-- 1. DATABASE NORMALIZATION ARCHITECTURE (1NF, 2NF, 3NF)
+-- ─────────────────────────────────────────────────────────────
+--
+-- ✦ First Normal Form (1NF):
+--   - Each column contains atomic (indivisible) values.
+--   - Every table has a designated primary key ensuring record uniqueness.
+--   - No repeating groups or comma-separated lists stored in columns (e.g. skills/sections are normalized).
+--
+-- ✦ Second Normal Form (2NF):
+--   - Satisfies 1NF.
+--   - Eliminates Partial Dependencies: All non-key attributes are fully functionally dependent
+--     on the entire primary key (especially critical in composite-key junction tables like drive_applications).
+--
+-- ✦ Third Normal Form (3NF):
+--   - Satisfies 2NF.
+--   - Eliminates Transitive Dependencies: Non-key attributes depend ONLY on the primary key,
+--     not on another non-key attribute (e.g., department name is stored in 'departments',
+--     and 'profiles' only references 'department_id', preventing update/deletion anomalies).
+-- ─────────────────────────────────────────────────────────────
 
--- Departments Table (Parent Table)
+-- ── Parent Table 1: Departments (Normalized 3NF) ─────────────
 CREATE TABLE IF NOT EXISTS departments (
-    id VARCHAR(10) PRIMARY KEY, -- e.g. 'CSE', 'IT', 'ECE'
+    id VARCHAR(10) PRIMARY KEY, -- e.g. 'CSE', 'IT', 'ECE', 'AI&DS' (Atomic PK)
     name VARCHAR(255) NOT NULL,
+    faculty_head VARCHAR(255),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- Sections Table (Child of Departments: 1-to-Many FK)
+-- ── Parent Table 2: Sections (Child of Departments: 1-to-Many FK) ─
 CREATE TABLE IF NOT EXISTS sections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     department_id VARCHAR(10) NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
@@ -24,7 +46,7 @@ CREATE TABLE IF NOT EXISTS sections (
     CONSTRAINT uq_dept_section UNIQUE(department_id, section_name)
 );
 
--- Student & Staff Profiles Table (Relational User Directory)
+-- ── Entity Table 3: User & Student Profiles (3NF Normalized) ──
 CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -39,17 +61,20 @@ CREATE TABLE IF NOT EXISTS profiles (
     status VARCHAR(50) DEFAULT 'Applied' CHECK (status IN ('Applied', 'Shortlisted', 'Placed', 'Rejected')),
     package_lpa NUMERIC(5, 2) DEFAULT 0.00,
     company VARCHAR(255),
+    password_hash VARCHAR(255), -- Securely salted PBKDF2/bcrypt hash
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- Recruitment Drives Table
+-- ── Entity Table 4: Recruitment Drives ────────────────────────
 CREATE TABLE IF NOT EXISTS drives (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company VARCHAR(255) NOT NULL,
     role VARCHAR(255) NOT NULL,
     package_lpa NUMERIC(5, 2) NOT NULL CHECK (package_lpa > 0),
     min_cgpa NUMERIC(4, 2) DEFAULT 0.00,
+    total_slots_capacity INT DEFAULT 50 CHECK (total_slots_capacity >= 0),
+    remaining_slots INT DEFAULT 50 CHECK (remaining_slots >= 0),
     deadline DATE NOT NULL,
     status VARCHAR(50) DEFAULT 'Open' CHECK (status IN ('Open', 'In-Progress', 'Closed')),
     applicants INT DEFAULT 0,
@@ -57,7 +82,8 @@ CREATE TABLE IF NOT EXISTS drives (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- Candidate Applications Table (Junction Table: Many-to-Many between Profiles & Drives)
+-- ── Junction Table 5: Drive Applications (2NF/3NF Many-to-Many) ─
+-- Composite Key (drive_id, student_id) ensures 0 duplicate applications
 CREATE TABLE IF NOT EXISTS drive_applications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     drive_id UUID NOT NULL REFERENCES drives(id) ON DELETE CASCADE,
@@ -68,7 +94,7 @@ CREATE TABLE IF NOT EXISTS drive_applications (
     CONSTRAINT uq_student_drive UNIQUE(drive_id, student_id)
 );
 
--- Slot Allocations Table (1-to-Many from Drives)
+-- ── Table 6: Slot Allocations (1-to-Many from Drives) ──────────
 CREATE TABLE IF NOT EXISTS slot_allocations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     drive_id UUID NOT NULL REFERENCES drives(id) ON DELETE CASCADE,
@@ -78,7 +104,7 @@ CREATE TABLE IF NOT EXISTS slot_allocations (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- Slot Candidate Bookings Table (Child of Slot Allocations & Profiles)
+-- ── Table 7: Slot Candidate Bookings (Child of Slot Allocations & Profiles) ─
 CREATE TABLE IF NOT EXISTS slot_candidate_bookings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     slot_allocation_id UUID NOT NULL REFERENCES slot_allocations(id) ON DELETE CASCADE,
@@ -96,10 +122,11 @@ CREATE INDEX IF NOT EXISTS idx_applications_drive ON drive_applications(drive_id
 CREATE INDEX IF NOT EXISTS idx_applications_stage ON drive_applications(current_stage);
 
 
--- ── 2. SQL JOINS DEMONSTRATION & ADVANCED QUERY SUITE ──────────
+-- ─────────────────────────────────────────────────────────────
+-- 2. SQL JOINS DEMONSTRATION & ADVANCED QUERY SUITE
+-- ─────────────────────────────────────────────────────────────
 
 -- QUERY 1: Multi-Table INNER JOIN — Student Academic & Department Hierarchy Report
--- Joins: profiles + departments + sections
 SELECT 
     p.id AS student_id,
     p.full_name AS student_name,
@@ -120,7 +147,6 @@ ORDER BY d.id ASC, s.section_name ASC, p.cgpa DESC;
 
 
 -- QUERY 2: Multi-Table LEFT JOIN with Aggregations — Department Placement Performance Matrix
--- Calculates total enrolled students, placed count, placement percentage, and avg package
 SELECT 
     d.id AS dept_code,
     d.name AS department_name,
@@ -136,7 +162,6 @@ ORDER BY placement_percentage DESC;
 
 
 -- QUERY 3: Complex Multi-Table JOIN with CTE — Recruitment Pipeline & Slot Attendance Telemetry
--- Joins: drives + drive_applications + profiles + slot_allocations + slot_candidate_bookings
 WITH DriveMetrics AS (
     SELECT 
         dr.id AS drive_id,
@@ -167,3 +192,43 @@ LEFT JOIN slot_allocations sa ON dm.drive_id = sa.drive_id
 LEFT JOIN slot_candidate_bookings scb ON sa.id = scb.slot_allocation_id
 LEFT JOIN profiles p ON scb.student_id = p.id
 ORDER BY dm.company ASC, sa.allocation_date DESC, scb.slot_time ASC;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 3. ACID TRANSACTIONS (SQL / POSTGRESQL)
+-- ─────────────────────────────────────────────────────────────
+--
+-- Scenario: Atomic Candidate Application & Slot Capacity Reservation
+-- Guarantees:
+-- - Atomicity: Either all steps succeed, or entire state is rolled back.
+-- - Consistency: Capacity constraint (remaining_slots >= 0) is never violated.
+-- - Isolation: Serializable / Read Committed row-level locks prevent race conditions.
+-- - Durability: Changes are committed to WAL log.
+--
+-- TRANSACTION EXAMPLE:
+/*
+BEGIN;
+
+-- Step 1: Check and Lock Drive Slot Row (Row-level lock prevents double booking race condition)
+SELECT id, remaining_slots 
+FROM drives 
+WHERE id = '7c9e6679-7425-40de-944b-e07fc1f90ae7' 
+FOR UPDATE;
+
+-- Step 2: Decrement remaining capacity
+UPDATE drives 
+SET remaining_slots = remaining_slots - 1, applicants = applicants + 1
+WHERE id = '7c9e6679-7425-40de-944b-e07fc1f90ae7' AND remaining_slots > 0;
+
+-- Step 3: Insert Application Junction Record
+INSERT INTO drive_applications (drive_id, student_id, current_stage)
+VALUES ('7c9e6679-7425-40de-944b-e07fc1f90ae7', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Applied');
+
+-- Step 4: Insert Venue Booking Slot
+INSERT INTO slot_candidate_bookings (slot_allocation_id, student_id, venue_name, slot_time, attendance_status)
+VALUES ('b1f9b33a-4a21-4f6c-829d-dfc32a76ef42', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Audi 2 - Station 4', '10:30 AM', 'pending');
+
+-- If any check fails: ROLLBACK;
+-- If all checks pass:
+COMMIT;
+*/

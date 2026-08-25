@@ -24,6 +24,7 @@ const SECTIONS = {
       { label: 'Employability Score', icon: 'intelligence', route: 'employability' },
       { label: 'AI Modules', icon: 'intelligence', route: 'ai-modules' },
       { label: 'React Studio & Lab', icon: 'intelligence', route: 'react-studio' },
+      { label: '16 Concepts Lab', icon: 'intelligence', route: 'concepts' },
     ]},
     { label: 'RECRUITMENT', items: [
       { label: 'Opportunity Hub', icon: 'recruitment', route: 'new-applications' },

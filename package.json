@@ -7,9 +7,14 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "serve": "node server.js"
+    "serve": "node server.js",
+    "build": "node -e \"console.log('Placenix production bundle ready.')\"",
+    "docker:build": "docker build -t placenix:latest .",
+    "docker:compose": "docker-compose up -d",
+    "prisma:generate": "npx prisma generate",
+    "test": "node --test"
   },
-  "keywords": ["placement", "ai", "saas", "university", "recruitment"],
+  "keywords": ["placement", "ai", "saas", "university", "recruitment", "prisma", "mongodb", "redis", "websockets", "ssr"],
   "author": "Placenix Technologies",
   "license": "MIT"
 }

@@ -31,6 +31,7 @@ import { loadMySlotsPage } from './pages/my-slots.js';
 import { loadAttendanceTrackerPage } from './pages/attendance-tracker.js';
 import { loadSaaSPage } from './pages/saas-admin.js';
 import { loadReactStudioPage } from './pages/react-studio.js';
+import { loadConceptsLabPage } from './pages/concepts-lab.js';
 import { renderSkeleton } from './components/skeleton.js';
 
 import { renderSidebar, renderTopbar, initTopbarEvents } from './components/sidebar.js';
@@ -46,7 +47,8 @@ const DASHBOARD_PAGES = [
   'faculty-advisor', 'faculty-dashboard', 'fa-students', 'fa-resume', 'fa-skills', 'fa-new-jobs', 'fa-prev-jobs',
   'admin-dept', 'resume', 'resume-analysis', 'kanban', 'saas-admin',
   'dept-students', 'dept-resume', 'dept-skills', 'dept-new-jobs', 'dept-prev-jobs', 'dept-announcements', 'dept-queries',
-  'admin-setup', 'admin-staff', 'admin-roles', 'admin-mapping', 'slot-allocation', 'my-slots', 'attendance-tracker', 'react-studio'
+  'admin-setup', 'admin-staff', 'admin-roles', 'admin-mapping', 'slot-allocation', 'my-slots', 'attendance-tracker', 'react-studio',
+  'concepts', 'concepts-lab'
 ];
 
 const routes = {
@@ -88,6 +90,8 @@ const routes = {
   'slot-allocation':   loadSlotAllocationPage,
   'saas-admin':        loadSaaSPage,
   'react-studio':      loadReactStudioPage,
+  'concepts':          loadConceptsLabPage,
+  'concepts-lab':      loadConceptsLabPage,
   'dept-students':      loadDeptStudents,
   'dept-resume':        loadDeptResume,
   'dept-skills':        loadDeptSkills,
