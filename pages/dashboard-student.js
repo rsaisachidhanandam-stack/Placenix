@@ -210,7 +210,7 @@ export async function loadStudentDash(root, Store, supabase) {
           <div class="card-ent">
             <div class="label-ent" style="margin-bottom: 16px;">Market Readiness</div>
             <div class="metric-ent">${technicalSkill >= 80 ? 'Tier 1' : 'Tier 2'}</div>
-            <p style="font-size:13px; color:var(--text-description); margin-top:8px;">Top 10% of Department Node</p>
+            <p style="font-size:13px; color:var(--text-description); margin-top:8px;">Top ${technicalSkill >= 85 ? '10%' : technicalSkill >= 75 ? '25%' : '40%'} of ${studentDept} Department</p>
           </div>
 
           <div class="card-ent">
