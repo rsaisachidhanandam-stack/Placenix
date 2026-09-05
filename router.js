@@ -187,7 +187,7 @@ async function handleRoute() {
         'tpo': [
           'tpo-dashboard', 'drives', 'kanban', 'attendance-tracker', 'slot-allocation',
           'alumni-connect', 'alumni', 'profile', 'student-details', 'analytics', 'completed-batches',
-          'new-applications', 'interview-repo', 'virtual-interview', 'react-studio'
+          'new-applications', 'interview-repo', 'virtual-interview'
         ],
         'coordinator': [
           'coordinator-dashboard', 'department-dashboard', 'dept-students', 'dept-resume',

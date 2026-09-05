@@ -326,104 +326,45 @@ function getAuthHTML(mode) {
       50% { opacity: 0.6; transform: scale(0.8); }
     }
 
-    /* ── Role Card Grid ─────────────────────────────────── */
-    .role-card-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 24px;
-    }
-    .role-card-btn {
-      position: relative;
+    /* ── Intelligent Role Detection Badge ──────────────── */
+    .auth-role-badge {
       display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 8px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.07);
-      border-radius: 14px;
-      padding: 14px 16px;
-      cursor: pointer;
-      transition: all 0.25s cubic-bezier(0.25, 1, 0.5, 1);
-      text-align: left;
-      overflow: hidden;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: rgba(0, 200, 255, 0.06);
+      border: 1px solid rgba(0, 200, 255, 0.18);
+      border-radius: 12px;
+      margin-bottom: 20px;
+      transition: all 0.3s ease;
     }
-    .role-card-btn::before {
-      content: '';
-      position: absolute; inset: 0;
-      border-radius: 14px;
-      opacity: 0;
-      background: linear-gradient(135deg, rgba(0,200,255,0.08), rgba(99,102,241,0.06));
-      transition: opacity 0.25s;
-    }
-    .role-card-btn:hover::before { opacity: 1; }
-    .role-card-btn:hover {
-      border-color: rgba(0,200,255,0.25);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-    }
-    .role-card-btn.active {
-      border-color: rgba(0,200,255,0.55);
-      background: rgba(0,200,255,0.07);
-      box-shadow: 0 0 0 1px rgba(0,200,255,0.25), 0 8px 32px rgba(0,200,255,0.12);
-    }
-    .role-card-btn.active::before { opacity: 1; }
-    .role-card-icon {
-      width: 30px; height: 30px;
-      border-radius: 9px;
-      background: rgba(255,255,255,0.06);
-      display: flex; align-items: center; justify-content: center;
-      color: #64748B;
-      transition: all 0.25s;
+    .auth-role-badge-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(0, 200, 255, 0.12);
+      color: #00C8FF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
       flex-shrink: 0;
     }
-    .role-card-btn.active .role-card-icon {
-      background: rgba(0,200,255,0.15);
-      color: #00C8FF;
-      box-shadow: 0 0 10px rgba(0,200,255,0.2);
+    .auth-role-badge-content {
+      display: flex;
+      flex-direction: column;
+      text-align: left;
     }
-    .role-card-btn:hover .role-card-icon {
-      color: #00C8FF;
-    }
-    .role-card-icon svg { width: 15px; height: 15px; stroke: currentColor; }
-    .role-card-name {
-      font-size: 12.5px;
+    .auth-role-badge-title {
+      font-size: 12px;
       font-weight: 700;
+      color: #FFFFFF;
+      line-height: 1.2;
+    }
+    .auth-role-badge-subtitle {
+      font-size: 10.5px;
       color: #94A3B8;
-      transition: color 0.25s;
-      line-height: 1;
     }
-    .role-card-btn.active .role-card-name { color: #fff; }
-    .role-card-btn:hover .role-card-name { color: #cbd5e1; }
-    .role-card-desc {
-      font-size: 10px;
-      color: #475569;
-      font-weight: 500;
-      line-height: 1.3;
-      transition: color 0.25s;
-    }
-    .role-card-btn.active .role-card-desc { color: rgba(0,200,255,0.7); }
-    /* Active checkmark */
-    .role-card-check {
-      position: absolute;
-      top: 10px; right: 10px;
-      width: 16px; height: 16px;
-      border-radius: 50%;
-      background: #00C8FF;
-      display: flex; align-items: center; justify-content: center;
-      opacity: 0;
-      transform: scale(0.5);
-      transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
-    }
-    .role-card-btn.active .role-card-check {
-      opacity: 1;
-      transform: scale(1);
-    }
-    .role-card-check svg { width: 9px; height: 9px; stroke: #080A10; stroke-width: 3; }
-    /* Keep pill hidden — needed by JS but not shown */
-    .role-selector-pill { display: none; }
-    .role-pill-bg { display: none; }
-    .role-pill-btn { display: none; }
 
     /* ── Inputs ─────────────────────────────────────────── */
     .input-wrapper { margin-bottom: 18px; }
@@ -590,16 +531,6 @@ function getAuthHTML(mode) {
 }
 
 function renderLogin() {
-  const roles = [
-    { id: 'student',    name: 'Student',     desc: 'Academic journey',   icon: `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/></svg>` },
-    { id: 'faculty',   name: 'FA Advisor',  desc: 'Mentor workspace',   icon: `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>` },
-    { id: 'department', name: 'Dept. Coord.', desc: 'Dept. management',  icon: `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 22V8h18v14M6 22V12h4v10M14 22V12h4v10M2 2h20"/></svg>` },
-    { id: 'tpo',       name: 'TPO Office',  desc: 'Placement control',  icon: `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>` },
-    { id: 'admin',     name: 'Admin',       desc: 'Institutional ops',  icon: `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>` }
-  ];
-
-  const checkIcon = `<svg fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`;
-
   return `
     <!-- Brand -->
     <div class="auth-brand">
@@ -616,45 +547,30 @@ function renderLogin() {
     <!-- System status badge -->
     <div class="auth-status-badge">
       <span class="auth-status-dot"></span>
-      System Operational — All services live
-    </div>
-
-    <!-- Hidden pill (kept for JS compatibility) -->
-    <div class="role-selector-pill" aria-hidden="true">
-      <div class="role-pill-bg"></div>
-      ${roles.map((r, i) => `
-        <button type="button" class="role-pill-btn ${i === 0 ? 'active' : ''}" data-role="${r.id}">${r.name}</button>
-      `).join('')}
+      Single Sign-On — Automatic Role Routing
     </div>
 
     <!-- Hidden telemetry log (kept for JS) -->
     <div id="telemetry-log-container" style="display:none;"></div>
 
-    <!-- Role Card Grid -->
-    <div class="role-card-grid">
-      ${roles.map((r, i) => `
-        <button type="button"
-          class="role-card-btn ${i === 0 ? 'active' : ''}"
-          data-role-card="${r.id}"
-          data-role="${r.id}"
-          aria-pressed="${i === 0}">
-          <div class="role-card-check">${checkIcon}</div>
-          <div class="role-card-icon">${r.icon}</div>
-          <div class="role-card-name">${r.name}</div>
-          <div class="role-card-desc">${r.desc}</div>
-        </button>
-      `).join('')}
+    <!-- Dynamic Role Detection Badge (Auto updates as user types email) -->
+    <div id="role-detect-badge" class="auth-role-badge animate-fade-in" style="display:none;">
+      <div class="auth-role-badge-icon" id="role-badge-icon">🎓</div>
+      <div class="auth-role-badge-content">
+        <div class="auth-role-badge-title" id="role-badge-title">Student Portal</div>
+        <div class="auth-role-badge-subtitle" id="role-badge-subtitle">Automatic workspace routing detected</div>
+      </div>
     </div>
 
     <!-- Login Form -->
     <form id="login-form">
       <div class="input-wrapper">
-        <label class="input-label">Email Address</label>
+        <label class="input-label">Institutional Email / Register No.</label>
         <div class="input-group-icon">
           <span class="input-icon-left">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
           </span>
-          <input type="email" id="login-email" class="auth-input auth-input-with-icon" placeholder="name@email.com" required>
+          <input type="email" id="login-email" class="auth-input auth-input-with-icon" placeholder="name@university.edu or register no." required autocomplete="username">
         </div>
       </div>
       <div class="input-wrapper">
@@ -666,7 +582,7 @@ function renderLogin() {
           <span class="input-icon-left">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           </span>
-          <input type="password" id="login-password" class="auth-input auth-input-with-icon" placeholder="••••••••" required>
+          <input type="password" id="login-password" class="auth-input auth-input-with-icon" placeholder="••••••••" required autocomplete="current-password">
         </div>
       </div>
 
@@ -676,7 +592,7 @@ function renderLogin() {
       </div>
 
       <button type="submit" class="btn-auth" id="login-submit-btn" style="display:flex; align-items:center; justify-content:center; position:relative;">
-        <span>Sign In</span>
+        <span>Sign In to Workspace</span>
         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="position:absolute; right:20px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </button>
     </form>
@@ -734,9 +650,105 @@ function renderSignup() {
     </p>`;
 }
 
-function initAuth(root, mode, Store, supabase) {
-  let selectedRole = 'student';
+export function detectUserRole(email = '', Store = null) {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (!cleanEmail) return 'student';
 
+  // 1. Check known staff list in Store.staff or fallback default staff registry
+  const staffList = (Store && Store.staff && Store.staff.length > 0) ? Store.staff : [
+    { email: 'fa1@gamail.com', role: 'faculty' },
+    { email: 'fa@placenix.edu', role: 'faculty' },
+    { email: 'faculty@placenix.edu', role: 'faculty' },
+    { email: 'dept@gmail.com', role: 'coordinator' },
+    { email: 'coordinator@placenix.edu', role: 'coordinator' },
+    { email: 'saiganka2410@gmail.com', role: 'tpo' },
+    { email: 'tpo@placenix.edu', role: 'tpo' },
+    { email: 'srithikansrinivasan+admin@gmail.com', role: 'admin' },
+    { email: 'admin@placenix.edu', role: 'admin' },
+    { email: 'saas@placenix.edu', role: 'saas-admin' }
+  ];
+
+  const matchedStaff = staffList.find(s => s.email && s.email.toLowerCase() === cleanEmail);
+  if (matchedStaff && matchedStaff.role && matchedStaff.role !== 'None') {
+    return matchedStaff.role === 'department' ? 'coordinator' : matchedStaff.role;
+  }
+
+  // 2. Check local persistent profile cache
+  try {
+    const profileCache = JSON.parse(localStorage.getItem('placenix_profile_cache') || '{}');
+    const deterministicId = 'usr_' + cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_');
+    const cached = profileCache[deterministicId] || 
+      profileCache[cleanEmail] || 
+      Object.values(profileCache).find(p => (p.email && p.email.toLowerCase() === cleanEmail) || (p.personal_email && p.personal_email.toLowerCase() === cleanEmail));
+    if (cached && cached.role) {
+      return cached.role === 'department' ? 'coordinator' : cached.role;
+    }
+  } catch (e) {}
+
+  // 3. Heuristic pattern recognition based on email handle / prefix
+  const prefix = cleanEmail.split('@')[0];
+  if (/^(admin|superadmin|root|sysadmin)/i.test(prefix) || cleanEmail.includes('+admin')) {
+    return 'admin';
+  }
+  if (/^(tpo|placement|recruiter|placements|t&p)/i.test(prefix) || cleanEmail.includes('+tpo')) {
+    return 'tpo';
+  }
+  if (/^(dept|coordinator|coord|department|hod|hod_)/i.test(prefix) || cleanEmail.includes('+coord') || cleanEmail.includes('+dept')) {
+    return 'coordinator';
+  }
+  if (/^(fa|faculty|advisor|mentor|prof|professor|dr\.)/i.test(prefix) || cleanEmail.includes('+faculty') || cleanEmail.includes('+fa')) {
+    return 'faculty';
+  }
+  if (/^(saas|super)/i.test(prefix)) {
+    return 'saas-admin';
+  }
+
+  // Default fallback for student register numbers / general emails
+  return 'student';
+}
+
+function getRoleMeta(role) {
+  const meta = {
+    'student': {
+      icon: '🎓',
+      title: 'Student Portal',
+      subtitle: 'Academic journey & placement analytics'
+    },
+    'faculty': {
+      icon: '👨‍🏫',
+      title: 'Faculty Advisor Portal',
+      subtitle: 'Mentorship & student endorsement workspace'
+    },
+    'coordinator': {
+      icon: '🏛️',
+      title: 'Department Coordinator Portal',
+      subtitle: 'Departmental telemetry & verification'
+    },
+    'department': {
+      icon: '🏛️',
+      title: 'Department Coordinator Portal',
+      subtitle: 'Departmental telemetry & verification'
+    },
+    'tpo': {
+      icon: '💼',
+      title: 'TPO Placement Office',
+      subtitle: 'Campus recruitment logistics & drives'
+    },
+    'admin': {
+      icon: '🛡️',
+      title: 'Institutional Admin Center',
+      subtitle: 'Global infrastructure & role governance'
+    },
+    'saas-admin': {
+      icon: '⚡',
+      title: 'SaaS Platform Admin',
+      subtitle: 'Multi-tenant cloud management'
+    }
+  };
+  return meta[role] || meta['student'];
+}
+
+function initAuth(root, mode, Store, supabase) {
   const forgotBtn = root.querySelector('#forgot-password-link');
   if (forgotBtn) {
     forgotBtn.onclick = async () => {
@@ -801,7 +813,6 @@ function initAuth(root, mode, Store, supabase) {
 
     logContainer.innerHTML = '';
 
-    // Helper to append a single log line
     function appendLog(log) {
       const line = document.createElement('div');
       line.style.opacity = '0';
@@ -809,10 +820,10 @@ function initAuth(root, mode, Store, supabase) {
       line.style.transition = 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)';
       line.style.fontFamily = 'Courier New, Courier, monospace';
       
-      let typeColor = '#3b82f6'; // blue
-      if (log.type === 'LIVE') typeColor = '#10b981'; // green
-      if (log.type === 'SYNC') typeColor = '#8b5cf6'; // purple
-      if (log.type === 'AUTH') typeColor = '#ec4899'; // pink
+      let typeColor = '#3b82f6';
+      if (log.type === 'LIVE') typeColor = '#10b981';
+      if (log.type === 'SYNC') typeColor = '#8b5cf6';
+      if (log.type === 'AUTH') typeColor = '#ec4899';
 
       line.innerHTML = `<span style="color:${typeColor}; font-weight:700;">[${log.type}]</span> <span style="color:#cbd5e1;">${log.text}</span>`;
       logContainer.appendChild(line);
@@ -834,7 +845,6 @@ function initAuth(root, mode, Store, supabase) {
       }
     }
 
-    // Prefill 3 items
     logMessages.slice(0, 3).forEach(appendLog);
 
     let idx = 3;
@@ -844,59 +854,36 @@ function initAuth(root, mode, Store, supabase) {
     }, 3000);
   }
 
-  // Trigger telemetry logs
   if (mode === 'login') {
     startTelemetryStream();
+
+    // Live email role detection feedback
+    const emailInput = root.querySelector('#login-email');
+    const roleBadge = root.querySelector('#role-detect-badge');
+    const roleIcon = root.querySelector('#role-badge-icon');
+    const roleTitle = root.querySelector('#role-badge-title');
+    const roleSubtitle = root.querySelector('#role-badge-subtitle');
+
+    if (emailInput && roleBadge) {
+      const updateBadge = () => {
+        const val = emailInput.value.trim();
+        if (val.length >= 3) {
+          const detected = detectUserRole(val, Store);
+          const meta = getRoleMeta(detected);
+          if (roleIcon) roleIcon.textContent = meta.icon;
+          if (roleTitle) roleTitle.textContent = meta.title;
+          if (roleSubtitle) roleSubtitle.textContent = meta.subtitle;
+          roleBadge.style.display = 'flex';
+        } else {
+          roleBadge.style.display = 'none';
+        }
+      };
+
+      emailInput.addEventListener('input', updateBadge);
+      emailInput.addEventListener('change', updateBadge);
+      emailInput.addEventListener('blur', updateBadge);
+    }
   }
-
-  // Set up role switcher pill actions
-  const tabs = root.querySelectorAll('.role-pill-btn');
-  const pillBg = root.querySelector('.role-pill-bg');
-  
-  function updatePillPosition(activeTab) {
-    if (!pillBg || !activeTab) return;
-    pillBg.style.left = `${activeTab.offsetLeft}px`;
-    pillBg.style.width = `${activeTab.offsetWidth}px`;
-  }
-
-  tabs.forEach(tab => {
-    tab.onclick = () => {
-      tabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      selectedRole = tab.getAttribute('data-role');
-      updatePillPosition(tab);
-      // Sync card selection too
-      syncCardSelection(selectedRole);
-    };
-  });
-
-  // Position pill initially on student
-  const activeTab = root.querySelector('.role-pill-btn.active');
-  if (activeTab) {
-    setTimeout(() => updatePillPosition(activeTab), 150);
-  }
-
-  // Role Card Grid — wire up click → selectedRole + sync hidden pills
-  function syncCardSelection(roleId) {
-    const cards = root.querySelectorAll('.role-card-btn');
-    cards.forEach(c => {
-      const isActive = c.getAttribute('data-role-card') === roleId;
-      c.classList.toggle('active', isActive);
-      c.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-    });
-    // Also sync hidden pill buttons so JS logic still picks up correct role
-    tabs.forEach(t => {
-      t.classList.toggle('active', t.getAttribute('data-role') === roleId);
-    });
-  }
-
-  const roleCards = root.querySelectorAll('.role-card-btn');
-  roleCards.forEach(card => {
-    card.onclick = () => {
-      selectedRole = card.getAttribute('data-role-card');
-      syncCardSelection(selectedRole);
-    };
-  });
 
   // Clean up interval when view transitions away
   const obs = new MutationObserver(() => {
@@ -921,6 +908,18 @@ function initAuth(root, mode, Store, supabase) {
     const email = root.querySelector('#' + mode + '-email').value.trim().toLowerCase();
     const password = root.querySelector('#' + mode + '-password').value;
 
+    const detectedRole = detectUserRole(email, Store);
+
+    const roleHashMap = {
+      'student': 'student-dashboard',
+      'faculty': 'faculty-dashboard',
+      'tpo': 'tpo-dashboard',
+      'department': 'coordinator-dashboard',
+      'coordinator': 'coordinator-dashboard',
+      'admin': 'admin-dashboard',
+      'saas-admin': 'saas-admin'
+    };
+
     try {
       if (mode === 'login') {
         const loginPromise = supabase.auth.signInWithPassword({ email, password });
@@ -933,7 +932,7 @@ function initAuth(root, mode, Store, supabase) {
           if (error) throw error;
 
           if (data && data.user) {
-            let userRole = data.user.user_metadata?.role || selectedRole;
+            let userRole = data.user.user_metadata?.role || detectedRole;
             try {
               const { data: dbProf } = await supabase.from('profiles').select('role').eq('id', data.user.id).maybeSingle();
               if (dbProf && dbProf.role) {
@@ -959,21 +958,12 @@ function initAuth(root, mode, Store, supabase) {
 
             window.dispatchEvent(new CustomEvent('store-updated'));
 
-            const roleHashMap = {
-              'student': 'student-dashboard',
-              'faculty': 'faculty-dashboard',
-              'tpo': 'tpo-dashboard',
-              'department': 'coordinator-dashboard',
-              'coordinator': 'coordinator-dashboard',
-              'admin': 'admin-dashboard',
-              'saas-admin': 'saas-admin'
-            };
             window.location.hash = roleHashMap[userRole] || 'student-dashboard';
             return;
           }
         } catch (authErr) {
           console.warn('⚠️ Supabase Authentication failed or timed out:', authErr.message);
-          console.log('🔄 Triggering offline sandbox authentication fallback...');
+          console.log('🔄 Triggering offline sandbox authentication fallback with auto-detected role:', detectedRole);
           
           // Construct local mock user profile restoring any previously saved profile details
           const profileCache = JSON.parse(localStorage.getItem('placenix_profile_cache') || '{}');
@@ -991,14 +981,16 @@ function initAuth(root, mode, Store, supabase) {
               (p.roll_number && p.roll_number === regClean)
             ) || {};
 
+          const finalRole = existingProfile.role || detectedRole;
+
           const mockUser = {
             id: existingProfile.id || deterministicId,
             email: email,
             full_name: existingProfile.full_name || regClean,
-            role: existingProfile.role || selectedRole,
+            role: finalRole,
             institution: existingProfile.college || 'Kalasalingam University',
-            register_number: existingProfile.register_number || (selectedRole === 'student' ? regClean : ''),
-            roll_number: existingProfile.roll_number || (selectedRole === 'student' ? regClean : ''),
+            register_number: existingProfile.register_number || (finalRole === 'student' ? regClean : ''),
+            roll_number: existingProfile.roll_number || (finalRole === 'student' ? regClean : ''),
             department: existingProfile.department || 'Computer Science & Engineering',
             cgpa: existingProfile.cgpa || 8.5,
             ...existingProfile
@@ -1006,7 +998,7 @@ function initAuth(root, mode, Store, supabase) {
           
           // Update in-memory registry
           Store.session.user = mockUser;
-          Store.session.role = mockUser.role || selectedRole;
+          Store.session.role = finalRole;
           
           // Persist mock session and cache
           localStorage.setItem('placenix-mock-session', JSON.stringify(mockUser));
@@ -1017,22 +1009,13 @@ function initAuth(root, mode, Store, supabase) {
           if (mockUser.register_number) profileCache[mockUser.register_number] = mockUser;
           localStorage.setItem('placenix_profile_cache', JSON.stringify(profileCache));
           
-          window.showToast('Workspace loaded with persistent profile.', 'success');
+          window.showToast(`Authenticated into ${mockUser.role.toUpperCase()} Workspace.`, 'success');
           
           // Dispatch store update to trigger sidebar/shell updates
           window.dispatchEvent(new CustomEvent('store-updated'));
           
-          // Re-route to target workspace dashboard based on selected role
-          const roleHashMap = {
-            'student': 'student-dashboard',
-            'faculty': 'faculty-dashboard',
-            'tpo': 'tpo-dashboard',
-            'department': 'coordinator-dashboard',
-            'coordinator': 'coordinator-dashboard',
-            'admin': 'admin-dashboard',
-            'saas-admin': 'saas-admin'
-          };
-          const targetHash = roleHashMap[selectedRole] || 'student-dashboard';
+          // Re-route to target workspace dashboard based on detected role
+          const targetHash = roleHashMap[finalRole] || 'student-dashboard';
           window.location.hash = targetHash;
           return;
         }
@@ -1070,7 +1053,7 @@ function initAuth(root, mode, Store, supabase) {
     } catch (err) {
       window.showToast('Security Exception: ' + err.message, 'danger');
       btn.disabled = false;
-      btn.textContent = mode === 'signup' ? 'Begin Onboarding' : 'Sign In';
+      btn.textContent = mode === 'signup' ? 'Begin Onboarding' : 'Sign In to Workspace';
     }
   };
 }
