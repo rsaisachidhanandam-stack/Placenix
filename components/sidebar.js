@@ -108,10 +108,6 @@ const SECTIONS = {
       { label: 'Attendance Tracker', icon: 'clock', route: 'attendance-tracker' },
       { label: 'Slot Allocation', icon: 'intelligence', route: 'slot-allocation' },
       { label: 'Alumni Network', icon: 'network', route: 'alumni-connect' },
-    ]},
-    { label: 'ENGINEERING LABS', items: [
-      { label: '16 Concepts Lab', icon: 'intelligence', route: 'concepts' },
-      { label: 'React Studio & Lab', icon: 'intelligence', route: 'react-studio' },
     ]}
   ],
   'saas-admin': [

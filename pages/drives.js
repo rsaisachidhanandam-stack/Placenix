@@ -3,7 +3,7 @@
 // ============================================================
 
 import { showToast } from '../components/toast.js';
-import { saveStore, syncWithSupabase } from '../store.js';
+import { saveStore, syncWithSupabase, saveLocalDrive, removeLocalDrive } from '../store.js';
 
 export async function loadDrivesPage(root, Store, supabase) {
   let searchQuery = '';
@@ -703,12 +703,13 @@ export async function loadDrivesPage(root, Store, supabase) {
     }
 
     const rounds = roundsStr ? roundsStr.split(',').map(s => s.trim()).filter(Boolean) : ['Aptitude', 'Technical', 'HR'];
+    const packageStr = pkg ? `${pkg} LPA` : '8.0 LPA';
 
     const newDrive = {
-      id: 'd_' + Date.now(),
+      id: 'd_local_' + Date.now(),
       company,
       role,
-      package: pkg ? `${pkg} LPA` : '8.0 LPA',
+      package: packageStr,
       deadline: deadline || '2026-10-30',
       min_cgpa: cgpa,
       location: loc || 'Hybrid',
@@ -717,14 +718,61 @@ export async function loadDrivesPage(root, Store, supabase) {
       rounds,
       applicants: 0,
       description: desc || 'Exciting engineering role working on modern technology stacks.',
-      logo: '🏢'
+      logo: '🏢',
+      _local_pending: true  // marker: not yet confirmed by Supabase
     };
 
+    // ── STEP 1: Write locally immediately (visible to ALL roles on next load) ──
     Store.drives.unshift(newDrive);
-    saveStore();
+    saveLocalDrive(newDrive);   // persists to placenix_local_drives (survives logout + sync)
+    saveStore();                // persists to placenix_drives + dispatches store-updated
     modal.style.display = 'none';
-    showToast(`New recruitment drive for ${company} broadcasted!`, 'success');
+    showToast(`Drive for ${company} created! Broadcasting to all portals...`, 'success');
     render();
+
+    // ── STEP 2: Background push to Supabase (best-effort) ──
+    if (supabase) {
+      try {
+        const packageLpa = parseFloat(pkg) || 8.0;
+        const { data: inserted, error: insertErr } = await supabase.from('drives').insert([{
+          company,
+          role,
+          package_lpa: packageLpa,
+          deadline: deadline || '2026-10-30',
+          min_cgpa: cgpa,
+          eligible_depts: eligibleDepts.length ? eligibleDepts : ['CSE', 'IT', 'ECE'],
+          description: desc || 'Exciting engineering role working on modern technology stacks.',
+          required_skills: rounds,
+          status: 'Open',
+          applicants: 0
+        }]).select().single();
+
+        if (insertErr) {
+          console.warn('⚠️ Supabase drive push failed (drive is safely stored locally):', insertErr.message);
+          showToast(`Drive saved locally — will sync to Supabase when connection is restored.`, 'info');
+        } else if (inserted) {
+          // Supabase confirmed — replace local temp id with real Supabase id
+          console.log('✅ Drive synced to Supabase with id:', inserted.id);
+          removeLocalDrive(newDrive.id);
+
+          // Update the in-memory drive to use the real Supabase id
+          const idx = Store.drives.findIndex(d => String(d.id) === String(newDrive.id));
+          if (idx !== -1) {
+            Store.drives[idx] = {
+              ...Store.drives[idx],
+              id: inserted.id,
+              _local_pending: false
+            };
+          }
+
+          // Persist with the real id and save the confirmed version to local drives list
+          saveStore();
+          showToast(`Drive for ${company} synced to Supabase and broadcast to all portals! ✅`, 'success');
+        }
+      } catch (syncErr) {
+        console.warn('⚠️ Supabase drive sync error (drive safely saved locally):', syncErr.message);
+      }
+    }
   }
 
   // Real-time listener

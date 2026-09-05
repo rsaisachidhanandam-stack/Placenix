@@ -553,6 +553,32 @@ export function healData() {
 }
 
 // ── Supabase & Persistence Layer ────────────────────────────
+// ── saveLocalDrive: persist a TPO-created drive to the local-only drive registry ──
+export function saveLocalDrive(drive) {
+  try {
+    const localDrives = JSON.parse(localStorage.getItem('placenix_local_drives') || '[]');
+    // Deduplicate by ID — update if exists, insert if new
+    const idx = localDrives.findIndex(d => String(d.id) === String(drive.id));
+    if (idx !== -1) {
+      localDrives[idx] = drive;
+    } else {
+      localDrives.unshift(drive);
+    }
+    localStorage.setItem('placenix_local_drives', JSON.stringify(localDrives));
+  } catch (e) {
+    console.warn('⚠️ saveLocalDrive failed:', e);
+  }
+}
+
+// ── removeLocalDrive: called after Supabase confirms the drive was synced ──
+export function removeLocalDrive(driveId) {
+  try {
+    const localDrives = JSON.parse(localStorage.getItem('placenix_local_drives') || '[]');
+    const filtered = localDrives.filter(d => String(d.id) !== String(driveId));
+    localStorage.setItem('placenix_local_drives', JSON.stringify(filtered));
+  } catch (e) {}
+}
+
 export async function syncWithSupabase(supabase) {
   if (!supabase) return;
   
@@ -580,21 +606,67 @@ export async function syncWithSupabase(supabase) {
           deadline: rd.deadline || 'N/A',
           min_cgpa: rd.min_cgpa || 0,
           location: Array.isArray(rd.eligible_depts) ? (rd.eligible_depts[0] || 'General') : (rd.eligible_depts || 'General'),
-          eligible_depts: Array.isArray(rd.eligible_depts) ? rd.eligible_depts.slice(1) : [],
+          eligible_depts: Array.isArray(rd.eligible_depts) ? rd.eligible_depts : [],
           description: rd.description || '',
           rounds: Array.isArray(rd.required_skills) ? rd.required_skills : ['Aptitude', 'Technical', 'HR'],
           status: rd.status || 'Open',
           applicants: rd.applicants || 0,
           logo: rd.company ? rd.company.substring(0, 1).toUpperCase() : '🏢'
         }));
+
       const deletedDrives = JSON.parse(localStorage.getItem('placenix_deleted_drives') || '[]');
-      
-      // Preserve local-only drives that haven't been synced to Supabase (their ID starts with 'd')
-      const localOnlyDrives = (Store.drives || []).filter(d => typeof d.id === 'string' && d.id.startsWith('d'));
-      
-      Store.drives = [...localOnlyDrives, ...mappedDrives].filter(d => !deletedDrives.includes(String(d.id)));
+
+      // ── FIXED: read local-only drives from the dedicated registry, not from in-memory state ──
+      // These are drives created by the TPO that haven't been confirmed by Supabase yet.
+      let localOnlyDrives = [];
+      try {
+        localOnlyDrives = JSON.parse(localStorage.getItem('placenix_local_drives') || '[]');
+      } catch (e) { localOnlyDrives = []; }
+
+      // Determine which local drives have now been confirmed by Supabase (same company+role or matching id)
+      const remoteIds = new Set(mappedDrives.map(d => String(d.id)));
+      const remoteKeys = new Set(mappedDrives.map(d => `${(d.company||'').toLowerCase()}_${(d.role||'').toLowerCase()}`));
+
+      const confirmedLocalIds = [];
+      const stillLocalDrives = localOnlyDrives.filter(ld => {
+        const localKey = `${(ld.company||'').toLowerCase()}_${(ld.role||'').toLowerCase()}`;
+        if (remoteIds.has(String(ld.id)) || remoteKeys.has(localKey)) {
+          // This drive is now in Supabase — schedule removal from local registry
+          confirmedLocalIds.push(String(ld.id));
+          return false;
+        }
+        return !deletedDrives.includes(String(ld.id));
+      });
+
+      // Clean up confirmed drives from local registry
+      if (confirmedLocalIds.length > 0) {
+        localStorage.setItem('placenix_local_drives', JSON.stringify(stillLocalDrives));
+        console.log(`📡 Sync: ${confirmedLocalIds.length} local drive(s) confirmed by Supabase and promoted.`);
+      }
+
+      // Merge: local-only (unsynced) drives take priority, then Supabase drives
+      const allDriveIds = new Set();
+      const mergedDrives = [];
+
+      // 1. Add still-pending local drives first (newest TPO creations)
+      stillLocalDrives.forEach(d => {
+        if (!deletedDrives.includes(String(d.id)) && !allDriveIds.has(String(d.id))) {
+          allDriveIds.add(String(d.id));
+          mergedDrives.push(d);
+        }
+      });
+
+      // 2. Add Supabase drives (deduped)
+      mappedDrives.forEach(d => {
+        if (!deletedDrives.includes(String(d.id)) && !allDriveIds.has(String(d.id))) {
+          allDriveIds.add(String(d.id));
+          mergedDrives.push(d);
+        }
+      });
+
+      Store.drives = mergedDrives;
       localStorage.setItem('placenix_drives', JSON.stringify(Store.drives));
-      console.log('📡 Sync: Recruitment data synchronized.');
+      console.log(`📡 Sync: Recruitment pipeline synchronized — ${Store.drives.length} drives active (${stillLocalDrives.length} local-pending, ${mappedDrives.length} from Supabase).`);
     }
 
     // 2. Sync Student Registry
@@ -722,11 +794,26 @@ export function loadStoreFromLocalStorage() {
     const q = localStorage.getItem('placenix_queries');
     
     const deletedDrives = JSON.parse(localStorage.getItem('placenix_deleted_drives') || '[]');
-    if (d) {
-      try {
-        Store.drives = JSON.parse(d).filter(drive => !deletedDrives.includes(String(drive.id)));
-      } catch(e){}
+
+    // ── FIXED: Load Supabase-synced drives AND local-pending drives, merge them ──
+    const mainDrives = d ? (() => { try { return JSON.parse(d).filter(drive => !deletedDrives.includes(String(drive.id))); } catch(e) { return []; } })() : [];
+    let localPendingDrives = [];
+    try { localPendingDrives = JSON.parse(localStorage.getItem('placenix_local_drives') || '[]').filter(ld => !deletedDrives.includes(String(ld.id))); } catch(e) {}
+
+    // Merge: local-pending drives (newest) + main drives (Supabase-sourced), deduplicated by ID
+    const mergedLoadedIds = new Set();
+    const mergedLoaded = [];
+    [...localPendingDrives, ...mainDrives].forEach(drive => {
+      const key = String(drive.id);
+      if (!mergedLoadedIds.has(key)) {
+        mergedLoadedIds.add(key);
+        mergedLoaded.push(drive);
+      }
+    });
+    if (mergedLoaded.length > 0) {
+      Store.drives = mergedLoaded;
     }
+
     if (s) {
       try {
         const apps = JSON.parse(s);
@@ -825,10 +912,14 @@ export function loadStoreFromLocalStorage() {
       }
     ];
 
-    // Fallback to active placement drives if registry is empty or only has closed drives
-    if (!Store.drives || Store.drives.length === 0 || !Store.drives.some(d => d.status === 'Open')) {
+    // ── FIXED: Only seed default drives on first-ever app load (no drives in localStorage at all) ──
+    // Do NOT override if we have drives already — even if they are all closed.
+    // Previously this incorrectly wiped real data when all drives were auto-closed by deadline.
+    const hasNeverBeenInitialized = !d && localPendingDrives.length === 0;
+    if (hasNeverBeenInitialized || !Store.drives || Store.drives.length === 0) {
       Store.drives = DEFAULT_PLACEMENT_DRIVES;
       localStorage.setItem('placenix_drives', JSON.stringify(Store.drives));
+      console.log('📦 Drive registry seeded with default placement drives (first-time init).');
     }
 
     // Auto-close drives past their deadline
