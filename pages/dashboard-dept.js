@@ -1267,13 +1267,18 @@ export async function loadDeptAnnouncements(root, Store) {
   render();
 }
 
-// ── (g) Queries ──────────────────────────────────────────
+// ── (g) Queries / Institutional Help Desk ───────────────────
 export async function loadDeptQueries(root, Store) {
-  let activeSubTab = 'open'; // open or resolved
+  let activeSubTab = 'open'; // 'open' | 'urgent' | 'resolved' | 'all'
+  let searchQuery = '';
+  let selectedCategory = 'all';
+
+  const userRole = Store.session?.role || 'tpo';
+  const staffName = Store.session?.user?.full_name || (userRole === 'tpo' ? 'TPO Placement Cell' : 'Dept Coordinator');
 
   // Bind global resolve handler
   window.handleResolveQuery = (id) => {
-    const query = Store.queries.find(q => q.id === id);
+    const query = (Store.queries || []).find(q => q.id === id);
     if (!query) return;
 
     const responseText = document.getElementById(`resolution-input-${id}`)?.value?.trim();
@@ -1284,109 +1289,283 @@ export async function loadDeptQueries(root, Store) {
 
     query.status = 'Resolved';
     query.response = responseText;
+    query.resolvedBy = staffName;
+    query.resolvedRole = userRole;
+    query.resolvedAt = new Date().toISOString();
+
+    // Dispatch notification to student
+    if (!Store.notifications) Store.notifications = [];
+    Store.notifications.unshift({
+      id: 'notif_res_' + Date.now(),
+      title: `✓ Query Resolved: ${query.title}`,
+      message: `${staffName} has issued an official resolution directive: "${responseText.substring(0, 80)}..."`,
+      type: 'success',
+      link: 'queries',
+      targetUser: query.studentName,
+      timestamp: new Date().toISOString(),
+      read: false
+    });
+
     saveStore();
+    if (window.NotificationService?.refreshBadge) window.NotificationService.refreshBadge();
+    showToast(`Ticket #${id.substring(0, 8)} successfully resolved. Student notified!`, 'success');
     render();
-    showToast('Query resolution directive submitted successfully.', 'success');
+  };
+
+  // Bind template filler
+  window.fillQueryTemplate = (id, text) => {
+    const el = document.getElementById(`resolution-input-${id}`);
+    if (el) {
+      el.value = text;
+      el.focus();
+    }
   };
 
   const render = () => {
-    const openQueries = (Store.queries || []).filter(q => q.status !== 'Resolved');
-    const resolvedQueries = (Store.queries || []).filter(q => q.status === 'Resolved');
-    const currentList = activeSubTab === 'open' ? openQueries : resolvedQueries;
+    const allQueries = Store.queries || [];
+    const openQueries = allQueries.filter(q => q.status !== 'Resolved');
+    const urgentQueries = allQueries.filter(q => (q.priority === 'Urgent' || q.status === 'Pending TPO') && q.status !== 'Resolved');
+    const resolvedQueries = allQueries.filter(q => q.status === 'Resolved');
+
+    let currentList = allQueries;
+    if (activeSubTab === 'open') currentList = openQueries;
+    else if (activeSubTab === 'urgent') currentList = urgentQueries;
+    else if (activeSubTab === 'resolved') currentList = resolvedQueries;
+
+    // Apply category filter
+    if (selectedCategory !== 'all') {
+      currentList = currentList.filter(q => (q.category || '').toLowerCase().includes(selectedCategory.toLowerCase()));
+    }
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const qLower = searchQuery.toLowerCase().trim();
+      currentList = currentList.filter(q => 
+        (q.title || '').toLowerCase().includes(qLower) ||
+        (q.body || '').toLowerCase().includes(qLower) ||
+        (q.studentName || '').toLowerCase().includes(qLower) ||
+        (q.rollNo || '').toLowerCase().includes(qLower) ||
+        (q.department || '').toLowerCase().includes(qLower)
+      );
+    }
 
     root.innerHTML = `
       <style>
         .query-tab {
-          padding: 10px 20px; font-size: 13px; font-weight: 700; color: var(--text-muted);
+          padding: 8px 18px; font-size: 12.5px; font-weight: 700; color: var(--text-muted);
           cursor: pointer; border-radius: 8px; transition: all 0.2s; border: 1px solid transparent;
+          user-select: none;
         }
         .query-tab.active {
-          background: rgba(124, 58, 237, 0.1); color: var(--brand-secondary); border: 1px solid rgba(124, 58, 237, 0.2);
+          background: rgba(0, 200, 255, 0.12); color: #00C8FF; border: 1px solid rgba(0, 200, 255, 0.25);
+        }
+        .query-tab.tab-urgent.active {
+          background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3);
         }
         .query-card {
-          background: rgba(255,255,255,0.015); border: 1px solid var(--border-subtle); border-radius: 20px; padding: 32px; transition: all 0.2s;
+          background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 28px; transition: all 0.2s;
         }
         .query-card:hover {
           border-color: var(--border-medium);
-          background: rgba(255,255,255,0.025);
+          background: rgba(255,255,255,0.03);
+        }
+        .quick-pill {
+          font-size: 11px; padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,0.04);
+          border: 1px solid var(--border-subtle); color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+        }
+        .quick-pill:hover {
+          background: rgba(0, 200, 255, 0.1); color: #00C8FF; border-color: rgba(0, 200, 255, 0.3);
         }
       </style>
       
-      <div style="padding: 40px; max-width: 1560px; margin: 0 auto; animation: fadeIn 0.4s ease-out;">
-        <div style="margin-bottom: 40px; display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:20px;">
+      <div style="padding: 32px 40px; max-width: 1560px; margin: 0 auto; animation: fadeIn 0.3s ease-out; display:flex; flex-direction:column; gap:28px;">
+        
+        <!-- Header & KPIs -->
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:20px;">
           <div>
-            <h1 class="h1-ent" style="font-size:28px;">Institutional Help Desk</h1>
-            <p style="color:var(--text-description); font-size:14px; margin-top:6px;">Student support resolution node and communication hub.</p>
+            <div style="display:flex; align-items:center; gap:8px; font-size:10px; font-weight:700; color:var(--text-description); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:6px;">
+              <span>TPO Placement Command</span>
+              <span style="opacity:0.3;">/</span>
+              <span style="color:var(--brand-primary);">Query & Help Desk Center</span>
+            </div>
+            <h1 class="h1-ent" style="font-size:26px;">Student Support & Query Resolution Node</h1>
+            <p style="color:var(--text-description); font-size:13.5px; margin-top:4px;">
+              Review student inquiries, resolve slot overlaps and eligibility criteria, and issue official resolution directives.
+            </p>
           </div>
-          <div style="display:flex; gap:12px; background:rgba(0,0,0,0.2); padding:6px; border-radius:12px; width:fit-content;">
-            <div class="query-tab ${activeSubTab === 'open' ? 'active' : ''}" id="tab-queries-open">Open Queries (${openQueries.length})</div>
-            <div class="query-tab ${activeSubTab === 'resolved' ? 'active' : ''}" id="tab-queries-resolved">Resolved (${resolvedQueries.length})</div>
+          
+          <div style="display:flex; gap:12px; flex-wrap:wrap;">
+            <div class="card-ent" style="padding:10px 18px; border:1px solid var(--border-subtle); background:rgba(0,0,0,0.2); border-radius:10px; display:flex; align-items:center; gap:12px;">
+              <span style="font-size:18px;">📬</span>
+              <div>
+                <div style="font-size:10px; color:var(--text-muted); font-weight:700; text-transform:uppercase;">TOTAL TICKETS</div>
+                <div style="font-size:16px; font-weight:800; color:#fff;">${allQueries.length}</div>
+              </div>
+            </div>
+            <div class="card-ent" style="padding:10px 18px; border:1px solid rgba(239,68,68,0.25); background:rgba(239,68,68,0.05); border-radius:10px; display:flex; align-items:center; gap:12px;">
+              <span style="font-size:18px;">🚨</span>
+              <div>
+                <div style="font-size:10px; color:#ef4444; font-weight:700; text-transform:uppercase;">URGENT ACTION</div>
+                <div style="font-size:16px; font-weight:800; color:#ef4444;">${urgentQueries.length}</div>
+              </div>
+            </div>
+            <div class="card-ent" style="padding:10px 18px; border:1px solid rgba(16,185,129,0.25); background:rgba(16,185,129,0.05); border-radius:10px; display:flex; align-items:center; gap:12px;">
+              <span style="font-size:18px;">✅</span>
+              <div>
+                <div style="font-size:10px; color:#10B981; font-weight:700; text-transform:uppercase;">RESOLVED</div>
+                <div style="font-size:16px; font-weight:800; color:#10B981;">${resolvedQueries.length}</div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div style="display:flex; flex-direction:column; gap:24px;">
+        <!-- Filter & Search Toolbar -->
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; background:rgba(0,0,0,0.25); padding:12px 16px; border-radius:12px; border:1px solid var(--border-subtle);">
+          
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <div class="query-tab ${activeSubTab === 'open' ? 'active' : ''}" id="tab-queries-open">Open (${openQueries.length})</div>
+            <div class="query-tab tab-urgent ${activeSubTab === 'urgent' ? 'active' : ''}" id="tab-queries-urgent">🚨 Urgent (${urgentQueries.length})</div>
+            <div class="query-tab ${activeSubTab === 'resolved' ? 'active' : ''}" id="tab-queries-resolved">Resolved (${resolvedQueries.length})</div>
+            <div class="query-tab ${activeSubTab === 'all' ? 'active' : ''}" id="tab-queries-all">All (${allQueries.length})</div>
+          </div>
+
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+            <select id="query-cat-filter" class="input-ent" style="height:38px; font-size:12px; padding:0 12px; background:rgba(0,0,0,0.3); border:1px solid var(--border-subtle); color:#fff; border-radius:8px;">
+              <option value="all" ${selectedCategory === 'all' ? 'selected' : ''}>All Categories</option>
+              <option value="Eligibility" ${selectedCategory === 'Eligibility' ? 'selected' : ''}>🎯 Drive Eligibility</option>
+              <option value="CGPA" ${selectedCategory === 'CGPA' ? 'selected' : ''}>📊 Academic CGPA / Marksheet</option>
+              <option value="Slot" ${selectedCategory === 'Slot' ? 'selected' : ''}>🕒 Slot & Venue Conflict</option>
+              <option value="Resume" ${selectedCategory === 'Resume' ? 'selected' : ''}>📄 Resume & Vault Documents</option>
+              <option value="General" ${selectedCategory === 'General' ? 'selected' : ''}>💡 General Support</option>
+            </select>
+
+            <input type="text" id="query-search-input" value="${searchQuery}" placeholder="Search student, roll, or topic..." class="input-ent" style="height:38px; width:240px; font-size:12px; padding:0 12px; background:rgba(0,0,0,0.3); border:1px solid var(--border-subtle); color:#fff; border-radius:8px;">
+          </div>
+        </div>
+
+        <!-- Queries List Feed -->
+        <div style="display:flex; flex-direction:column; gap:20px;">
           ${currentList.length === 0 ? `
-            <div style="padding: 64px 32px; text-align:center; border: 1.5px dashed var(--border-main); border-radius:24px; background:rgba(255,255,255,0.005); backdrop-filter:blur(8px);">
-              <div style="font-size:48px; margin-bottom:16px;">✉️</div>
-              <h3 style="font-size:18px; font-weight:800; color:#fff; margin-bottom:8px;">No Queries Found</h3>
-              <p style="color:var(--text-description); font-size:13px; max-width:400px; margin:0 auto; line-height:1.5;">There are no help desk tickets in this workspace category.</p>
+            <div style="padding: 64px 32px; text-align:center; border: 1.5px dashed var(--border-main); border-radius:18px; background:rgba(255,255,255,0.005); backdrop-filter:blur(8px);">
+              <div style="font-size:42px; margin-bottom:12px;">✉️</div>
+              <h3 style="font-size:17px; font-weight:800; color:#fff; margin-bottom:6px;">No Tickets in this View</h3>
+              <p style="color:var(--text-description); font-size:13px; max-width:400px; margin:0 auto; line-height:1.5;">All student inquiries in this category have been attended to or none match your search filters.</p>
             </div>
-          ` : currentList.map(q => `
-            <div class="query-card">
-              <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:20px; flex-wrap:wrap; gap:16px;">
-                <div style="display:flex; gap:16px; align-items:center;">
-                  <div style="width:44px; height:44px; background:var(--bg-elevated); border:1px solid var(--border-main); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:900; color:var(--brand-primary);">
+          ` : currentList.map(q => {
+            const isResolved = q.status === 'Resolved';
+            const isUrgent = q.priority === 'Urgent' || q.status === 'Pending TPO';
+
+            return `
+            <div class="query-card" style="border-left: ${isUrgent && !isResolved ? '4px solid #ef4444' : isResolved ? '4px solid #10B981' : '4px solid var(--brand-primary)'};">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:14px;">
+                
+                <div style="display:flex; gap:14px; align-items:center;">
+                  <div style="width:44px; height:44px; background:rgba(0,200,255,0.08); border:1px solid rgba(0,200,255,0.2); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:900; color:var(--brand-primary);">
                     ${(q.studentName || 'S')[0].toUpperCase()}
                   </div>
                   <div>
-                    <h4 style="font-size:17px; font-weight:800; color:#fff; margin:0;">${q.title}</h4>
-                    <div style="display:flex; gap:12px; margin-top:6px; font-size:12px; color:var(--text-muted); font-weight:600;">
-                      <span>Student: <strong>${q.studentName}</strong> (Roll: ${q.rollNo})</span>
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                      <span style="font-size:10px; font-weight:800; background:rgba(255,255,255,0.05); color:var(--text-muted); padding:2px 8px; border-radius:4px; border:1px solid var(--border-subtle);">
+                        ${q.category || 'General Support'}
+                      </span>
+                      ${isUrgent ? '<span style="font-size:9.5px; font-weight:800; background:rgba(239,68,68,0.15); color:#ef4444; padding:2px 8px; border-radius:4px; border:1px solid rgba(239,68,68,0.3);">🚨 URGENT</span>' : ''}
+                      <span style="font-size:11px; color:var(--text-muted);">Dept: <strong>${q.department || 'CSE'}</strong></span>
+                    </div>
+                    <h4 style="font-size:16.5px; font-weight:800; color:#fff; margin:0;">${q.title}</h4>
+                    <div style="display:flex; gap:10px; margin-top:4px; font-size:11.5px; color:var(--text-muted);">
+                      <span>Student: <strong style="color:#fff;">${q.studentName}</strong> (Roll: ${q.rollNo})</span>
                       <span>•</span>
-                      <span>Submitted: ${q.date}</span>
+                      <span>Submitted: ${q.date || 'Recent'}</span>
                     </div>
                   </div>
                 </div>
-                <span class="status-pill ${q.status === 'Resolved' ? 'status-success' : 'status-warning'}" style="font-size:10px; padding:6px 14px; font-weight:900;">
-                  ${q.status === 'Resolved' ? 'RESOLVED' : 'AWAITING ACTION'}
+
+                <span class="status-pill ${isResolved ? 'status-success' : isUrgent ? 'status-danger' : 'status-warning'}" style="font-size:10px; padding:5px 12px; font-weight:800;">
+                  ${isResolved ? '✓ RESOLVED' : isUrgent ? '🚨 URGENT ACTION' : 'AWAITING DIRECTIVE'}
                 </span>
               </div>
               
-              <div style="background:rgba(0,0,0,0.15); border:1px solid var(--border-subtle); padding:20px; border-radius:12px; font-size:14px; color:var(--text-description); line-height:1.6; margin-bottom:24px; font-style:italic;">
+              <!-- Student Query Body -->
+              <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border-subtle); padding:16px 20px; border-radius:10px; font-size:13.5px; color:#e2e8f0; line-height:1.6; margin-bottom:18px;">
                 "${q.body}"
               </div>
 
-              ${q.status === 'Resolved' ? `
-                <div style="background:rgba(16,185,129,0.03); border:1px solid rgba(16,185,129,0.1); padding:20px; border-radius:12px; font-size:14px; color:#10B981; line-height:1.6;">
-                  <strong style="display:block; font-size:11px; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.05em; color:rgba(16,185,129,0.8);">Resolution Directive:</strong>
+              ${q.response && !isResolved ? `
+                <div style="background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.2); padding:12px 16px; border-radius:8px; font-size:12px; color:var(--text-description); line-height:1.5; margin-bottom:18px;">
+                  <strong style="color:var(--brand-primary); display:block; font-size:10.5px; margin-bottom:4px; letter-spacing:0.04em;">🤖 Preliminary AI Diagnosis sent to Student:</strong>
+                  ${q.response}
+                </div>
+              ` : ''}
+
+              ${isResolved ? `
+                <div style="background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.2); padding:16px 20px; border-radius:10px; font-size:13.5px; color:#10B981; line-height:1.6;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <strong style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:rgba(16,185,129,0.9);">
+                      Official Directive Issued by ${q.resolvedBy || 'TPO Placement Cell'} (${q.resolvedRole || 'TPO'})
+                    </strong>
+                    <span style="font-size:10.5px; color:rgba(16,185,129,0.7);">${q.resolvedAt ? new Date(q.resolvedAt).toLocaleString() : ''}</span>
+                  </div>
                   "${q.response}"
                 </div>
               ` : `
-                <div style="display:flex; flex-direction:column; gap:12px;">
-                  <label class="label-ent" style="font-size:9.5px; font-weight:800; color:var(--brand-primary); letter-spacing:0.05em;">DRAFT RESOLUTION DIRECTIVE</label>
-                  <div style="display:flex; gap:16px; flex-wrap:wrap;">
-                    <input type="text" id="resolution-input-${q.id}" placeholder="Specify support details or action directives..." class="input-ent" style="flex:1; min-width:280px; height:48px; background:rgba(255,255,255,0.02); border:1.2px solid var(--border-main); color:#fff; padding:0 16px; border-radius:10px; font-size:13.5px;">
-                    <button class="btn-premium" onclick="window.handleResolveQuery('${q.id}')" style="height:48px; padding:0 24px; font-size:13px; font-weight:900; border-radius:10px; cursor:pointer;">
-                      Resolve Ticket
+                <div style="display:flex; flex-direction:column; gap:10px; background:rgba(255,255,255,0.015); padding:18px; border-radius:12px; border:1px solid var(--border-subtle);">
+                  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <label class="label-ent" style="font-size:10px; font-weight:800; color:var(--brand-primary); letter-spacing:0.05em;">ISSUE OFFICIAL RESOLUTION DIRECTIVE</label>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                      <span class="quick-pill" onclick="window.fillQueryTemplate('${q.id}', '✓ Approved. Special eligibility exception granted for this drive. Please proceed with registration.')">✓ Approve Exception</span>
+                      <span class="quick-pill" onclick="window.fillQueryTemplate('${q.id}', '🗓️ Interview slot successfully rescheduled to Slot 2 (Afternoon Batch) to avoid venue clash.')">🗓️ Reschedule Slot</span>
+                      <span class="quick-pill" onclick="window.fillQueryTemplate('${q.id}', '📄 Marksheet verification confirmed with Controller of Examinations. Profile CGPA updated.')">📄 Marksheet Verified</span>
+                      <span class="quick-pill" onclick="window.fillQueryTemplate('${q.id}', '📍 Please report in person to Placement Cell (Room 204) with original document proofs.')">📍 Visit TPO Office</span>
+                    </div>
+                  </div>
+                  
+                  <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                    <input type="text" id="resolution-input-${q.id}" placeholder="Specify official directive, slot resolution, or exception approval..." class="input-ent" style="flex:1; min-width:280px; height:44px; background:rgba(0,0,0,0.3); border:1.2px solid var(--border-main); color:#fff; padding:0 14px; border-radius:8px; font-size:13px;">
+                    <button class="btn-premium" onclick="window.handleResolveQuery('${q.id}')" style="height:44px; padding:0 22px; font-size:12.5px; font-weight:800; border-radius:8px; cursor:pointer;">
+                      Resolve & Transmit Directive →
                     </button>
                   </div>
                 </div>
               `}
             </div>
-          `).join('')}
+            `;
+          }).join('')}
         </div>
       </div>
     `;
 
     // Bind tab clicks
-    document.getElementById('tab-queries-open').onclick = () => {
-      activeSubTab = 'open';
-      render();
-    };
-    document.getElementById('tab-queries-resolved').onclick = () => {
-      activeSubTab = 'resolved';
-      render();
-    };
+    document.getElementById('tab-queries-open').onclick = () => { activeSubTab = 'open'; render(); };
+    document.getElementById('tab-queries-urgent').onclick = () => { activeSubTab = 'urgent'; render(); };
+    document.getElementById('tab-queries-resolved').onclick = () => { activeSubTab = 'resolved'; render(); };
+    document.getElementById('tab-queries-all').onclick = () => { activeSubTab = 'all'; render(); };
+
+    // Bind category filter
+    const catSelect = document.getElementById('query-cat-filter');
+    if (catSelect) {
+      catSelect.onchange = (e) => {
+        selectedCategory = e.target.value;
+        render();
+      };
+    }
+
+    // Bind search input
+    const sInput = document.getElementById('query-search-input');
+    if (sInput) {
+      sInput.oninput = (e) => {
+        searchQuery = e.target.value;
+        // Debounce render slightly
+        clearTimeout(window.__qSearchTimer);
+        window.__qSearchTimer = setTimeout(() => {
+          render();
+          const nextInput = document.getElementById('query-search-input');
+          if (nextInput) {
+            nextInput.focus();
+            nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
+          }
+        }, 200);
+      };
+    }
   };
 
   render();

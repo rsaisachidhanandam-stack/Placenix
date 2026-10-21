@@ -87,20 +87,38 @@ export async function loadCommPage(root, Store, supabase) {
           id: 'q_' + Date.now(),
           studentName: studentName,
           rollNo: user.roll_number || user.register_number || '99220041005',
+          department: user.department || user.dept || 'CSE',
           category: category,
           priority: priority,
           title: title,
           body: body,
           date: new Date().toISOString().split('T')[0],
-          status: 'AI Assisted',
+          createdAt: new Date().toISOString(),
+          status: priority === 'Urgent' ? 'Pending TPO' : 'Open',
           response: aiDiagnosis,
           humanEscalated: priority === 'Urgent'
         };
 
         if (!Store.queries) Store.queries = [];
         Store.queries.unshift(newQuery);
+
+        // Add real-time notification alert for TPO and coordinators
+        if (!Store.notifications) Store.notifications = [];
+        Store.notifications.unshift({
+          id: 'notif_q_' + Date.now(),
+          title: priority === 'Urgent' ? `🚨 Urgent Query: ${title}` : `📝 New Student Query: ${title}`,
+          message: `${studentName} (${newQuery.rollNo}) submitted a ticket: "${body.substring(0, 70)}..."`,
+          type: priority === 'Urgent' ? 'error' : 'info',
+          link: 'dept-queries',
+          timestamp: new Date().toISOString(),
+          read: false
+        });
+
         saveStore();
-        showToast('Query submitted! Instant AI preliminary diagnosis ready.', 'success');
+        if (window.NotificationService?.refreshBadge) {
+          window.NotificationService.refreshBadge();
+        }
+        showToast('Query submitted! Instant AI diagnostic ready & notified TPO Placement Desk.', 'success');
         render();
       };
 
@@ -108,7 +126,10 @@ export async function loadCommPage(root, Store, supabase) {
         const q = (Store.queries || []).find(item => item.id === id);
         if (q) {
           q.status = 'Resolved';
+          q.resolvedAt = new Date().toISOString();
+          q.resolvedBy = q.resolvedBy || 'Student Confirmed';
           saveStore();
+          if (window.NotificationService?.refreshBadge) window.NotificationService.refreshBadge();
           showToast('Ticket marked as resolved!', 'success');
           render();
         }
@@ -118,8 +139,20 @@ export async function loadCommPage(root, Store, supabase) {
         const q = (Store.queries || []).find(item => item.id === id);
         if (q) {
           q.humanEscalated = true;
+          q.priority = 'Urgent';
           q.status = 'Pending TPO';
+          if (!Store.notifications) Store.notifications = [];
+          Store.notifications.unshift({
+            id: 'notif_esc_' + Date.now(),
+            title: `🚨 Escalated Query: ${q.title}`,
+            message: `${q.studentName} (${q.rollNo}) escalated ticket directly to TPO Placement Cell.`,
+            type: 'error',
+            link: 'dept-queries',
+            timestamp: new Date().toISOString(),
+            read: false
+          });
           saveStore();
+          if (window.NotificationService?.refreshBadge) window.NotificationService.refreshBadge();
           showToast('Ticket escalated directly to TPO Placement Cell queue!', 'info');
           render();
         }
@@ -128,6 +161,7 @@ export async function loadCommPage(root, Store, supabase) {
       window.deleteQueryTicket = (id) => {
         Store.queries = (Store.queries || []).filter(item => item.id !== id);
         saveStore();
+        if (window.NotificationService?.refreshBadge) window.NotificationService.refreshBadge();
         showToast('Ticket removed from registry.', 'info');
         render();
       };
@@ -327,11 +361,19 @@ export async function loadCommPage(root, Store, supabase) {
 
                     <p style="font-size:12px; color:var(--text-description); line-height:1.5; margin:0;">${q.body}</p>
                     
-                    ${q.response ? `
+                    ${isResolved ? `
+                      <div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.3); border-radius:10px; padding:14px 16px;">
+                        <div style="font-size:10.5px; font-weight:800; color:#10B981; margin-bottom:6px; letter-spacing:0.04em; display:flex; justify-content:space-between; align-items:center;">
+                          <span>✓ OFFICIAL RESOLUTION DIRECTIVE (${q.resolvedBy || 'TPO Placement Cell'}):</span>
+                          <span style="opacity:0.8; font-size:10px;">${q.resolvedAt ? formatRelativeTime(q.resolvedAt) : 'Resolved'}</span>
+                        </div>
+                        <p style="font-size:12.5px; color:#fff; line-height:1.5; margin:0; font-weight:500;">${q.response}</p>
+                      </div>
+                    ` : q.response ? `
                       <div style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.25); border-radius:10px; padding:12px 14px;">
                         <div style="font-size:10px; font-weight:800; color:var(--brand-primary); margin-bottom:4px; letter-spacing:0.04em; display:flex; justify-content:space-between; align-items:center;">
-                          <span>DIAGNOSTIC RESOLUTION DIRECTIVE:</span>
-                          <span style="opacity:0.7;">⚡ Automated</span>
+                          <span>PRELIMINARY AI DIAGNOSIS:</span>
+                          <span style="opacity:0.7;">⚡ Instant Analysis</span>
                         </div>
                         <p style="font-size:11.5px; color:#fff; line-height:1.5; margin:0;">${q.response}</p>
                       </div>
@@ -340,7 +382,7 @@ export async function loadCommPage(root, Store, supabase) {
                     <!-- Action Controls for Student -->
                     <div style="display:flex; justify-content:space-between; align-items:center; padding-top:10px; border-top:1px solid var(--glass-border-subtle); flex-wrap:wrap; gap:8px;">
                       <div style="font-size:10.5px; color:var(--text-muted);">
-                        ${isResolved ? '✓ Ticket closed & marked resolved.' : q.humanEscalated ? '📩 Assigned to Human Placement Officer queue.' : '🤖 AI Assisted • Awaiting confirmation'}
+                        ${isResolved ? `✓ Resolved by ${q.resolvedBy || 'Placement Officer'}` : q.humanEscalated ? '📩 Assigned to TPO Placement Cell review queue.' : '🤖 AI Assisted • Awaiting Coordinator / TPO review'}
                       </div>
                       <div style="display:flex; gap:8px;">
                         ${!isResolved ? `
@@ -351,7 +393,7 @@ export async function loadCommPage(root, Store, supabase) {
                             ✓ Mark as Resolved
                           </button>
                         ` : `
-                          <span style="font-size:11px; color:var(--brand-secondary); font-weight:700;">✓ Resolved</span>
+                          <span style="font-size:11px; color:var(--brand-secondary); font-weight:700;">✓ Satisfied & Closed</span>
                         `}
                       </div>
                     </div>

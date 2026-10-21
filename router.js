@@ -187,7 +187,7 @@ async function handleRoute() {
         'tpo': [
           'tpo-dashboard', 'drives', 'kanban', 'attendance-tracker', 'slot-allocation',
           'alumni-connect', 'alumni', 'profile', 'student-details', 'analytics', 'completed-batches',
-          'new-applications', 'interview-repo', 'virtual-interview'
+          'new-applications', 'interview-repo', 'virtual-interview', 'dept-queries', 'queries'
         ],
         'coordinator': [
           'coordinator-dashboard', 'department-dashboard', 'dept-students', 'dept-resume',
@@ -201,14 +201,14 @@ async function handleRoute() {
         ],
         'faculty': [
           'faculty-dashboard', 'fa-students', 'fa-resume', 'fa-skills', 'fa-new-jobs',
-          'fa-prev-jobs', 'attendance-tracker', 'slot-allocation', 'my-slots', 'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview', 'react-studio'
+          'fa-prev-jobs', 'attendance-tracker', 'slot-allocation', 'my-slots', 'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview', 'react-studio', 'dept-queries', 'queries'
         ],
         'admin': [
           'admin-dashboard', 'admin-setup', 'admin-staff', 'admin-roles', 'admin-mapping',
-          'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview', 'react-studio'
+          'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview', 'react-studio', 'dept-queries', 'queries'
         ],
         'saas-admin': [
-          'saas-admin', 'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview', 'react-studio'
+          'saas-admin', 'alumni-connect', 'alumni', 'profile', 'student-details', 'virtual-interview', 'react-studio', 'dept-queries', 'queries'
         ]
       };
 

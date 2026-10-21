@@ -15,20 +15,21 @@ const ICONS = {
 
 const SECTIONS = {
   student: [
-    { label: 'OPERATIONAL', items: [
-      { label: 'Intelligence Node', icon: 'dashboard', route: 'student-dashboard' },
+    { label: 'OVERVIEW', items: [
+      { label: 'Student Dashboard', icon: 'dashboard', route: 'student-dashboard' },
       { label: 'Academic Profile', icon: 'user', route: 'student-details' },
     ]},
-    { label: 'AI INTELLIGENCE', items: [
-      { label: 'Resume Scan', icon: 'intelligence', route: 'resume-analysis' },
+    { label: 'CAREER INTELLIGENCE', items: [
+      { label: 'Resume ATS Scan', icon: 'intelligence', route: 'resume-analysis' },
       { label: 'Employability Score', icon: 'intelligence', route: 'employability' },
-      { label: 'AI Modules', icon: 'intelligence', route: 'ai-modules' },
+      { label: 'AI Virtual Coach', icon: 'intelligence', route: 'virtual-interview' },
+      { label: 'AI Preparation Modules', icon: 'intelligence', route: 'ai-modules' },
     ]},
-    { label: 'RECRUITMENT', items: [
+    { label: 'CAMPUS PLACEMENT', items: [
       { label: 'Opportunity Hub', icon: 'recruitment', route: 'new-applications' },
       { label: 'My Interview Slots', icon: 'clock', route: 'my-slots' },
     ]},
-    { label: 'ECOSYSTEM', items: [
+    { label: 'NETWORK & HELP', items: [
       { label: 'Alumni Network', icon: 'network', route: 'alumni-connect' },
       { label: 'Communication Hub', icon: 'support', route: 'communication' },
       { label: 'Query Center', icon: 'support', route: 'queries' },
@@ -107,6 +108,7 @@ const SECTIONS = {
       { label: 'Previous Job Application', icon: 'recruitment', route: 'kanban' },
       { label: 'Attendance Tracker', icon: 'clock', route: 'attendance-tracker' },
       { label: 'Slot Allocation', icon: 'intelligence', route: 'slot-allocation' },
+      { label: 'Query Center', icon: 'support', route: 'dept-queries' },
       { label: 'Alumni Network', icon: 'network', route: 'alumni-connect' },
     ]}
   ],
@@ -129,18 +131,18 @@ export function renderSidebar(role, activeRoute, user) {
   const initials = (user?.full_name || 'U').split(' ').map(n=>n[0]).join('').toUpperCase();
 
   const navHTML = sections.map(section => `
-    <div class="label-ent" style="margin: 32px 24px 12px; font-size:10px; opacity:0.5;">${section.label}</div>
+    <div class="label-ent" style="margin: 24px 20px 8px; font-size:10.5px; font-weight:700; color:var(--text-muted); letter-spacing:0.08em;">${section.label}</div>
     ${section.items.map(item => {
       const isActive = item.route === activeRoute;
       return `
         <a class="sidebar-item ${isActive ? 'active' : ''}" 
            data-route="${item.route}" 
            href="#${item.route}"
-           style="display: flex; align-items: center; gap: 12px; padding: 10px 20px; margin: 2px 12px; border-radius: 10px; text-decoration: none; transition: var(--t-fast);">
-          <span style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex-shrink: 0; opacity: ${isActive ? '1' : '0.5'}; color: ${isActive ? 'var(--brand-primary)' : 'var(--text-description)'};">
+           style="display: flex; align-items: center; gap: 12px; padding: 10px 16px; margin: 2px 10px; border-radius: 10px; text-decoration: none; transition: all var(--t-fast); ${isActive ? 'background: rgba(0, 200, 255, 0.12); border: 1px solid rgba(0, 200, 255, 0.30); box-shadow: 0 0 16px rgba(0, 200, 255, 0.14);' : 'border: 1px solid transparent;'}">
+          <span style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex-shrink: 0; color: ${isActive ? 'var(--brand-primary)' : 'var(--text-secondary)'};">
             ${ICONS[item.icon] || ''}
           </span>
-          <span style="font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: ${isActive ? '#fff' : 'var(--text-description)'};">
+          <span style="font-size: 13.5px; font-weight: ${isActive ? '700' : '500'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: ${isActive ? '#FFFFFF' : 'var(--text-secondary)'};">
             ${item.label}
           </span>
         </a>`;
@@ -148,32 +150,36 @@ export function renderSidebar(role, activeRoute, user) {
   `).join('');
 
   return `
-    <div class="sidebar-header" style="padding: 32px 24px 24px;">
-      <div class="flex items-center" style="display: flex; align-items: center; gap: 12px;">
-        <div style="width:32px; height:32px; background:var(--brand-primary); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; box-shadow:0 8px 16px -4px rgba(0,200,255,0.4); flex-shrink:0;">🎓</div>
-        <span class="h2-ent" style="font-size:20px; letter-spacing:-0.05em; font-weight:800; color:#fff;">Placenix</span>
+    <div class="sidebar-header" style="padding: 24px 20px 20px; border-bottom: 1px solid var(--border-subtle);">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width:36px; height:36px; background:linear-gradient(135deg, #00C8FF, #0077CC); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; box-shadow:0 4px 16px rgba(0,200,255,0.35); flex-shrink:0;">🎓</div>
+        <div>
+          <div style="font-family:var(--font-display); font-size:18px; letter-spacing:-0.03em; font-weight:800; color:#fff; line-height:1.2;">Placenix</div>
+          <div style="font-size:10px; font-weight:700; color:var(--brand-primary); letter-spacing:0.06em; text-transform:uppercase;">Campus Placement OS</div>
+        </div>
       </div>
     </div>
     
-    <div class="sidebar-scroll" style="flex:1; overflow-y:auto; padding-bottom:40px;">
+    <div class="sidebar-scroll" style="flex:1; overflow-y:auto; padding-bottom:32px;">
       ${navHTML}
     </div>
     
-    <div class="sidebar-footer" style="padding: 24px; border-top: 1px solid var(--border-subtle); background: rgba(0,0,0,0.2);">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-4" style="min-width:0;">
-          <div style="width:36px;height:36px;background:var(--bg-elevated);border:1px solid var(--border-main);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--brand-primary);">${initials}</div>
+    <div class="sidebar-footer" style="padding: 16px 20px; border-top: 1px solid var(--border-subtle); background: rgba(5, 8, 16, 0.7); backdrop-filter: blur(8px);">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+          <div style="width:36px;height:36px;background:linear-gradient(135deg, rgba(0,200,255,0.15), rgba(139,92,246,0.15));border:1px solid rgba(0,200,255,0.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--brand-primary);flex-shrink:0;">${initials}</div>
           <div style="overflow:hidden;">
-            <div style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap;text-overflow:ellipsis;">${user?.full_name || 'Operational User'}</div>
-            <div class="label-ent" style="font-size:9px;color:var(--text-muted);">${role} Workspace</div>
+            <div style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap;text-overflow:ellipsis;">${user?.full_name || 'Student User'}</div>
+            <div style="font-size:11px;color:var(--text-muted);text-transform:capitalize;">${role} Workspace</div>
           </div>
         </div>
-        <button id="logout-btn" class="sidebar-footer-btn" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:8px;border-radius:8px;">${ICONS['log-out']}</button>
+        <button id="logout-btn" class="sidebar-footer-btn" title="Sign Out" style="background:rgba(255,255,255,0.04);border:1px solid var(--border-subtle);color:var(--text-muted);cursor:pointer;padding:8px;border-radius:8px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;">${ICONS['log-out']}</button>
       </div>
     </div>
 
     <style>
-      .sidebar-footer-btn:hover { background: var(--bg-hover); color: #fff; }
+      .sidebar-footer-btn:hover { background: rgba(239, 68, 68, 0.15) !important; color: #EF4444 !important; border-color: rgba(239, 68, 68, 0.3) !important; }
+      .sidebar-item:hover { background: rgba(255,255,255,0.06) !important; color: #FFFFFF !important; }
     </style>
   `;
 }
@@ -185,51 +191,58 @@ export function renderTopbar(user, route) {
     <div class="topbar glass-shell" style="
       height: 72px; border-bottom: 1px solid var(--border-subtle);
       display: flex; align-items: center; justify-content: space-between;
-      padding: 0 40px; position: sticky; top: 0; z-index: 100;
+      padding: 0 36px; position: sticky; top: 0; z-index: 100;
+      background: var(--glass-1); backdrop-filter: var(--blur-lg); -webkit-backdrop-filter: var(--blur-lg);
     ">
-      <div class="flex items-center gap-4">
-        <div class="label-ent" style="display:flex; align-items:center; gap:10px;">
-          <span>Workspace</span>
-          <span style="opacity:0.2;">/</span>
-          <span style="color:#fff; font-weight:800;">${routeName}</span>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600;">
+          <span style="color:var(--text-muted);">Workspace</span>
+          <span style="color:var(--text-dim);">/</span>
+          <span style="color:#fff; font-weight:700;">${routeName}</span>
         </div>
       </div>
 
-      <div style="display:flex; align-items:center; gap:40px;">
-        <!-- Placenix Global Neural Search -->
+      <div style="display:flex; align-items:center; gap:20px;">
+        <!-- Global Search Bar -->
         <div id="placenix-search-wrap" style="position:relative;">
-          <div style="background:var(--bg-graphite); border:1.2px solid var(--border-main); padding:0 20px; height:44px; border-radius:14px; display:flex; align-items:center; gap:12px; width:360px; transition: var(--t-standard);" id="placenix-search-bar">
-            <svg width="16" height="16" fill="none" stroke="var(--text-muted)" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input id="placenix-search-input" type="text" placeholder="Search operational infrastructure..." style="background:none; border:none; color:#fff; font-size:14px; outline:none; width:100%; font-weight:500;">
-            <div style="font-size:11px; color:var(--text-muted); border:1px solid var(--border-subtle); padding:3px 8px; border-radius:8px; font-weight:800; background:rgba(255,255,255,0.03); letter-spacing:0.05em;">⌘K</div>
+          <div style="background:rgba(15, 23, 42, 0.75); border:1px solid var(--border-subtle); padding:0 16px; height:42px; border-radius:12px; display:flex; align-items:center; gap:10px; width:340px; transition: var(--t-standard);" id="placenix-search-bar">
+            <svg width="15" height="15" fill="none" stroke="var(--text-muted)" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="placenix-search-input" type="text" placeholder="Search drives, companies, skills, prep..." style="background:none; border:none; color:#fff; font-size:13px; outline:none; width:100%; font-weight:500;">
+            <div style="font-size:10.5px; color:var(--text-muted); border:1px solid var(--border-subtle); padding:2px 7px; border-radius:6px; font-weight:700; background:rgba(255,255,255,0.04); letter-spacing:0.04em;">⌘K</div>
           </div>
           <!-- Search Results Dropdown -->
           <div id="placenix-search-results" style="
-            display:none; position:absolute; top:52px; left:0; right:0;
-            background:#111113; border:1px solid var(--border-main); border-radius:14px;
-            box-shadow:0 20px 60px rgba(0,0,0,.6); overflow:hidden; z-index:9999;
+            display:none; position:absolute; top:48px; left:0; right:0;
+            background:#0D1424; border:1px solid var(--border-main); border-radius:14px;
+            box-shadow:0 20px 60px rgba(0,0,0,.7); overflow:hidden; z-index:9999;
             max-height:380px; overflow-y:auto;
           "></div>
         </div>
 
         <div id="notif-wrapper" style="position:relative;">
-          <div id="notif-bell-btn" role="button" aria-label="Notifications" style="position:relative; cursor:pointer; color:var(--text-muted); display:flex; align-items:center; justify-content:center; padding:8px; border-radius:10px; transition:all 0.2s;" onmouseover="this.style.color='#fff'; this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.color='var(--text-muted)'; this.style.background='transparent'">
-             <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-             <span id="notif-badge" style="position:absolute; top:-2px; right:-2px; background:#00C8FF; color:#050810; font-size:10px; font-weight:900; min-width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid #050810; box-shadow:0 0 10px #00C8FF; padding:0 3px;">0</span>
+          <div id="notif-bell-btn" role="button" aria-label="Notifications" style="position:relative; cursor:pointer; color:var(--text-secondary); display:flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); transition:all 0.2s;" onmouseover="this.style.color='#fff'; this.style.borderColor='rgba(0,200,255,0.3)'; this.style.background='rgba(0,200,255,0.08)'" onmouseout="this.style.color='var(--text-secondary)'; this.style.borderColor='var(--border-subtle)'; this.style.background='rgba(255,255,255,0.03)'">
+             <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+             <span id="notif-badge" style="position:absolute; top:-3px; right:-3px; background:#00C8FF; color:#050810; font-size:10px; font-weight:900; min-width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid #070B14; box-shadow:0 0 10px rgba(0,200,255,0.6); padding:0 3px;">0</span>
           </div>
         </div>
-          <div style="width:40px; height:40px; background:rgba(0,200,255,0.12); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:900; color:var(--brand-primary); cursor:pointer; border:1px solid rgba(0,200,255,0.25);">
+
+        <!-- User Profile Pill -->
+        <div style="display:flex; align-items:center; gap:10px; padding:4px 12px 4px 4px; background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); border-radius:100px;">
+          <div style="width:32px; height:32px; background:linear-gradient(135deg, #00C8FF 0%, #3B82F6 100%); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; color:#050810; box-shadow:0 0 12px rgba(0,200,255,0.4);">
             ${(user?.full_name || 'U')[0]}
           </div>
+          <div style="font-size:12.5px; font-weight:600; color:#fff; padding-right:4px;">
+            ${(user?.full_name || 'Student').split(' ')[0]}
+          </div>
+        </div>
       </div>
+      <style>
+        .placenix-sr-item { display:flex; align-items:center; gap:12px; padding:12px 16px; cursor:pointer; transition:background .15s; text-decoration:none; color:inherit; }
+        .placenix-sr-item:hover { background:rgba(255,255,255,.06); }
+        .placenix-sr-divider { font-size:9px; font-weight:800; color:var(--text-muted); letter-spacing:.1em; text-transform:uppercase; padding:10px 16px 4px; }
+        .placenix-sr-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; }
+      </style>
     </div>
-
-    <style>
-      .placenix-sr-item { display:flex; align-items:center; gap:12px; padding:12px 16px; cursor:pointer; transition:background .15s; text-decoration:none; color:inherit; }
-      .placenix-sr-item:hover { background:rgba(255,255,255,.06); }
-      .placenix-sr-divider { font-size:9px; font-weight:800; color:var(--text-muted); letter-spacing:.1em; text-transform:uppercase; padding:10px 16px 4px; }
-      .placenix-sr-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; }
-    </style>
   `;
 }
 
@@ -255,6 +268,7 @@ export function initTopbarEvents(Store) {
     { label:'Attendance Tracker',      route:'attendance-tracker',  icon:'✅', cat:'Logistics' },
     { label:'Interview Experiences Repo', route:'interview-repo',   icon:'📂', cat:'Knowledge' },
     { label:'Communication Hub',       route:'communication',       icon:'💬', cat:'Operations' },
+    { label:'Query Center & Help Desk', route:'dept-queries',       icon:'🎫', cat:'Support' },
     { label:'AI Intelligence Modules', route:'ai-modules',          icon:'🧠', cat:'AI Intelligence' },
     { label:'My Interview Slots',      route:'my-slots',            icon:'🗓️', cat:'Recruitment' },
     { label:'SaaS Super Admin',        route:'saas-admin',          icon:'☁️', cat:'Platform Control' },

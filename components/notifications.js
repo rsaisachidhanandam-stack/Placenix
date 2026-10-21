@@ -129,18 +129,25 @@ const NotificationService = (function () {
           );
         });
 
-      // Query replies
+      // Query resolution updates for this student
       (store.queries || [])
-        .filter(q => q.status === 'Replied' || q.status === 'Resolved')
-        .slice(0, 2)
+        .filter(q => {
+          const cardName = (q.studentName || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+          const cardRoll = String(q.rollNo || '').trim();
+          const userRoll = String(user?.roll_number || user?.register_number || '').trim();
+          const isMyQuery = (!rawName && !userRoll) || (rawName && cardName && (cardName.includes(rawName) || rawName.includes(cardName))) || (userRoll && cardRoll && userRoll === cardRoll);
+          return isMyQuery && (q.status === 'Resolved' || q.response);
+        })
+        .slice(0, 4)
         .forEach((q, i) => {
+          const isResolved = q.status === 'Resolved';
           push(
             _id('qrep', q.id || i),
             'query_reply',
-            `Query Replied`,
-            `TPO responded: "${(q.subject || q.message || 'your query').substring(0, 45)}..."`,
-            'communication',
-            _ago(48 + i * 24)
+            isResolved ? `✓ Official Directive: ${q.title || 'Query Resolved'}` : `AI Diagnosis Ready: ${q.title || 'Query'}`,
+            `${q.resolvedBy || 'Placement Desk'}: "${(q.response || '').substring(0, 50)}..."`,
+            'queries',
+            q.resolvedAt || q.createdAt || q.date || _ago(i * 12 + 1)
           );
         });
     }
@@ -186,6 +193,22 @@ const NotificationService = (function () {
           _ago(3)
         );
       }
+
+      // Student help desk tickets awaiting TPO action
+      (store.queries || [])
+        .filter(q => q.status !== 'Resolved')
+        .slice(0, 6)
+        .forEach((q, i) => {
+          const isUrgent = q.priority === 'Urgent' || q.status === 'Pending TPO';
+          push(
+            _id('tpo_q', q.id || i),
+            'query_received',
+            isUrgent ? `🚨 Urgent Query: ${q.title || 'Help Desk Ticket'}` : `New Student Query: ${q.title || 'Help Desk Ticket'}`,
+            `${q.studentName || 'Student'} (${q.rollNo || q.department || 'Batch'}): "${(q.body || '').substring(0, 50)}..."`,
+            'dept-queries',
+            q.createdAt || q.date || _ago(i * 3 + 1)
+          );
+        });
 
       (store.students || []).slice(0, 2).forEach((s, i) => {
         push(
@@ -242,16 +265,20 @@ const NotificationService = (function () {
           );
         });
 
-      (store.queries || []).slice(0, 2).forEach((q, i) => {
-        push(
-          _id('dept_q', q.id || i),
-          'query_received',
-          `Student Query Received`,
-          `"${(q.subject || q.message || 'Query').substring(0, 45)}"`,
-          'dept-queries',
-          _ago(i * 24 + 6)
-        );
-      });
+      (store.queries || [])
+        .filter(q => q.status !== 'Resolved')
+        .slice(0, 6)
+        .forEach((q, i) => {
+          const isUrgent = q.priority === 'Urgent';
+          push(
+            _id('dept_q', q.id || i),
+            'query_received',
+            isUrgent ? `🚨 Urgent Student Query: ${q.title || 'Ticket'}` : `Help Desk Ticket: ${q.title || 'Query'}`,
+            `${q.studentName || 'Student'} (${q.rollNo || q.department || ''}): "${(q.body || '').substring(0, 50)}..."`,
+            'dept-queries',
+            q.createdAt || q.date || _ago(i * 3 + 1)
+          );
+        });
     }
 
     /* ── FACULTY ──────────────────────────────────────── */

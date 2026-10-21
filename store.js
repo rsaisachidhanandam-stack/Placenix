@@ -1280,8 +1280,60 @@ export function loadStoreFromLocalStorage() {
 
     if (!Store.queries || Store.queries.length === 0) {
       Store.queries = [
-        { id: 'q1', studentName: 'srithikan s', rollNo: '1111111', title: 'Request for Resume Review Assistance', body: 'I have uploaded my primary resume. Could you please review if the keyword alignment is ATS-ready?', date: '2026-05-28', status: 'Pending', response: '' },
-        { id: 'q2', studentName: 'Sai R', rollNo: '3652148', title: 'Infosys Operational Drive Query', body: 'The Infosys drive details mention a minimum CGPA of 7.0, but the portal does not let me register. Please verify.', date: '2026-05-27', status: 'Pending', response: '' }
+        {
+          id: 'q_101',
+          studentId: 'st_1',
+          studentName: 'srithikan s',
+          rollNo: '99220041005',
+          department: 'CSE',
+          category: '🕒 Slot & Venue Conflict',
+          priority: 'Urgent',
+          title: 'Overlapping Amazon SDE & Cisco Technical Interview Slots',
+          body: 'My technical interview for Amazon Round 2 (Slot 1, 10:00 AM) clashes with the Cisco Systems assessment scheduled at 10:30 AM in Seminar Hall A. Requesting slot adjustment.',
+          date: '2026-09-06',
+          createdAt: new Date(Date.now() - 3600000 * 3).toISOString(),
+          status: 'Pending TPO',
+          response: '🤖 AI Diagnostic Analysis: Identified schedule overlap. Escalated to TPO Placement Cell for slot reassignment.',
+          humanEscalated: true
+        },
+        {
+          id: 'q_102',
+          studentId: 'st_2',
+          studentName: 'Priya Sharma',
+          rollNo: '99220041042',
+          department: 'ECE',
+          category: '🎯 Drive Eligibility',
+          priority: 'Normal',
+          title: 'Freshworks Drive CGPA Cutoff Clarification',
+          body: 'My aggregate CGPA is 7.48. Will rounding off to 7.5 be eligible for the Freshworks Enterprise product developer recruitment round?',
+          date: '2026-09-05',
+          createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
+          status: 'Resolved',
+          response: 'Approved for registration. Freshworks has granted eligibility exception for candidates with CGPA >= 7.45. Ensure your resume is uploaded before deadline.',
+          resolvedBy: 'TPO Placement Cell',
+          resolvedRole: 'tpo',
+          resolvedAt: new Date(Date.now() - 3600000 * 12).toISOString(),
+          humanEscalated: false
+        },
+        {
+          id: 'q_103',
+          studentId: 'st_3',
+          studentName: 'Sai R',
+          rollNo: '3652148',
+          department: 'CSE',
+          category: '📄 Resume & Vault Documents',
+          priority: 'Normal',
+          title: 'Request for Resume Review & ATS Keyword Verification',
+          body: 'I have uploaded my primary resume. Could you please review if the keyword alignment is ATS-ready for upcoming Tier-1 Cloud Architect drives?',
+          date: '2026-09-04',
+          createdAt: new Date(Date.now() - 3600000 * 48).toISOString(),
+          status: 'Resolved',
+          response: 'Resume verified. Keyword density for Cloud Architecture, REST APIs, and Docker is within optimal ATS thresholds (84%). Ready for submission.',
+          resolvedBy: 'Dept Placement Coordinator',
+          resolvedRole: 'coordinator',
+          resolvedAt: new Date(Date.now() - 3600000 * 36).toISOString(),
+          humanEscalated: false
+        }
       ];
     }
 

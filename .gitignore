@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+package-lock.json.backup
+
+# Testing & Uploads artifacts
+scratch/uploads/upl_*
+
+# Logs & Runtime
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Environment Local Overrides
+.env.local
+.env.*.local
+
+# OS & Editor metadata
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
