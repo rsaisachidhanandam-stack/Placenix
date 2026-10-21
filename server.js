@@ -58,14 +58,16 @@ function loadEnv() {
         if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
           val = val.substring(1, val.length - 1);
         }
-        process.env[key] = val;
+        if (process.env[key] === undefined) {
+          process.env[key] = val;
+        }
       }
     });
   }
 }
 loadEnv();
 
-const PORT = process.env.PORT || 3000;
+let currentPort = parseInt(process.env.PORT || '3001', 10);
 const PUBLIC_DIR = __dirname;
 
 const MIME_TYPES = {
@@ -840,7 +842,8 @@ async function handleApiRoutes(req, res) {
 function handleSsrRoutes(req, res) {
   const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   if (urlObj.pathname === '/ssr/drives') {
-    const html = SsrEngine.renderDrivesPage(drivesDatabase, `http://${req.headers.host || 'localhost:3000'}`);
+    const host = req.headers.host || `localhost:${currentPort}`;
+    const html = SsrEngine.renderDrivesPage(drivesDatabase, `http://${host}`);
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(html);
     return true;
@@ -945,16 +948,40 @@ server.on('upgrade', (req, socket, head) => {
   }
 });
 
-server.listen(PORT, () => {
+server.on('listening', () => {
+  const addr = server.address();
+  const boundPort = typeof addr === 'object' && addr ? addr.port : currentPort;
+  currentPort = boundPort;
   console.log(`=======================================================`);
-  console.log(`🚀 Placenix Enterprise Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Placenix Enterprise Server running on http://localhost:${boundPort}`);
   console.log(`🛡️ Middleware: CORS, Logger, RateLimiter, BodyParser, Sanitizer`);
   console.log(`📡 REST API: /api/v1/health, /api/v1/drives, /api/v1/mongo/logs`);
   console.log(`⚡ Caching: Redis Cache-Aside enabled (/api/v1/cache/demo)`);
-  console.log(`🌐 Real-Time: RFC 6455 WebSocket Gateway at ws://localhost:${PORT}/ws`);
-  console.log(`📄 SSR Engine: Server-Side Rendered Drives at http://localhost:${PORT}/ssr/drives`);
+  console.log(`🌐 Real-Time: RFC 6455 WebSocket Gateway at ws://localhost:${boundPort}/ws`);
+  console.log(`📄 SSR Engine: Server-Side Rendered Drives at http://localhost:${boundPort}/ssr/drives`);
   console.log(`=======================================================`);
 });
+
+function startServer(portToListen) {
+  server.listen(portToListen);
+}
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.warn(`⚠️ Port ${currentPort} is currently occupied by another process.`);
+    const nextPort = currentPort + 1;
+    console.log(`🔄 Automatically retrying on next available port: http://localhost:${nextPort}...`);
+    currentPort = nextPort;
+    server.close(() => {
+      startServer(currentPort);
+    });
+  } else {
+    console.error('🔥 Fatal Server Error:', err);
+    process.exit(1);
+  }
+});
+
+startServer(currentPort);
 
 // Graceful Shutdown for Container Orchestrators
 const handleShutdown = (signal) => {

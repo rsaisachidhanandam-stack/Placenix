@@ -556,8 +556,12 @@ input.input-ent::-webkit-calendar-picker-indicator:hover {
   color: var(--text-muted) !important;
 }
 
-[data-theme="light"] select,
-[data-theme="light"] input,
+[data-theme="light"] {
+  --bg-input: #FFFFFF;
+}
+
+[data-theme="light"] select:not(.pf-input),
+[data-theme="light"] input:not(.pf-input),
 [data-theme="light"] option,
 [data-theme="light"] [style*="background-color:rgba(0,0,0"],
 [data-theme="light"] [style*="background-color: rgba(0,0,0"],

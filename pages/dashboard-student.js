@@ -95,8 +95,8 @@ export async function loadStudentDash(root, Store, supabase) {
     
     const empScore = Store.session.user.employability_data?.overall_score || studentRec.employability_data?.overall_score || studentRec.empScore || 70;
     const technicalSkill = Store.session.user.employability_data?.score_breakdown?.technical || studentRec.employability_data?.score_breakdown?.technical || Math.min(100, Math.round(empScore * 1.1)) || 75;
-    const activeEngagementsCount = Store.studentProfile.applications.length || 0;
-    const pendingReviewsCount = Store.studentProfile.applications.filter(a => a.status === 'Applied' || a.status === 'Shortlisted').length;
+    const activeEngagementsCount = Store.studentProfile?.applications?.length || 0;
+    const pendingReviewsCount = (Store.studentProfile?.applications || []).filter(a => a.status === 'Applied' || a.status === 'Shortlisted').length;
     
     if (Store.slotAllocations && Array.isArray(Store.slotAllocations)) {
       Store.slotAllocations.forEach(alloc => {
@@ -174,237 +174,441 @@ export async function loadStudentDash(root, Store, supabase) {
       return matchCohort;
     });
 
+    const openDrivesCount = Store.drives.filter(d=>d.status==='Open').length;
+    const shortName = studentName ? studentName.split(' ')[0] : 'Student';
+
     root.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 32px;">
+      <div style="display: flex; flex-direction: column; gap: 28px;">
         
-        <!-- Operational Header -->
-        <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+        <!-- Professional Welcome Header -->
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-subtle);">
           <div>
-            <div class="label-ent" style="margin-bottom: 8px; color:var(--brand-primary);">${Store.session.user.institution || 'Placenix Institutional Node'}</div>
-            <h1 class="h1-ent">Operational Intelligence</h1>
-          </div>
-          <div style="display:flex; gap:16px;">
-            <div class="card-glass" style="padding:8px 16px; border-radius:10px; display:flex; align-items:center; gap:12px; font-size:13px; font-weight:700; border: 1px solid var(--glass-border-main);">
-              <div style="width:8px; height:8px; background:var(--brand-secondary); border-radius:50%; box-shadow:0 0 8px var(--brand-secondary);"></div>
-              Node Active: ${Store.session.user.full_name || Store.session.user.name || 'Student'}
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+              <span style="font-size:11.5px; font-weight:700; color:var(--brand-primary); text-transform:uppercase; letter-spacing:0.08em; background:rgba(0, 200, 255, 0.08); border:1px solid rgba(0, 200, 255, 0.25); padding:4px 12px; border-radius:100px; display:inline-flex; align-items:center; gap:6px;">
+                <span>🎓</span> ${Store.session.user.institution || 'Campus Placement Workspace'}
+              </span>
+              <span style="font-size:12px; color:var(--text-muted);">•</span>
+              <span style="font-size:12.5px; font-weight:600; color:var(--text-secondary);">
+                ${studentDept} Department
+              </span>
+              <span style="font-size:12px; color:var(--text-muted);">•</span>
+              <span style="font-size:12.5px; font-weight:600; color:var(--text-muted);">
+                Batch of 2026
+              </span>
             </div>
+            <h1 class="h1-ent" style="font-size:28px; letter-spacing:-0.03em; margin:0 0 6px 0; color:#fff;">
+              Welcome back, <span style="background:linear-gradient(135deg, #FFFFFF 30%, #00C8FF 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">${shortName}</span> 👋
+            </h1>
+            <p style="font-size:14px; color:var(--text-description); margin:0;">
+              Your career readiness index, active placement pipeline, and real-time interview schedules.
+            </p>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div style="padding:8px 16px; border-radius:100px; display:flex; align-items:center; gap:10px; font-size:12.5px; font-weight:700; background:rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); color:#10B981;">
+              <span style="width:8px; height:8px; background:#10B981; border-radius:50%; box-shadow:0 0 10px #10B981;"></span>
+              Placement Cycle Active
+            </div>
+            <a href="#new-applications" class="btn-premium" style="padding:10px 18px; border-radius:10px; text-decoration:none; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:8px;">
+              <span>💼</span> Browse Drives
+            </a>
+            <a href="#virtual-interview" class="btn-premium-ghost" style="padding:10px 18px; border-radius:10px; text-decoration:none; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:8px;">
+              <span>🤖</span> AI Mock Coach
+            </a>
           </div>
         </div>
 
-        <!-- Metric Infrastructure -->
-        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 24px;">
-          <div class="card-ent" style="background: linear-gradient(145deg, var(--glass-2), rgba(129,140,248,0.06));">
-            <div class="label-ent" style="margin-bottom: 16px;">Employability Node</div>
-            <div class="metric-ent">${technicalSkill}</div>
-            <div style="height:6px; background:rgba(255,255,255,0.05); border-radius:10px; overflow:hidden; margin-top:16px;">
-              <div style="width:${technicalSkill}%; height:100%; background:linear-gradient(90deg, var(--brand-primary), #8B5CF6); box-shadow:0 0 12px var(--brand-primary);"></div>
-            </div>
-          </div>
-
-          <div class="card-ent">
-            <div class="label-ent" style="margin-bottom: 16px;">Active Engagements</div>
-            <div class="metric-ent">${activeEngagementsCount}</div>
-            <p style="font-size:13px; color:var(--text-description); margin-top:8px;">${pendingReviewsCount} Pending institutional reviews</p>
-          </div>
-
-          <div class="card-ent">
-            <div class="label-ent" style="margin-bottom: 16px;">Market Readiness</div>
-            <div class="metric-ent">${technicalSkill >= 80 ? 'Tier 1' : 'Tier 2'}</div>
-            <p style="font-size:13px; color:var(--text-description); margin-top:8px;">Top ${technicalSkill >= 85 ? '10%' : technicalSkill >= 75 ? '25%' : '40%'} of ${studentDept} Department</p>
-          </div>
-
-          <div class="card-ent">
-            <div class="label-ent" style="margin-bottom: 16px;">Total Institutional Opportunities</div>
-            <div class="metric-ent">${Store.drives.filter(d=>d.status==='Open').length}</div>
-            <p style="font-size:13px; color:var(--text-description); margin-top:8px;">New drives this week: <span style="color:var(--brand-secondary); font-weight:700;">+${Store.drives.filter(d=>d.status==='Open').length > 3 ? '1' : '2'}</span></p>
-          </div>
-        </div>
-
-        <!-- Primary Content Area -->
-        <div style="display:grid; grid-template-columns: 2fr 1fr; gap: 40px;">
+        <!-- 4 Refined KPI Metric Cards -->
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 20px;">
           
-          <div style="display:flex; flex-direction:column; gap:40px;">
-            <!-- Scheduled Rounds Node -->
-            ${myAllocations.length === 0 ? `
-              <div class="card-ent animate-fade-in-up" style="background: var(--glass-1); border: 1px dashed var(--glass-border-strong); padding: 48px 32px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; text-align:center; position:relative; overflow:hidden;">
-                <div style="width:56px; height:56px; border-radius:50%; background:rgba(129,140,248,0.12); border:1px solid rgba(129,140,248,0.25); display:flex; align-items:center; justify-content:center; font-size:24px; color:var(--brand-primary);">🕒</div>
-                <div>
-                  <h3 style="font-family:var(--font-display); font-size:17px; font-weight:700; color:#fff; margin:0 0 8px 0;">No Active Schedules Released</h3>
-                  <p style="color:var(--text-description); font-size:13.5px; max-width:440px; margin:0; line-height:1.7;">
-                    Your upcoming recruitment round slots and venue details will appear here in real-time once published by training and placement officers.
+          <!-- KPI 1: Employability Index -->
+          <div class="card-ent" style="background: linear-gradient(145deg, rgba(13, 22, 42, 0.9), rgba(9, 14, 28, 0.96)); border: 1px solid rgba(0, 200, 255, 0.22); padding: 22px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 12px;">
+              <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-description);">Employability Index</span>
+              <div style="width:34px; height:34px; border-radius:10px; background:rgba(0, 200, 255, 0.12); border:1px solid rgba(0, 200, 255, 0.25); display:flex; align-items:center; justify-content:center; font-size:16px;">🎯</div>
+            </div>
+            <div style="display:flex; align-items:baseline; gap:6px;">
+              <div class="metric-ent" style="font-size:36px; line-height:1; font-weight:800; color:#fff;">${technicalSkill}</div>
+              <span style="font-size:14px; font-weight:700; color:var(--text-muted);">/ 100</span>
+              <span style="margin-left:auto; font-size:11px; font-weight:700; color:#10B981; background:rgba(16, 185, 129, 0.12); border:1px solid rgba(16, 185, 129, 0.25); padding:2px 8px; border-radius:100px;">▲ +4%</span>
+            </div>
+            <div style="height:6px; background:rgba(255,255,255,0.06); border-radius:10px; overflow:hidden; margin-top:14px;">
+              <div style="width:${technicalSkill}%; height:100%; background:linear-gradient(90deg, #00C8FF, #8B5CF6); border-radius:10px; box-shadow:0 0 10px rgba(0,200,255,0.5);"></div>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:12px; color:var(--text-description);">
+              <span>Readiness Tier</span>
+              <span style="color:#00C8FF; font-weight:700;">${technicalSkill >= 80 ? 'Tier 1 Dream' : 'Benchmark'}</span>
+            </div>
+          </div>
+
+          <!-- KPI 2: Active Applications -->
+          <div class="card-ent" style="background: linear-gradient(145deg, rgba(13, 20, 38, 0.9), rgba(9, 13, 26, 0.95)); border: 1px solid rgba(255, 255, 255, 0.08); padding: 22px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 12px;">
+              <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-description);">Active Applications</span>
+              <div style="width:34px; height:34px; border-radius:10px; background:rgba(139, 92, 246, 0.12); border:1px solid rgba(139, 92, 246, 0.25); display:flex; align-items:center; justify-content:center; font-size:16px;">💼</div>
+            </div>
+            <div style="display:flex; align-items:baseline; gap:6px;">
+              <div class="metric-ent" style="font-size:36px; line-height:1; font-weight:800; color:#fff;">${activeEngagementsCount}</div>
+              <span style="font-size:13px; font-weight:600; color:var(--text-muted);">${activeEngagementsCount === 1 ? 'Drive Applied' : 'Drives Applied'}</span>
+            </div>
+            <div style="margin-top:14px; padding-top:10px; border-top:1px dashed rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:space-between;">
+              <span style="font-size:12px; color:var(--text-description);">${pendingReviewsCount} Under Review</span>
+              <a href="#new-applications" style="font-size:12px; font-weight:700; color:var(--brand-primary); text-decoration:none;">View All →</a>
+            </div>
+          </div>
+
+          <!-- KPI 3: Campus Readiness Tier -->
+          <div class="card-ent" style="background: linear-gradient(145deg, rgba(13, 20, 38, 0.9), rgba(9, 13, 26, 0.95)); border: 1px solid rgba(255, 255, 255, 0.08); padding: 22px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 12px;">
+              <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-description);">Placement Tier</span>
+              <div style="width:34px; height:34px; border-radius:10px; background:rgba(16, 185, 129, 0.12); border:1px solid rgba(16, 185, 129, 0.25); display:flex; align-items:center; justify-content:center; font-size:16px;">🏆</div>
+            </div>
+            <div style="display:flex; align-items:baseline; gap:6px;">
+              <div class="metric-ent" style="font-size:34px; line-height:1; font-weight:800; color:#10B981;">${technicalSkill >= 80 ? 'Tier 1' : 'Tier 2'}</div>
+              <span style="font-size:11px; font-weight:700; color:#10B981; background:rgba(16, 185, 129, 0.12); border:1px solid rgba(16, 185, 129, 0.25); padding:2px 8px; border-radius:100px;">Dream Pool</span>
+            </div>
+            <div style="margin-top:14px; padding-top:10px; border-top:1px dashed rgba(255,255,255,0.08);">
+              <p style="font-size:12px; color:var(--text-description); margin:0;">Top ${technicalSkill >= 85 ? '10%' : technicalSkill >= 75 ? '25%' : '40%'} of ${studentDept} Department</p>
+            </div>
+          </div>
+
+          <!-- KPI 4: Open Drives Available -->
+          <div class="card-ent" style="background: linear-gradient(145deg, rgba(13, 20, 38, 0.9), rgba(9, 13, 26, 0.95)); border: 1px solid rgba(255, 255, 255, 0.08); padding: 22px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 12px;">
+              <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-description);">Eligible Campus Drives</span>
+              <div style="width:34px; height:34px; border-radius:10px; background:rgba(245, 158, 11, 0.12); border:1px solid rgba(245, 158, 11, 0.25); display:flex; align-items:center; justify-content:center; font-size:16px;">🏢</div>
+            </div>
+            <div style="display:flex; align-items:baseline; gap:6px;">
+              <div class="metric-ent" style="font-size:36px; line-height:1; font-weight:800; color:#fff;">${openDrivesCount}</div>
+              <span style="font-size:13px; font-weight:600; color:var(--text-muted);">Open Drives</span>
+              <span style="margin-left:auto; font-size:11px; font-weight:700; color:#F59E0B; background:rgba(245, 158, 11, 0.12); border:1px solid rgba(245, 158, 11, 0.25); padding:2px 8px; border-radius:100px;">+2 New</span>
+            </div>
+            <div style="margin-top:14px; padding-top:10px; border-top:1px dashed rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:space-between;">
+              <span style="font-size:12px; color:var(--text-description);">Upcoming Deadlines</span>
+              <a href="#new-applications" style="font-size:12px; font-weight:700; color:var(--brand-primary); text-decoration:none;">Apply Now →</a>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Primary Content Area (2-Column Grid) -->
+        <div style="display:grid; grid-template-columns: 2fr 1fr; gap: 28px;">
+          
+          <!-- Left Column (Main Workflows) -->
+          <div style="display:flex; flex-direction:column; gap:28px;">
+            
+            <!-- Interview Schedule / Upcoming Slots -->
+            <div>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 14px;">
+                <h3 style="font-family:var(--font-display); font-size:17px; font-weight:700; color:#fff; margin:0; display:flex; align-items:center; gap:8px;">
+                  <span>📅</span> Upcoming Interview Rounds & Schedules
+                </h3>
+                <a href="#my-slots" style="font-size:12.5px; font-weight:700; color:var(--brand-primary); text-decoration:none;">
+                  View All Slots →
+                </a>
+              </div>
+
+              ${myAllocations.length === 0 ? `
+                <div class="card-ent animate-fade-in-up" style="padding: 36px 28px; text-align: center; border: 1px dashed rgba(255,255,255,0.12); background: rgba(13, 20, 36, 0.5);">
+                  <div style="width:52px; height:52px; border-radius:14px; background:linear-gradient(135deg, rgba(0,200,255,0.12), rgba(139,92,246,0.12)); border:1px solid rgba(0,200,255,0.25); display:flex; align-items:center; justify-content:center; font-size:24px; margin:0 auto 14px;">
+                    🕒
+                  </div>
+                  <h4 style="font-family:var(--font-display); font-size:16px; font-weight:700; color:#fff; margin:0 0 6px 0;">No Active Schedules Released</h4>
+                  <p style="color:var(--text-description); font-size:13.5px; max-width:440px; margin:0 auto 18px; line-height:1.6;">
+                    When training and placement officers publish shortlists or allocate interview slots for your applied companies, your reporting schedule and venue details will appear here in real time.
                   </p>
-                </div>
-              </div>
-            ` : myAllocations.map(alloc => `
-              <div class="card-ent card-dark clickable-slot-card animate-fade-in-up" onclick="window.location.hash='my-slots'" style="background: linear-gradient(135deg, rgba(129,140,248,0.12), rgba(52,211,153,0.04)); border: 1.5px solid rgba(129,140,248,0.25); padding:32px; display:flex; flex-direction:column; gap:16px; position:relative; overflow:hidden;">
-                <!-- Decorative background elements -->
-                <div style="position:absolute; right:-20px; top:-20px; font-size:96px; opacity:0.04; transform:rotate(15deg); font-weight:900; user-select:none;">📅</div>
-                
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
-                  <div>
-                    <span class="badge badge-success badge-dot" style="margin-bottom:8px; font-size:10px; background:var(--success-bg); border-color:var(--success-border);">SCHEDULED ROUND</span>
-                    <h2 class="h2-ent" style="font-size:22px; color:#fff; margin:0;">${alloc.company} — ${alloc.roundName}</h2>
-                    <p style="color:var(--text-description); font-size:14px; margin:4px 0 0 0;">Designation: ${alloc.role}</p>
-                  </div>
-                  <div style="text-align:right;">
-                    <div class="label-ent" style="color:var(--brand-secondary); font-size:10px; margin-bottom:4px;">Date of Process</div>
-                    <div style="font-weight:800; color:#fff; font-size:16px; font-family:var(--font-display);">${alloc.date}</div>
+                  <div style="display:flex; justify-content:center; gap:12px; flex-wrap:wrap;">
+                    <a href="#new-applications" class="btn-premium" style="padding:8px 16px; font-size:12.5px; text-decoration:none; border-radius:8px;">Explore Open Drives</a>
+                    <a href="#virtual-interview" class="btn-premium-ghost" style="padding:8px 16px; font-size:12.5px; text-decoration:none; border-radius:8px;">Practice AI Mock Coach</a>
                   </div>
                 </div>
-                
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:8px; padding-top:16px; border-top:1px dashed rgba(255,255,255,0.08);">
-                  <div style="display:flex; align-items:center; gap:12px;">
-                    <div style="width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border-main); display:flex; align-items:center; justify-content:center; font-size:16px;">🏢</div>
+              ` : myAllocations.map(alloc => `
+                <div class="card-ent clickable-slot-card animate-fade-in-up" onclick="window.location.hash='my-slots'" style="background: linear-gradient(135deg, rgba(13, 22, 42, 0.9), rgba(9, 14, 28, 0.95)); border: 1px solid rgba(0, 200, 255, 0.25); padding:24px; display:flex; flex-direction:column; gap:16px; position:relative; overflow:hidden;">
+                  <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
                     <div>
-                      <div class="label-ent" style="font-size:9px; margin-bottom:2px;">VENUE ROOM</div>
-                      <div style="font-weight:700; color:#fff; font-size:14px;">${alloc.venue}</div>
+                      <span class="badge badge-success badge-dot" style="margin-bottom:8px; font-size:10px; background:rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); color:#10B981;">SCHEDULED ROUND</span>
+                      <h3 style="font-family:var(--font-display); font-size:19px; font-weight:700; color:#fff; margin:4px 0 2px 0;">${alloc.company} — ${alloc.roundName}</h3>
+                      <p style="color:var(--text-description); font-size:13.5px; margin:0;">Role: <strong style="color:var(--text-secondary);">${alloc.role}</strong></p>
+                    </div>
+                    <div style="text-align:right;">
+                      <div style="font-size:10.5px; font-weight:700; color:var(--brand-primary); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px;">Date of Process</div>
+                      <div style="font-weight:800; color:#fff; font-size:15px; font-family:var(--font-display);">${alloc.date}</div>
                     </div>
                   </div>
-                  <div style="display:flex; align-items:center; gap:12px;">
-                    <div style="width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border-main); display:flex; align-items:center; justify-content:center; font-size:16px;">🕒</div>
-                    <div>
-                      <div class="label-ent" style="font-size:9px; margin-bottom:2px;">SLOT INTERVAL</div>
-                      <div style="font-weight:700; color:#fff; font-size:14px;">${alloc.slotTime}</div>
+                  
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; padding-top:14px; border-top:1px dashed rgba(255,255,255,0.08);">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                      <div style="width:34px; height:34px; border-radius:8px; background:rgba(255,255,255,0.04); border:1px solid var(--border-subtle); display:flex; align-items:center; justify-content:center; font-size:15px;">🏢</div>
+                      <div>
+                        <div style="font-size:9.5px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Venue / Hall</div>
+                        <div style="font-weight:700; color:#fff; font-size:13.5px;">${alloc.venue}</div>
+                      </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                      <div style="width:34px; height:34px; border-radius:8px; background:rgba(255,255,255,0.04); border:1px solid var(--border-subtle); display:flex; align-items:center; justify-content:center; font-size:15px;">🕒</div>
+                      <div>
+                        <div style="font-size:9.5px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Slot Interval</div>
+                        <div style="font-weight:700; color:#fff; font-size:13.5px;">${alloc.slotTime}</div>
+                      </div>
                     </div>
                   </div>
                 </div>
+              `).join('')}
+            </div>
+
+            <!-- Employability Growth Trajectory (Interactive Chart) -->
+            <div class="card-ent" style="padding:28px;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; flex-wrap:wrap; gap:12px;">
+                <div>
+                  <h3 style="font-family:var(--font-display); font-size:18px; font-weight:700; color:#fff; margin:0 0 4px 0;">Employability & Skill Trajectory</h3>
+                  <p style="color:var(--text-description); font-size:13.5px; margin:0;">Continuous benchmarking across coding, system architecture, and technical interview assessments.</p>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px; background:rgba(0,0,0,0.3); border:1px solid var(--border-subtle); padding:3px; border-radius:8px;">
+                  <button class="filter-tab active" style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; border:none; background:rgba(0,200,255,0.15); color:var(--brand-primary); cursor:pointer;">All Time</button>
+                  <button class="filter-tab" style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600; border:none; background:transparent; color:var(--text-muted); cursor:pointer;">90 Days</button>
+                  <button class="filter-tab" style="padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600; border:none; background:transparent; color:var(--text-muted); cursor:pointer;">Sem 6</button>
+                </div>
               </div>
-            `).join('')}
- 
-            <!-- Shared Resources Panel -->
+              
+              <div style="height:260px; width:100%; position:relative; margin-bottom:20px;">
+                <svg width="100%" height="100%" viewBox="0 0 800 260" preserveAspectRatio="none" style="display:block;">
+                  <defs>
+                    <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="#00C8FF" stop-opacity="0.25"/>
+                      <stop offset="100%" stop-color="#00C8FF" stop-opacity="0.0"/>
+                    </linearGradient>
+                  </defs>
+                  
+                  <!-- Grid telemetry references -->
+                  <line x1="0" y1="50" x2="800" y2="50" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 6" />
+                  <line x1="0" y1="110" x2="800" y2="110" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 6" />
+                  <line x1="0" y1="170" x2="800" y2="170" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 6" />
+
+                  <!-- Text Labels inside SVG -->
+                  <text x="10" y="45" fill="#64748B" font-size="10" font-weight="600">90% — Tier 1 Target</text>
+                  <text x="10" y="105" fill="#64748B" font-size="10" font-weight="600">75% — Campus Benchmark</text>
+                  <text x="10" y="165" fill="#64748B" font-size="10" font-weight="600">60% — Minimum Criteria</text>
+
+                  <!-- Paths -->
+                  <path d="M0,230 Q160,210 280,140 T540,95 T800,35 L800,260 L0,260 Z" fill="url(#chartGrad)"/>
+                  <path d="M0,230 Q160,210 280,140 T540,95 T800,35" fill="none" stroke="#00C8FF" stroke-width="3" stroke-linecap="round"/>
+                  
+                  <!-- Milestone 1 -->
+                  <circle cx="280" cy="140" r="8" fill="#00C8FF" fill-opacity="0.2" />
+                  <circle cx="280" cy="140" r="4" fill="#fff" stroke="#00C8FF" stroke-width="2.5"/>
+
+                  <!-- Milestone 2 -->
+                  <circle cx="540" cy="95" r="8" fill="#00C8FF" fill-opacity="0.2" />
+                  <circle cx="540" cy="95" r="4" fill="#fff" stroke="#00C8FF" stroke-width="2.5"/>
+                  
+                  <!-- Current Peak -->
+                  <circle cx="796" cy="35" r="10" fill="#00C8FF" fill-opacity="0.3" class="pulse-ring-element" />
+                  <circle cx="796" cy="35" r="4.5" fill="#fff" stroke="#00C8FF" stroke-width="3"/>
+                </svg>
+
+                <div style="position:absolute; top:20px; right:20px; background:rgba(10, 16, 30, 0.85); backdrop-filter:blur(8px); padding:10px 16px; border-radius:10px; border:1px solid rgba(0,200,255,0.25); box-shadow:0 4px 20px rgba(0,0,0,0.4);">
+                  <div style="font-size:10px; font-weight:700; color:var(--brand-primary); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:2px;">Target Readiness</div>
+                  <div style="font-weight:800; color:#fff; font-size:13.5px; font-family:var(--font-display);">Tier 1 High Probability (${technicalSkill}%)</div>
+                </div>
+              </div>
+
+              <!-- 4 Skill Breakdown Bars -->
+              <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:14px; padding-top:16px; border-top:1px solid var(--border-subtle);">
+                <div>
+                  <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:12px;">
+                    <span style="font-weight:600; color:var(--text-secondary);">💻 Data Structures & Algorithms</span>
+                    <span style="font-weight:700; color:#00C8FF;">86%</span>
+                  </div>
+                  <div style="height:5px; background:rgba(255,255,255,0.06); border-radius:10px; overflow:hidden;">
+                    <div style="width:86%; height:100%; background:#00C8FF; border-radius:10px;"></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:12px;">
+                    <span style="font-weight:600; color:var(--text-secondary);">⚙️ Core CS (OS, DBMS, Networks)</span>
+                    <span style="font-weight:700; color:#10B981;">88%</span>
+                  </div>
+                  <div style="height:5px; background:rgba(255,255,255,0.06); border-radius:10px; overflow:hidden;">
+                    <div style="width:88%; height:100%; background:#10B981; border-radius:10px;"></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:12px;">
+                    <span style="font-weight:600; color:var(--text-secondary);">🏗️ System Design & Cloud Basics</span>
+                    <span style="font-weight:700; color:#8B5CF6;">80%</span>
+                  </div>
+                  <div style="height:5px; background:rgba(255,255,255,0.06); border-radius:10px; overflow:hidden;">
+                    <div style="width:80%; height:100%; background:#8B5CF6; border-radius:10px;"></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:12px;">
+                    <span style="font-weight:600; color:var(--text-secondary);">💬 Communication & Behavioral</span>
+                    <span style="font-weight:700; color:#F59E0B;">82%</span>
+                  </div>
+                  <div style="height:5px; background:rgba(255,255,255,0.06); border-radius:10px; overflow:hidden;">
+                    <div style="width:82%; height:100%; background:#F59E0B; border-radius:10px;"></div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Prep Materials Shared by Advisors -->
             ${myResources.length > 0 ? `
-              <div class="card-ent card-dark animate-fade-in-up" style="padding:40px; background:linear-gradient(135deg, rgba(52,211,153,0.03) 0%, rgba(0,0,0,0) 100%); border:1px solid rgba(52,211,153,0.2);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+              <div class="card-ent animate-fade-in-up" style="padding:28px; background:linear-gradient(135deg, rgba(16,185,129,0.04) 0%, rgba(0,0,0,0) 100%); border:1px solid rgba(16,185,129,0.2);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                   <div>
-                    <h2 class="h2-ent" style="font-size:19px; margin:0; display:flex; align-items:center; gap:8px;">📚 Prep Materials Shared by Advisors</h2>
-                    <p style="color:var(--text-description); font-size:13.5px; margin-top:2px;">Curated prep resources assigned by your Faculty Advisor.</p>
+                    <h3 style="font-family:var(--font-display); font-size:17px; font-weight:700; color:#fff; margin:0 0 2px 0; display:flex; align-items:center; gap:8px;">
+                      <span>📚</span> Curated Prep Materials from Faculty Advisors
+                    </h3>
+                    <p style="color:var(--text-description); font-size:13px; margin:0;">Targeted technical guides and practice materials assigned for your section.</p>
                   </div>
-                  <span class="status-pill status-success" style="font-size:11px; padding:4px 12px; border-radius:100px;">
+                  <span class="status-pill status-success" style="font-size:11px; padding:3px 10px; border-radius:100px; background:rgba(16,185,129,0.15); color:#10B981; border:1px solid rgba(16,185,129,0.3);">
                     ${myResources.length} Active
                   </span>
                 </div>
                 
-                <div style="display:flex; flex-direction:column; gap:16px;">
+                <div style="display:flex; flex-direction:column; gap:12px;">
                   ${myResources.map(res => `
-                    <div style="padding:20px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border-main); border-radius:12px; display:flex; flex-direction:column; gap:12px;">
-                       <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                    <div style="padding:16px 20px; background:rgba(0,0,0,0.3); border:1px solid var(--border-subtle); border-radius:10px; display:flex; flex-direction:column; gap:10px;">
+                      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                         <div>
-                          <span style="font-size:11px; font-weight:800; color:var(--brand-primary); text-transform:uppercase; letter-spacing:0.05em; background:var(--brand-primary-light); padding:4px 8px; border-radius:4px;">
+                          <span style="font-size:10.5px; font-weight:700; color:var(--brand-primary); text-transform:uppercase; letter-spacing:0.06em; background:rgba(0,200,255,0.1); padding:2px 8px; border-radius:4px;">
                             ${res.type}
                           </span>
-                          <h4 style="font-size:15px; font-weight:700; color:#fff; margin:8px 0 2px 0; font-family:var(--font-display);">${res.title}</h4>
+                          <h4 style="font-size:15px; font-weight:700; color:#fff; margin:6px 0 2px 0; font-family:var(--font-display);">${res.title}</h4>
                           <div style="font-size:12px; color:var(--text-muted);">Assigned by ${res.shared_by} on ${res.date}</div>
                         </div>
                         ${res.link ? `
-                          <a href="${res.link}" target="_blank" class="btn-premium" style="padding:8px 16px; font-size:12px; text-decoration:none; display:inline-flex; align-items:center; gap:4px; height:auto; min-height:auto;">
-                            <span>🔗</span> Open Link
+                          <a href="${res.link}" target="_blank" class="btn-premium" style="padding:6px 14px; font-size:12px; text-decoration:none; display:inline-flex; align-items:center; gap:4px; min-height:36px;">
+                            <span>🔗</span> Open
                           </a>
                         ` : ''}
                       </div>
-                      <p style="font-size:13px; color:var(--text-description); line-height:1.6; margin:0; background:rgba(0,0,0,0.25); padding:10px 14px; border-radius:8px;">
-                        <strong>Advisor Notes:</strong> ${res.notes}
-                      </p>
+                      ${res.notes ? `
+                        <p style="font-size:12.5px; color:var(--text-description); line-height:1.5; margin:0; background:rgba(255,255,255,0.03); padding:8px 12px; border-radius:6px;">
+                          <strong>Advisor Notes:</strong> ${res.notes}
+                        </p>
+                      ` : ''}
                     </div>
                   `).join('')}
                 </div>
               </div>
             ` : ''}
- 
-            <!-- Trajectory Panel -->
-            <div class="card-ent card-dark" style="padding:48px;">
-              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:48px;">
-                <div>
-                  <h2 class="h2-ent">Employability Neural Trend</h2>
-                  <p style="color:var(--text-description); font-size:14px; margin-top:4px;">Diagnostic trajectory for comprehensive career readiness.</p>
-                </div>
-                <div class="data-card-subtle" style="padding:8px 16px; border-radius:8px; font-size:11px; font-weight:800; color:var(--text-muted); letter-spacing:0.05em;">LIVE TELEMETRY</div>
-              </div>
-              
-              <div style="height:320px; width:100%; position:relative;">
-                <svg width="100%" height="100%" viewBox="0 0 800 320" preserveAspectRatio="none" style="display:block;">
-                  <defs>
-                    <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stop-color="var(--brand-primary)" stop-opacity="0.22"/>
-                      <stop offset="100%" stop-color="var(--brand-primary)" stop-opacity="0"/>
-                    </linearGradient>
-                  </defs>
-                  
-                  <!-- Grid telemetry references -->
-                  <line x1="0" y1="64" x2="800" y2="64" stroke="var(--glass-border-main)" stroke-opacity="0.25" stroke-dasharray="4 8" />
-                  <line x1="0" y1="128" x2="800" y2="128" stroke="var(--glass-border-main)" stroke-opacity="0.25" stroke-dasharray="4 8" />
-                  <line x1="0" y1="192" x2="800" y2="192" stroke="var(--glass-border-main)" stroke-opacity="0.25" stroke-dasharray="4 8" />
-                  <line x1="0" y1="256" x2="800" y2="256" stroke="var(--glass-border-main)" stroke-opacity="0.25" stroke-dasharray="4 8" />
 
-                  <!-- Paths -->
-                  <path d="M0,280 Q150,260 300,180 T600,120 T800,40 L800,320 L0,320 Z" fill="url(#chartGrad)"/>
-                  <path d="M0,280 Q150,260 300,180 T600,120 T800,40" fill="none" stroke="var(--brand-primary)" stroke-width="3.5" stroke-linecap="round"/>
-                  
-                  <!-- Pulsating Node 1 -->
-                  <circle cx="300" cy="180" r="10" fill="var(--brand-primary)" fill-opacity="0.3" class="pulse-ring-element" />
-                  <circle cx="300" cy="180" r="4.5" fill="#fff" stroke="var(--brand-primary)" stroke-width="3.5"/>
-                  
-                  <!-- Pulsating Node 2 -->
-                  <circle cx="800" cy="40" r="10" fill="var(--brand-primary)" fill-opacity="0.3" class="pulse-ring-element" />
-                  <circle cx="800" cy="40" r="4.5" fill="#fff" stroke="var(--brand-primary)" stroke-width="3.5"/>
-                </svg>
-                <div class="data-card-subtle" style="position:absolute; bottom:40px; right:40px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); padding:16px 24px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-                  <div class="label-ent" style="color:var(--brand-primary); font-size:10px; margin-bottom:4px;">Current Prediction</div>
-                  <div style="font-weight:800; color:#fff; font-size:15px; font-family:var(--font-display);">${technicalSkill >= 80 ? 'Tier 1' : 'Tier 2'} High Probability</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Action Node -->
-            <div class="card-ent" style="padding:40px;">
-              <h2 class="h2-ent" style="margin-bottom:32px;">Institutional Action Center</h2>
-              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:32px;">
-                <div class="data-card-subtle" style="border-radius:16px; padding:32px; display:flex; flex-direction:column; justify-content:space-between; height:180px;">
-                  <div>
-                    <div style="font-family:var(--font-display); font-weight:700; font-size:16px; color:#fff; margin-bottom:8px;">TPO Opportunity Stream</div>
-                    <div class="label-ent" style="font-size:10px;">Latest: ${Store.drives[0]?.company || 'Pending...'}</div>
-                  </div>
-                  <button class="btn-premium" onclick="window.location.hash='new-applications'">Commence Application</button>
-                </div>
-                <div class="data-card-subtle" style="border-radius:16px; padding:32px; display:flex; flex-direction:column; justify-content:space-between; height:180px;">
-                  <div>
-                    <div style="font-family:var(--font-display); font-weight:700; font-size:16px; color:#fff; margin-bottom:8px;">Meta University Network</div>
-                    <div class="label-ent" style="font-size:10px;">Screening in Progress</div>
-                  </div>
-                  <button class="btn-premium-ghost" onclick="window.location.hash='my-slots'">Track Progression</button>
-                </div>
-              </div>
-            </div>
           </div>
 
-          <div style="display:flex; flex-direction:column; gap:40px;">
-            <!-- Intelligence Feed -->
-            <div class="card-ent" style="padding:40px;">
-              <div class="label-ent" style="color:var(--brand-primary); margin-bottom:32px;">Operational Intelligence</div>
-              <div style="display:flex; flex-direction:column; gap:32px;">
-                <div style="position:relative; padding-left:24px; border-left:1px solid var(--glass-border-main);">
-                  <div style="position:absolute; left:-6.5px; top:3px; width:13px; height:13px; border-radius:50%; background:var(--bg-card); border:3px solid var(--brand-primary); box-shadow:0 0 0 3px var(--brand-primary-light);"></div>
-                  <div style="font-weight:700; color:var(--text-main); font-size:14px; margin-bottom:4px;">Node Sync Complete</div>
-                  <p style="font-size:13px; color:var(--text-description); line-height:1.6;">Resume parsed for FinTech infrastructure alignment. Match: 88%.</p>
-                  <div class="label-ent" style="font-size:10px; margin-top:8px;">2h 14m ago</div>
+          <!-- Right Column (Live Feed & Fast Actions) -->
+          <div style="display:flex; flex-direction:column; gap:28px;">
+            
+            <!-- Recent Placement Activity -->
+            <div class="card-ent" style="padding:26px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="font-family:var(--font-display); font-size:16px; font-weight:700; color:#fff; margin:0; display:flex; align-items:center; gap:8px;">
+                  <span>⚡</span> Placement Activity
+                </h3>
+                <span style="font-size:10.5px; font-weight:700; color:var(--brand-primary); text-transform:uppercase; letter-spacing:0.06em;">LIVE</span>
+              </div>
+
+              <div style="display:flex; flex-direction:column; gap:18px;">
+                <div style="display:flex; gap:12px; align-items:flex-start;">
+                  <div style="width:28px; height:28px; border-radius:8px; background:rgba(0,200,255,0.12); border:1px solid rgba(0,200,255,0.3); display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0;">📄</div>
+                  <div>
+                    <div style="font-weight:700; color:#fff; font-size:13px; margin-bottom:2px;">Resume ATS Match Verified</div>
+                    <p style="font-size:12px; color:var(--text-description); line-height:1.5; margin:0;">Resume scored 88% alignment for Cloud & Software Engineering roles.</p>
+                    <div style="font-size:10.5px; color:var(--text-muted); margin-top:4px;">2 hours ago</div>
+                  </div>
                 </div>
-                <div style="position:relative; padding-left:24px; border-left:1px solid var(--glass-border-main);">
-                  <div style="position:absolute; left:-6.5px; top:3px; width:13px; height:13px; border-radius:50%; background:var(--bg-card); border:3px solid var(--text-muted); box-shadow:0 0 0 3px rgba(0, 0, 0, 0.02);"></div>
-                  <div style="font-weight:700; color:var(--text-main); font-size:14px; margin-bottom:4px;">Skill Radar Update</div>
-                  <p style="font-size:13px; color:var(--text-description); line-height:1.6;">Cloud Architecture certification verified by Dept. Node.</p>
-                  <div class="label-ent" style="font-size:10px; margin-top:8px;">Yesterday</div>
+
+                <div style="display:flex; gap:12px; align-items:flex-start;">
+                  <div style="width:28px; height:28px; border-radius:8px; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0;">🏆</div>
+                  <div>
+                    <div style="font-weight:700; color:#fff; font-size:13px; margin-bottom:2px;">Skill Benchmark Validated</div>
+                    <p style="font-size:12px; color:var(--text-description); line-height:1.5; margin:0;">Cloud Architecture & DSA assessments certified in Top 10% band.</p>
+                    <div style="font-size:10.5px; color:var(--text-muted); margin-top:4px;">Yesterday</div>
+                  </div>
+                </div>
+
+                <div style="display:flex; gap:12px; align-items:flex-start;">
+                  <div style="width:28px; height:28px; border-radius:8px; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0;">📢</div>
+                  <div>
+                    <div style="font-weight:700; color:#fff; font-size:13px; margin-bottom:2px;">New Campus Drive Added</div>
+                    <p style="font-size:12px; color:var(--text-description); line-height:1.5; margin:0;">Google Cloud & AI role registration opened for CSE Batch 2026.</p>
+                    <div style="font-size:10.5px; color:var(--text-muted); margin-top:4px;">3 days ago</div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- Quick Governance -->
-            <div class="card-ent" style="padding:40px;">
-              <div class="label-ent" style="margin-bottom:24px;">Governance Links</div>
-              <div style="display:flex; flex-direction:column; gap:12px;">
-                <a href="#queries" class="gov-link">Institutional Query</a>
-                <a href="#resume-analysis" class="gov-link">Execute Neural Scan</a>
-                <a href="#skill-analysis" class="gov-link">Infrastructure Audit</a>
+            <!-- Career Acceleration Tools -->
+            <div class="card-ent" style="padding:26px;">
+              <div style="margin-bottom:18px;">
+                <h3 style="font-family:var(--font-display); font-size:16px; font-weight:700; color:#fff; margin:0 0 4px 0;">Career Preparation Tools</h3>
+                <p style="color:var(--text-description); font-size:12.5px; margin:0;">One-click shortcuts to key placement workflows.</p>
+              </div>
+
+              <div style="display:flex; flex-direction:column; gap:10px;">
+                <a href="#resume-analysis" class="tool-shortcut">
+                  <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:34px; height:34px; border-radius:8px; background:rgba(0,200,255,0.1); display:flex; align-items:center; justify-content:center; font-size:16px;">📄</div>
+                    <div>
+                      <div style="font-weight:700; color:#fff; font-size:13px;">Resume ATS Optimizer</div>
+                      <div style="font-size:11.5px; color:var(--text-description);">Scan and improve ATS job keyword match</div>
+                    </div>
+                  </div>
+                  <span style="color:var(--brand-primary); font-weight:700; font-size:14px;">→</span>
+                </a>
+
+                <a href="#virtual-interview" class="tool-shortcut">
+                  <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:34px; height:34px; border-radius:8px; background:rgba(139,92,246,0.1); display:flex; align-items:center; justify-content:center; font-size:16px;">🤖</div>
+                    <div>
+                      <div style="font-weight:700; color:#fff; font-size:13px;">AI Virtual Interview Coach</div>
+                      <div style="font-size:11.5px; color:var(--text-description);">Practice real-time speech & technical rounds</div>
+                    </div>
+                  </div>
+                  <span style="color:var(--brand-primary); font-weight:700; font-size:14px;">→</span>
+                </a>
+
+                <a href="#new-applications" class="tool-shortcut">
+                  <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:34px; height:34px; border-radius:8px; background:rgba(16,185,129,0.1); display:flex; align-items:center; justify-content:center; font-size:16px;">💼</div>
+                    <div>
+                      <div style="font-weight:700; color:#fff; font-size:13px;">Campus Placement Drives</div>
+                      <div style="font-size:11.5px; color:var(--text-description);">View eligibility, CTC packages & deadlines</div>
+                    </div>
+                  </div>
+                  <span style="color:var(--brand-primary); font-weight:700; font-size:14px;">→</span>
+                </a>
+
+                <a href="#alumni-connect" class="tool-shortcut">
+                  <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:34px; height:34px; border-radius:8px; background:rgba(245,158,11,0.1); display:flex; align-items:center; justify-content:center; font-size:16px;">🤝</div>
+                    <div>
+                      <div style="font-weight:700; color:#fff; font-size:13px;">Alumni Mentor Network</div>
+                      <div style="font-size:11.5px; color:var(--text-description);">Connect with seniors placed at top companies</div>
+                    </div>
+                  </div>
+                  <span style="color:var(--brand-primary); font-weight:700; font-size:14px;">→</span>
+                </a>
+
+                <a href="#queries" class="tool-shortcut">
+                  <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:34px; height:34px; border-radius:8px; background:rgba(59,130,246,0.1); display:flex; align-items:center; justify-content:center; font-size:16px;">💬</div>
+                    <div>
+                      <div style="font-weight:700; color:#fff; font-size:13px;">TPO Placement Helpdesk</div>
+                      <div style="font-size:11.5px; color:var(--text-description);">Submit questions to placement coordinators</div>
+                    </div>
+                  </div>
+                  <span style="color:var(--brand-primary); font-weight:700; font-size:14px;">→</span>
+                </a>
               </div>
             </div>
+
           </div>
 
         </div>
@@ -415,29 +619,62 @@ export async function loadStudentDash(root, Store, supabase) {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, #00C8FF 0%, #0088CC 100%); color: #050810; border: 1px solid rgba(255,255,255,0.3); padding: 12px 20px; 
-          border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; cursor: pointer; transition: all var(--t-fast);
+          background: linear-gradient(135deg, #00C8FF 0%, #0088CC 100%);
+          color: #050810;
+          border: 1px solid rgba(255,255,255,0.3);
+          padding: 10px 18px;
+          border-radius: var(--radius-sm);
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all var(--t-fast);
           box-shadow: 0 4px 16px rgba(0, 200, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.3);
-          min-height: 44px;
+          min-height: 40px;
         }
-        .btn-premium:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0, 200, 255, 0.4); background: linear-gradient(135deg, #33D4FF 0%, #00B4F0 100%); }
+        .btn-premium:hover {
+          transform: translateY(-1.5px);
+          box-shadow: 0 8px 24px rgba(0, 200, 255, 0.4);
+          background: linear-gradient(135deg, #33D4FF 0%, #00B4F0 100%);
+        }
 
         .btn-premium-ghost {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          background: rgba(0, 200, 255, 0.06); color: #00C8FF; border: 1px solid rgba(0, 200, 255, 0.2); 
-          padding: 12px 20px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; cursor: pointer; transition: all var(--t-fast);
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-          min-height: 44px;
+          background: rgba(0, 200, 255, 0.08);
+          color: #00C8FF;
+          border: 1px solid rgba(0, 200, 255, 0.25);
+          padding: 10px 18px;
+          border-radius: var(--radius-sm);
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all var(--t-fast);
+          min-height: 40px;
         }
-        .btn-premium-ghost:hover { background: rgba(0, 200, 255, 0.15); color: #ffffff; border-color: rgba(0, 200, 255, 0.45); transform: translateY(-1.5px); }
+        .btn-premium-ghost:hover {
+          background: rgba(0, 200, 255, 0.16);
+          color: #ffffff;
+          border-color: rgba(0, 200, 255, 0.45);
+          transform: translateY(-1.5px);
+        }
 
-        .gov-link {
-          display: block; padding: 16px; background: var(--data-bg); border: 1px solid var(--glass-border-main);
-          border-radius: var(--radius-md); color: var(--text-description); font-size: 14px; font-weight: 600; text-decoration: none; transition: all var(--t-fast);
+        .tool-shortcut {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 14px;
+          background: rgba(255,255,255,0.02);
+          border: 1px solid var(--border-subtle);
+          border-radius: 10px;
+          text-decoration: none;
+          transition: all var(--t-fast);
         }
-        .gov-link:hover { color: var(--text-main); border-color: var(--brand-primary); transform: translateX(4px); background: var(--data-bg-alt); }
+        .tool-shortcut:hover {
+          background: rgba(0, 200, 255, 0.06);
+          border-color: rgba(0, 200, 255, 0.3);
+          transform: translateX(3px);
+        }
 
         .clickable-slot-card {
           cursor: pointer;

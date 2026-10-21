@@ -28,6 +28,8 @@ class WebSocketGateway {
       return;
     }
 
+    
+
     // Compute Sec-WebSocket-Accept key
     const acceptKey = crypto
       .createHash('sha1')
